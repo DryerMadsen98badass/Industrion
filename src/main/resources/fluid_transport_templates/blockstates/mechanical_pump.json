@@ -1,0 +1,30 @@
+{
+  "variants": {
+    "facing=down": {
+      "model": "industron:block/bronze_mechanical_pump/block",
+      "x": 180
+    },
+    "facing=east": {
+      "model": "industron:block/bronze_mechanical_pump/block",
+      "x": 90,
+      "y": 90
+    },
+    "facing=north": {
+      "model": "industron:block/bronze_mechanical_pump/block",
+      "x": 90
+    },
+    "facing=south": {
+      "model": "industron:block/bronze_mechanical_pump/block",
+      "x": 90,
+      "y": 180
+    },
+    "facing=up": {
+      "model": "industron:block/bronze_mechanical_pump/block"
+    },
+    "facing=west": {
+      "model": "industron:block/bronze_mechanical_pump/block",
+      "x": 90,
+      "y": 270
+    }
+  }
+}

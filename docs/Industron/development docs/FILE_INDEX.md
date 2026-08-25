@@ -1,0 +1,74 @@
+# File index
+
+Dette er den faktiske listen over filer under `development docs/` i denne docs-pakken. Listen er generert fra den korrigerte basen og skal oppdateres når filer legges til/fjernes.
+
+- `API_CONVENTIONS.md`
+- `DECISIONS.md`
+- `FILE_INDEX.md`
+- `README.md`
+- `START_HERE.md`
+- `SYSTEM_OVERVIEW.md`
+- `code/README.md`
+- `code/casings/README.md`
+- `code/casings/profile-definition.md`
+- `code/chemistry/README.md`
+- `code/chemistry/acidity-model.md`
+- `code/chemistry/compound-model.md`
+- `code/chemistry/data-rule-example.md`
+- `code/chemistry/reaction-balancing.md`
+- `code/chemistry/rule-system.md`
+- `code/diagnostics/README.md`
+- `code/elements/README.md`
+- `code/elements/atomic-model.md`
+- `code/elements/ion-model.md`
+- `code/energy/README.md`
+- `code/integration/create.md`
+- `code/machines/README.md`
+- `code/machines/how-to-add-a-machine.md`
+- `code/maintenance/README.md`
+- `code/maintenance/state-and-repair.md`
+- `code/materials/README.md`
+- `code/materials/color-generation.md`
+- `code/materials/generated-forms.md`
+- `code/materials/tools-ores-cables.md`
+- `code/multiblocks/README.md`
+- `code/recipes/README.md`
+- `code/recipes/assembly-recipes.md`
+- `code/recipes/generation-pipeline.md`
+- `preferences/README.md`
+- `preferences/delivery-workflow.md`
+- `preferences/documentation-rules.md`
+- `preferences/implementation-rules.md`
+- `preferences/naming-and-formatting.md`
+- `preferences/project-structure.md`
+- `templates/decision-record.md`
+- `templates/element-definition-example.md`
+- `templates/new-machine-proposal.md`
+- `templates/new-rule-proposal.md`
+- `templates/new-system-document.md`
+- `to do/00-foundation.md`
+- `to do/01-atomic-model.md`
+- `to do/02-material-properties.md`
+- `to do/03-capabilities-and-requirements.md`
+- `to do/04-content-generation-and-casings.md`
+- `to do/05-recipe-type-foundation.md`
+- `to do/06-process-rules.md`
+- `to do/07-foundry-and-heater-multiblocks.md`
+- `to do/08-composition-graph.md`
+- `to do/09-alloys.md`
+- `to do/10-molecular-and-bond-model.md`
+- `to do/11-compounds-and-ionic-chemistry.md`
+- `to do/12-organic-chemistry-and-polymers.md`
+- `to do/13-reaction-system.md`
+- `to do/14-automatic-process-recipe-generation.md`
+- `to do/15-component-definitions.md`
+- `to do/16-assembly-recipe-language.md`
+- `to do/17-assembly-runtime-and-tools.md`
+- `to do/18-machines-and-multiblocks.md`
+- `to do/19-maintenance.md`
+- `to do/20-create-integration.md`
+- `to do/21-validation-and-balance.md`
+- `to do/Industron Checklist.xlsx`
+- `to do/README.md`
+- `to do/open-decisions.md`
+- `to do/technical-debt.md`

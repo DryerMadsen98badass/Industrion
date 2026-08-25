@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "priority": 1000,
+  "package": "net.mads.industron.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "BlazeBurnerBlockEntityMixin",
+    "FluidNetworkMixin",
+    "PumpBlockEntityMixin",
+    "PumpFluidTransferBehaviourMixin",
+    "FluidPipeBlockMixin",
+    "FluidTransportBehaviourPipeColorMixin",
+    "RecipeManagerMixin"
+  ],
+  "minVersion": "0.8.5"
+}
