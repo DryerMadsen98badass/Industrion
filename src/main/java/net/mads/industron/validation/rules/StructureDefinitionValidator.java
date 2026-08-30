@@ -3,6 +3,7 @@ package net.mads.industron.validation.rules;
 import net.mads.industron.material.structure.StructureBlockDefinition;
 import net.mads.industron.material.structure.StructureMaterial;
 import net.mads.industron.material.structure.StructureMaterialGenerator;
+import net.mads.industron.material.structure.StructureModel;
 import net.mads.industron.material.structure.StructureSetResolver;
 import net.mads.industron.validation.ValidationCode;
 import net.mads.industron.validation.ValidationCollector;
@@ -70,26 +71,26 @@ public final class StructureDefinitionValidator implements ValidationRule {
                             "Duplicate generated structure block id"
                     );
                 }
-                validateTexture(sourceTextures, definition.textureFile(), blockSubject, diagnostics);
+                validateTexture(material.model(), definition.textureFile(), blockSubject, diagnostics);
                 definition.topTextureFile().ifPresent(texture ->
-                        validateTexture(sourceTextures, texture, blockSubject, diagnostics));
+                        validateTexture(material.model(), texture, blockSubject, diagnostics));
                 definition.bottomTextureFile().ifPresent(texture ->
-                        validateTexture(sourceTextures, texture, blockSubject, diagnostics));
+                        validateTexture(material.model(), texture, blockSubject, diagnostics));
                 definition.itemTextureFile().ifPresent(texture ->
-                        validateTexture(sourceTextures, texture, blockSubject, diagnostics));
+                        validateTexture(material.model(), texture, blockSubject, diagnostics));
                 definition.textureFiles().values().forEach(texture ->
-                        validateTexture(sourceTextures, texture, blockSubject, diagnostics));
+                        validateTexture(material.model(), texture, blockSubject, diagnostics));
             }
         }
     }
 
     private static void validateTexture(
-            List<String> available,
+            StructureModel model,
             String texture,
             String subject,
             ValidationCollector diagnostics
     ) {
-        if (!available.contains(texture)) {
+        if (StructureSetResolver.sourceTemplate(model, texture).isEmpty()) {
             diagnostics.error(
                     ValidationSubsystem.STRUCTURE,
                     ValidationCode.MISSING_RESOURCE,

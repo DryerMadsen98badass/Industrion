@@ -17,11 +17,16 @@ Vanlige kommandoer:
 .\gradlew.bat build -x createMinecraftArtifacts --no-daemon
 ```
 
+Datagen er stor. `gradle.properties` bruker `org.gradle.jvmargs=-Xmx6G`; senk bare dette hvis maskinen ikke har nok ledig RAM.
+
 `createMinecraftArtifacts` er ekskludert fordi oppryddingen er verifisert mot vanlig kompilering, datagen og jar-bygging.
+
+Siste status: material-block datagen bruker delte tinted cube/cutout/layer templates for aa redusere gjentatt per-material modellgeometri. Compile/runData ble ikke kjoert i denne sandboxen fordi `java`/`javac` ikke var tilgjengelig fra miljoet.
 
 ## Viktige kataloger
 
-- `src/main/java/net/mads/industron/material`: materialdefinisjoner og materialdeler.
+- `src/main/java/net/mads/industron/material`: material-framework, property-kode og materialdeler.
+- `src/main/java/net/mads/industron/material/defenitions`: konkrete, manuelt definerte materiallister. Navnet er bevisst stavet `defenitions`.
 - `src/main/java/net/mads/industron/recipe`: generisk recipe-rammeverk.
 - `src/main/java/net/mads/industron/machine`: generisk maskin- og multiblockrammeverk.
 - `src/main/java/net/mads/industron/transport`: generisk fluid-transport.

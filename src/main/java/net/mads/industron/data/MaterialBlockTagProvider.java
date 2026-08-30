@@ -12,8 +12,9 @@ import net.mads.industron.machine.MachineDefinition;
 import net.mads.industron.machine.MachinePortBlock;
 import net.mads.industron.machine.SingleBlockMachineInstance;
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.material.IndustrialMaterials;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.MaterialPart;
+import net.mads.industron.material.MaterialOreHost;
 import net.mads.industron.material.structure.StructureBlockDefinition;
 import net.mads.industron.material.structure.StructureMaterial;
 import net.mads.industron.material.structure.StructureMaterialGenerator;
@@ -61,18 +62,12 @@ public class MaterialBlockTagProvider
             Map.entry(MaterialPart.SMALL_ORE, cTag("ores_in_ground/stone")),
             Map.entry(MaterialPart.DEEPSLATE_ORE, cTag("ores_in_ground/deepslate")),
             Map.entry(MaterialPart.SMALL_DEEPSLATE_ORE, cTag("ores_in_ground/deepslate")),
-            Map.entry(MaterialPart.DIORITE_ORE, cTag("ores_in_ground/diorite")),
-            Map.entry(MaterialPart.SMALL_DIORITE_ORE, cTag("ores_in_ground/diorite")),
-            Map.entry(MaterialPart.ANDESITE_ORE, cTag("ores_in_ground/andesite")),
-            Map.entry(MaterialPart.SMALL_ANDESITE_ORE, cTag("ores_in_ground/andesite")),
-            Map.entry(MaterialPart.GRANITE_ORE, cTag("ores_in_ground/granite")),
-            Map.entry(MaterialPart.SMALL_GRANITE_ORE, cTag("ores_in_ground/granite")),
-            Map.entry(MaterialPart.TUFF_ORE, cTag("ores_in_ground/tuff")),
-            Map.entry(MaterialPart.SMALL_TUFF_ORE, cTag("ores_in_ground/tuff")),
             Map.entry(MaterialPart.NETHERRACK_ORE, cTag("ores_in_ground/netherrack")),
             Map.entry(MaterialPart.SMALL_NETHERRACK_ORE, cTag("ores_in_ground/netherrack")),
             Map.entry(MaterialPart.BLACKSTONE_ORE, cTag("ores_in_ground/blackstone")),
             Map.entry(MaterialPart.SMALL_BLACKSTONE_ORE, cTag("ores_in_ground/blackstone")),
+            Map.entry(MaterialPart.BASALT_ORE, cTag("ores_in_ground/basalt")),
+            Map.entry(MaterialPart.SMALL_BASALT_ORE, cTag("ores_in_ground/basalt")),
             Map.entry(MaterialPart.END_STONE_ORE, cTag("ores_in_ground/end_stone")),
             Map.entry(MaterialPart.SMALL_END_STONE_ORE, cTag("ores_in_ground/end_stone"))
     );
@@ -186,6 +181,19 @@ public class MaterialBlockTagProvider
 
                     tag(oreGroundTag.getValue())
                             .addOptional(existingBlockId);
+                }
+            }
+
+            if (MaterialOreHost.hasNaturalOre(material)) {
+                for (MaterialOreHost host : MaterialOreHost.compatibleHosts(material)) {
+                    TagKey<Block> groundTag = cTag("ores_in_ground/" + host.id());
+                    for (boolean small : new boolean[]{false, true}) {
+                        var generated = BlockRegistry.getMaterialOreHostBlock(material, host, small);
+                        if (generated != null) {
+                            addMiningTags(generated.get(), Set.of(MiningTool.PICKAXE), MiningTier.STONE);
+                            addOreTags(generated.get(), material, groundTag);
+                        }
+                    }
                 }
             }
         }

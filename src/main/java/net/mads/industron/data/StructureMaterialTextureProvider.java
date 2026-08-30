@@ -4,6 +4,9 @@ import com.google.common.hash.Hashing;
 import net.mads.industron.Industron;
 import net.mads.industron.material.structure.GemMaterial;
 import net.mads.industron.material.structure.StructureMaterial;
+import net.mads.industron.material.structure.StoneModel;
+import net.mads.industron.material.structure.StructureBlockDefinition;
+import net.mads.industron.material.structure.StructureMaterialGenerator;
 import net.mads.industron.material.structure.StructureMaterials;
 import net.mads.industron.material.structure.StructureSetResolver;
 import net.minecraft.data.CachedOutput;
@@ -19,7 +22,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 /** Generates colored structure textures from the grayscale structure_sets templates. */
@@ -61,27 +66,29 @@ public final class StructureMaterialTextureProvider implements DataProvider {
             Map<Path, TemplatePixels> templateCache,
             Map<Path, byte[]> metadataCache
     ) throws IOException {
-        var files = StructureSetResolver.textureFiles(material.model());
+        Set<String> files = new LinkedHashSet<>();
+        for (StructureBlockDefinition definition : StructureMaterialGenerator.generatedBlockDefinitions(material)) {
+            files.add(definition.textureFile());
+            definition.topTextureFile().ifPresent(files::add);
+            definition.bottomTextureFile().ifPresent(files::add);
+            definition.itemTextureFile().ifPresent(files::add);
+            files.addAll(definition.textureFiles().values());
+        }
         if (files.isEmpty()) {
-            throw new IllegalStateException(
-                    "No structure-set textures found for " + material.model().category() + "/" + material.model().id()
-            );
+            return 0;
         }
 
         int generated = 0;
         for (String fileName : files) {
-            Path source = StructureSetResolver.sourcePath(material.model(), fileName)
+            StructureSetResolver.ResolvedTemplate resolved = StructureSetResolver.sourceTemplate(material.model(), fileName)
                     .orElseThrow(() -> new IllegalStateException(
                             "Could not resolve source structure texture " + material.model().id() + "/" + fileName
                     ));
+            Path source = resolved.path();
+            TemplatePixels template = templatePixels(source, templateCache);
+            double grayScale = fallbackGrayScale(material, resolved, templateCache);
 
-            TemplatePixels template = templateCache.get(source);
-            if (template == null) {
-                template = decodeTemplate(source);
-                templateCache.put(source, template);
-            }
-
-            BufferedImage tinted = template.render(material.color(), material instanceof GemMaterial);
+            BufferedImage tinted = template.render(material.color(), material instanceof GemMaterial, grayScale);
             byte[] data = encodePng(tinted, source);
             ResourceLocation destination = StructureSetResolver.generatedTexture(material, fileName);
             Path path = texturePath(destination, "png");
@@ -100,6 +107,57 @@ public final class StructureMaterialTextureProvider implements DataProvider {
             generated++;
         }
         return generated;
+    }
+
+    private static TemplatePixels templatePixels(
+            Path source,
+            Map<Path, TemplatePixels> templateCache
+    ) throws IOException {
+        TemplatePixels template = templateCache.get(source);
+        if (template == null) {
+            template = decodeTemplate(source);
+            templateCache.put(source, template);
+        }
+        return template;
+    }
+
+    /**
+     * A fallback sprite comes from another stone family and may have a very different
+     * grayscale baseline. Normalize the donor sprite against donor/target base textures
+     * before tinting so, for example, polished netherrack keeps netherrack luminance
+     * instead of inheriting polished diorite's brightness.
+     */
+    private static double fallbackGrayScale(
+            StructureMaterial material,
+            StructureSetResolver.ResolvedTemplate resolved,
+            Map<Path, TemplatePixels> templateCache
+    ) throws IOException {
+        if (!(material.model() instanceof StoneModel targetModel)) {
+            return 1.0D;
+        }
+
+        StoneModel donorModel = resolved.fallbackDonor().orElse(null);
+        if (donorModel == null) {
+            return 1.0D;
+        }
+
+        Path targetBase = StructureSetResolver.sourceTemplate(targetModel, targetModel.baseSideTexture())
+                .orElseThrow(() -> new IllegalStateException(
+                        "Could not resolve base stone template for " + targetModel.id()
+                ))
+                .path();
+        Path donorBase = StructureSetResolver.sourceTemplate(donorModel, donorModel.baseSideTexture())
+                .orElseThrow(() -> new IllegalStateException(
+                        "Could not resolve donor base stone template for " + donorModel.id()
+                ))
+                .path();
+
+        double targetAverage = templatePixels(targetBase, templateCache).averageGray();
+        double donorAverage = templatePixels(donorBase, templateCache).averageGray();
+        if (donorAverage <= 0.0D) {
+            return 1.0D;
+        }
+        return targetAverage / donorAverage;
     }
 
     private static TemplatePixels decodeTemplate(Path source) throws IOException {
@@ -179,13 +237,13 @@ public final class StructureMaterialTextureProvider implements DataProvider {
             this.targetPixels = ((DataBufferInt) target.getRaster().getDataBuffer()).getData();
         }
 
-        private BufferedImage render(int rgb, boolean gem) {
+        private BufferedImage render(int rgb, boolean gem, double grayScale) {
             int targetR = (rgb >> 16) & 0xFF;
             int targetG = (rgb >> 8) & 0xFF;
             int targetB = rgb & 0xFF;
 
             for (int index = 0; index < gray.length; index++) {
-                int shade = gray[index];
+                int shade = clamp((int) Math.round(gray[index] * grayScale));
                 int outR;
                 int outG;
                 int outB;
@@ -204,6 +262,19 @@ public final class StructureMaterialTextureProvider implements DataProvider {
                 targetPixels[index] = (alpha[index] << 24) | (outR << 16) | (outG << 8) | outB;
             }
             return target;
+        }
+
+        private double averageGray() {
+            long total = 0L;
+            int count = 0;
+            for (int index = 0; index < gray.length; index++) {
+                if (alpha[index] == 0) {
+                    continue;
+                }
+                total += gray[index];
+                count++;
+            }
+            return count == 0 ? 0.0D : total / (double) count;
         }
     }
 

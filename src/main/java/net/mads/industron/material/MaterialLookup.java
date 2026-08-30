@@ -3,6 +3,7 @@ package net.mads.industron.material;
 import net.mads.industron.energy.EnergyWireBlock;
 import net.mads.industron.fluid.IndustrialFluid;
 import net.mads.industron.fluid.IndustrialFluidLookup;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.registry.FluidRegistry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;

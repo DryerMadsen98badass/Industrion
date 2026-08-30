@@ -13,6 +13,7 @@ public class ModDataGenerators {
     @SubscribeEvent
     public static void gatherData(GatherDataEvent event) {
         IndustronValidation.validateOrThrow(ValidationStage.DATAGEN);
+        net.mads.industron.material.chemistry.ChemistryBootstrap.runDataReports();
 
         if (event.includeServer()) {
             addProvider(event, new MaterialPropertyDebugProvider(event.getGenerator().getPackOutput()));
@@ -31,6 +32,8 @@ public class ModDataGenerators {
             addProvider(event, new CERecipeProvider(event.getGenerator().getPackOutput(), event.getLookupProvider()));
             addProvider(event, new SimpleBlockRecipeProvider(event.getGenerator().getPackOutput()));
             addProvider(event, new MaterialStoneLootProvider(event.getGenerator().getPackOutput()));
+            addProvider(event, new MaterialOreLootProvider(event.getGenerator().getPackOutput()));
+            addProvider(event, new GeologyWorldgenDataProvider(event.getGenerator().getPackOutput()));
             addProvider(event, new SimpleBlockLootProvider(event.getGenerator().getPackOutput()));
             addProvider(event, new StructureMaterialLootProvider(event.getGenerator().getPackOutput()));
             addProvider(event, new SingleBlockMachineLootProvider(event.getGenerator().getPackOutput()));

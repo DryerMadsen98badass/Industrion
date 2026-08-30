@@ -1,6 +1,7 @@
 package net.mads.industron.data;
 
 import net.mads.industron.material.recipes.MaterialProcessingRecipes;
+import net.mads.industron.material.recipes.StoneCentrifugingRecipes;
 import net.mads.industron.recipe.recipes.pulverizing.ULVPulverizingRecipes;
 import net.mads.industron.recipe.recipes.pulverizing.LVPulverizingRecipes;
 import net.mads.industron.recipe.recipes.pulverizing.MVPulverizingRecipes;
@@ -333,6 +334,7 @@ public class CERecipeProvider extends RecipeProvider {
 
     @Override
     protected void buildRecipes(RecipeOutput output, HolderLookup.Provider holderLookup) {
+        net.mads.industron.material.chemistry.AutomaticChemistryRecipes.build(output, holderLookup);
         ULVPulverizingRecipes.build(output, holderLookup);
         LVPulverizingRecipes.build(output, holderLookup);
         MVPulverizingRecipes.build(output, holderLookup);
@@ -651,6 +653,7 @@ public class CERecipeProvider extends RecipeProvider {
         HVCuttingRecipes.build(output, holderLookup);
         EVCuttingRecipes.build(output, holderLookup);
         IVCuttingRecipes.build(output, holderLookup);
+        StoneCentrifugingRecipes.build(output);
         MaterialProcessingRecipes.build(output);
     }
 }

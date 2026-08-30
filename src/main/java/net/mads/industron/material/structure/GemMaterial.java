@@ -28,7 +28,7 @@ public final class GemMaterial implements StructureMaterial {
     private final List<MaterialComponent> components;
     private final String formula;
     private final int componentTemperature;
-    private final Map<StructureMaterialPart, ResourceLocation> existingParts;
+    private final Map<MaterialPart, ResourceLocation> existingParts;
 
     public GemMaterial(IndustrialMaterial source) {
         this(
@@ -51,7 +51,7 @@ public final class GemMaterial implements StructureMaterial {
             List<MaterialComponent> components,
             String formula,
             int componentTemperature,
-            Map<StructureMaterialPart, ResourceLocation> existingParts
+            Map<MaterialPart, ResourceLocation> existingParts
     ) {
         if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("Gem id cannot be blank");
@@ -99,7 +99,7 @@ public final class GemMaterial implements StructureMaterial {
                 List.of(),
                 "",
                 20,
-                Map.of(StructureMaterialPart.BLOCK, baseBlock)
+                Map.of(MaterialPart.BLOCK, baseBlock)
         );
     }
 
@@ -113,22 +113,22 @@ public final class GemMaterial implements StructureMaterial {
         return source;
     }
 
-    private static Map<StructureMaterialPart, ResourceLocation> baseExistingParts(IndustrialMaterial source) {
+    private static Map<MaterialPart, ResourceLocation> baseExistingParts(IndustrialMaterial source) {
         if (source == null || !source.hasExistingPart(MaterialPart.BLOCK)) {
             return Map.of();
         }
-        return Map.of(StructureMaterialPart.BLOCK, source.existingPart(MaterialPart.BLOCK));
+        return Map.of(MaterialPart.BLOCK, source.existingPart(MaterialPart.BLOCK));
     }
 
-    public GemMaterial existing(StructureMaterialPart part, String resourceLocation) {
+    public GemMaterial existing(MaterialPart part, String resourceLocation) {
         return existing(part, ResourceLocation.parse(resourceLocation));
     }
 
-    public GemMaterial existing(StructureMaterialPart part, ResourceLocation resourceLocation) {
+    public GemMaterial existing(MaterialPart part, ResourceLocation resourceLocation) {
         if (part == null || resourceLocation == null) {
             throw new IllegalArgumentException("Existing gem structure part and resource cannot be null: " + id());
         }
-        EnumMap<StructureMaterialPart, ResourceLocation> updated = new EnumMap<>(StructureMaterialPart.class);
+        EnumMap<MaterialPart, ResourceLocation> updated = new EnumMap<>(MaterialPart.class);
         updated.putAll(existingParts);
         ResourceLocation previous = updated.put(part, resourceLocation);
         if (previous != null && !previous.equals(resourceLocation)) {
@@ -179,12 +179,12 @@ public final class GemMaterial implements StructureMaterial {
     }
 
     @Override
-    public Map<StructureMaterialPart, ResourceLocation> existingParts() {
+    public Map<MaterialPart, ResourceLocation> existingParts() {
         return existingParts;
     }
 
     @Override
-    public Set<StructureMaterialPart> generatedForms() {
+    public Set<MaterialPart> generatedForms() {
         return Set.of();
     }
 

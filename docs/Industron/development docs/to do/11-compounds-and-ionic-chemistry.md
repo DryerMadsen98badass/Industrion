@@ -11,7 +11,7 @@ Denne fasen bygger faktiske compounds oppå composition, Phase 01 ions og Phase 
 
 ## 2. Ionic compounds og salts
 
-Et salt skal ikke genereres bare fordi to elements er valgt. Charges må faktisk passe sammen.
+Et ionisk bulk-materiale skal ikke genereres bare fordi to elements er valgt. Charges må faktisk passe sammen.
 
 Eksempel:
 
@@ -50,7 +50,7 @@ charge neutrality:
 ## 6. Solutions og molten ionic media
 
 - [ ] Definer hvordan dissolved ions representeres uten å registrere egne `+1`/`+2` material-form families.
-- [ ] Definer charge-neutrality for bulk solution/molten salt state.
+- [ ] Definer charge-neutrality for bulk solution/molten ionic state.
 - [ ] Gjør dataene tilgjengelige for electrolysis og reaction-systemet senere.
 
 ## Ferdig når

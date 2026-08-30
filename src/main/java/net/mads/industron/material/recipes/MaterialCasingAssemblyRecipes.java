@@ -2,8 +2,8 @@ package net.mads.industron.material.recipes;
 
 import net.mads.industron.material.IndustrialMaterial;
 import net.mads.industron.material.MaterialPart;
-import net.mads.industron.recipe.recipetypes.AssemblyRecipeDefinition;
-import net.mads.industron.recipe.recipetypes.AssemblyRequirement;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyRecipeDefinition;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyRequirement;
 import net.mads.industron.registry.BlockRegistry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.Block;
@@ -95,7 +95,7 @@ public final class MaterialCasingAssemblyRecipes {
         if (requirement.property() == null) {
             throw new IllegalStateException("Typed casing requirement has no property: " + requirement);
         }
-        builder.stat((net.mads.industron.recipe.recipetypes.AssemblyProperty) requirement.property())
+        builder.stat((net.mads.industron.recipe.recipetypes.assembly.AssemblyProperty) requirement.property())
                 .is(requirement.expected());
     }
 }

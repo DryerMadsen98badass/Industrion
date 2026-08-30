@@ -136,7 +136,9 @@ public final class ClientMaterialTooltip {
         }
         MaterialProperties properties = material.properties();
         tooltip.add(colored("Tier: ", 0xB0B0B0).append(colored(material.tier().displayName(), material.tier().color())));
-        tooltip.add(colored("Atomic Number: ", 0xB0B0B0).append(colored(Integer.toString(material.atomicNumber()), 0xFFFFFF)));
+        if (material.atomicNumber() > 0) {
+            tooltip.add(colored("Atomic Number: ", 0xB0B0B0).append(colored(Integer.toString(material.atomicNumber()), 0xFFFFFF)));
+        }
         tooltip.add(colored("State: ", 0xFF66CC).append(colored(materialState(material, target.part()), 0xFF66CC)));
         tooltip.add(colored("Density: ", 0x9FD3FF).append(colored(Integer.toString(properties.density()), 0xFFFFFF)));
         tooltip.add(colored("Hardness: ", 0x2ECC40).append(colored(Integer.toString(properties.hardness()), 0xFFFFFF)));

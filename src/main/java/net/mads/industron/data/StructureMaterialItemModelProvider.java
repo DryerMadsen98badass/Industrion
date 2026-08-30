@@ -3,7 +3,7 @@ package net.mads.industron.data;
 import net.mads.industron.Industron;
 import net.mads.industron.material.structure.StructureMaterial;
 import net.mads.industron.material.structure.StructureMaterialGenerator;
-import net.mads.industron.material.structure.StructureMaterialPart;
+import net.mads.industron.material.MaterialPart;
 import net.mads.industron.material.structure.StructureMaterialVariantResolver;
 import net.mads.industron.material.structure.StructureMaterials;
 import net.minecraft.data.PackOutput;
@@ -27,7 +27,7 @@ public final class StructureMaterialItemModelProvider extends ItemModelProvider 
     @Override
     protected void registerModels() {
         for (StructureMaterial material : StructureMaterials.ALL) {
-            for (StructureMaterialPart part : StructureMaterialGenerator.generatedItemForms(material)) {
+            for (MaterialPart part : StructureMaterialGenerator.generatedItemForms(material)) {
                 StructureMaterialVariantResolver.itemTextures(material, part).ifPresent(textures -> {
                     var model = getBuilder(part.registryName(material))
                             .parent(new ModelFile.UncheckedModelFile(ResourceLocation.withDefaultNamespace("item/generated")))

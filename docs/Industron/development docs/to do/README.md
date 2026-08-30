@@ -51,7 +51,7 @@ Pressure brukes ikke som process-condition
 
 14. **14 Automatic Process Recipe Generation** – map validated reaction/process intent til riktig RecipeType og beregn tier/duration/conditions.
 
-`material/recipes/` reserveres for automatiske recipes fra `StoneMaterial`, `GemMaterial`, `WoodMaterial`, `IndustrialMaterial` og senere generated substances.
+`material/recipes/` brukes i den aktive integrasjonen for automatiske recipes fra `StoneMaterial`, `WoodMaterial` og deklarerte raw ore-source-materialer. Senere utvidelse til andre familier er separat scope.
 
 ### 15–17: Assembly crafting
 
@@ -116,3 +116,7 @@ Heateren fyller hele arealet direkte under Foundryen og må matche size variant 
 ## Hva vi gjør nå
 
 Roadmapen over er fortsatt nyttig for gjenstående systemer, men aktiv prioritet skal bestemmes fra siste prosjekt og brukerens siste instruks. Casing- og Assembly-kjernen er allerede implementert senere enn den opprinnelige statuslinjen. For Assembly er `../code/recipes/assembly-recipes.md` fasit.
+
+- `23-material-geology-autorecipe-integration.md` - CURRENT canonical implementation order for MaterialPart, stone/wood, ore hosts, geology and autorecipes.
+- `22-geology-and-ore-generation.md` - geology sub-phase, now subordinate to Phase 23 integration plan.
+- `14-automatic-process-recipe-generation.md` - current stone/wood/raw-ore processing scope.

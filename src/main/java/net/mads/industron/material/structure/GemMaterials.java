@@ -1,7 +1,9 @@
 package net.mads.industron.material.structure;
 
+import net.mads.industron.material.MaterialPart;
+
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.material.IndustrialMaterials;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -43,14 +45,14 @@ public final class GemMaterials {
         // so that one remains generated like every other gem wall.
         if (material.id().equals("quartz")) {
             gem = gem
-                    .existing(StructureMaterialPart.SLAB, "minecraft:quartz_slab")
-                    .existing(StructureMaterialPart.STAIRS, "minecraft:quartz_stairs")
-                    .existing(StructureMaterialPart.PILLAR, "minecraft:quartz_pillar")
-                    .existing(StructureMaterialPart.CHISELED_BLOCK, "minecraft:chiseled_quartz_block")
-                    .existing(StructureMaterialPart.BRICKS, "minecraft:quartz_bricks")
-                    .existing(StructureMaterialPart.SMOOTH_BLOCK, "minecraft:smooth_quartz")
-                    .existing(StructureMaterialPart.SMOOTH_SLAB, "minecraft:smooth_quartz_slab")
-                    .existing(StructureMaterialPart.SMOOTH_STAIRS, "minecraft:smooth_quartz_stairs");
+                    .existing(MaterialPart.SLAB, "minecraft:quartz_slab")
+                    .existing(MaterialPart.STAIRS, "minecraft:quartz_stairs")
+                    .existing(MaterialPart.PILLAR, "minecraft:quartz_pillar")
+                    .existing(MaterialPart.CHISELED_BLOCK, "minecraft:chiseled_quartz_block")
+                    .existing(MaterialPart.BRICKS, "minecraft:quartz_bricks")
+                    .existing(MaterialPart.SMOOTH_BLOCK, "minecraft:smooth_quartz")
+                    .existing(MaterialPart.SMOOTH_SLAB, "minecraft:smooth_quartz_slab")
+                    .existing(MaterialPart.SMOOTH_STAIRS, "minecraft:smooth_quartz_stairs");
         }
 
         return gem;

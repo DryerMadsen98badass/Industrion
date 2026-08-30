@@ -2,14 +2,14 @@ package net.mads.industron.material.recipes;
 
 import net.mads.industron.machine.MachineTier;
 import net.mads.industron.material.MaterialPart;
-import net.mads.industron.recipe.recipetypes.AssemblyCapability;
-import net.mads.industron.recipe.recipetypes.AssemblyComponent;
-import net.mads.industron.recipe.recipetypes.AssemblyMetal;
-import net.mads.industron.recipe.recipetypes.AssemblyNumericStatBuilder;
-import net.mads.industron.recipe.recipetypes.AssemblyProperty;
-import net.mads.industron.recipe.recipetypes.AssemblyPropertyStatBuilder;
-import net.mads.industron.recipe.recipetypes.AssemblyRequirement;
-import net.mads.industron.recipe.recipetypes.AssemblyToolType;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyCapability;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyComponent;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyMetal;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyNumericStatBuilder;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyProperty;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyPropertyStatBuilder;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyRequirement;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyToolType;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
 

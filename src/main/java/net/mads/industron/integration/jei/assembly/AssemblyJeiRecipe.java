@@ -1,6 +1,6 @@
 package net.mads.industron.integration.jei.assembly;
 
-import net.mads.industron.recipe.recipetypes.AssemblyRecipeDefinition;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyRecipeDefinition;
 
 import java.util.Objects;
 

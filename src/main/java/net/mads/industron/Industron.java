@@ -12,6 +12,7 @@ import net.mads.industron.registry.FluidRegistry;
 import net.mads.industron.registry.ItemRegistry;
 import net.mads.industron.registry.MenuRegistry;
 import net.mads.industron.registry.RecipeRegistry;
+import net.mads.industron.registry.WorldgenRegistry;
 import net.mads.industron.transport.color.ColoredFluidPipeRegistrations;
 import net.mads.industron.validation.IndustronValidation;
 import net.mads.industron.validation.ValidationStage;
@@ -41,6 +42,7 @@ public class Industron {
         BlockEntityRegistry.register(modEventBus);
         MenuRegistry.register(modEventBus);
         RecipeRegistry.register(modEventBus);
+        WorldgenRegistry.register(modEventBus);
         CreativeTabRegistry.register(modEventBus);
         IndustronPartialModels.init();
 

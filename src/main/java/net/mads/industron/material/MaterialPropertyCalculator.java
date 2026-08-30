@@ -6,6 +6,7 @@ import net.mads.industron.material.atomic.AtomicState;
 
 public final class MaterialPropertyCalculator {
     public static final int AMBIENT_TEMPERATURE_C = 20;
+    public static final int METAL_MELTING_TIER_BAND_C = 500;
 
     // Historical name kept for compatibility. This is now an overlapping tier-center step,
     // not a non-overlapping 100-point band. Intrinsic atomic specialization supplies more
@@ -16,6 +17,29 @@ public final class MaterialPropertyCalculator {
     private static final float[] COLOR_BRIGHTNESS_PROFILES = {0.92F, 0.62F, 0.93F, 0.58F};
 
     private MaterialPropertyCalculator() {
+    }
+
+    /**
+     * Center value of the default tier-banded material-property scale. The scale is deliberately
+     * open-ended; adding later MachineTier entries does not require changing chemistry thresholds.
+     */
+    public static double defaultTierBandCenter(int tierIndex) {
+        int safeTier = Math.max(0, tierIndex);
+        double intrinsicCenter = 5.0D + 50.0D * DEFAULT_INTRINSIC_SPREAD;
+        return safeTier * (double) DEFAULT_TIER_BAND_SIZE + intrinsicCenter;
+    }
+
+    /**
+     * Converts an open-ended tier-banded property score back to the nearest tier index.
+     * This method intentionally does not clamp to MachineTier.ALL so callers can decide how
+     * to handle values beyond the currently registered highest tier.
+     */
+    public static int tierIndexForBandedValue(double value) {
+        if (!Double.isFinite(value)) return 0;
+        double rawIndex = (value - defaultTierBandCenter(0)) / DEFAULT_TIER_BAND_SIZE;
+        long rounded = Math.round(rawIndex);
+        if (rounded <= 0L) return 0;
+        return rounded >= Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) rounded;
     }
 
     public static MaterialProperties calculate(ElementDefinition element) {
@@ -131,13 +155,19 @@ public final class MaterialPropertyCalculator {
         int fatigueResistance = tierBanded(fatigueScore, tierMultiplier);
 
         MaterialProperties.PhysicalState targetState = intrinsicState(atomic);
+        MaterialProperties.MetallicityClass metallicityClass = metallicityClass(metallicityProfile);
+        boolean tierBandedMetalMelting = targetState == MaterialProperties.PhysicalState.SOLID
+                && (metallicityClass == MaterialProperties.MetallicityClass.STRONGLY_METALLIC
+                || metallicityClass == MaterialProperties.MetallicityClass.METALLIC);
         int meltingPoint = meltingPointC(
                 atomic,
                 compactness,
                 crystalPotential,
                 cohesionProfile,
                 volatility,
-                targetState
+                targetState,
+                tierIndex,
+                tierBandedMetalMelting
         );
         int boilingPoint = boilingPointC(
                 meltingPoint,
@@ -148,7 +178,6 @@ public final class MaterialPropertyCalculator {
         );
         MaterialProperties.PhysicalState state = stateForTemperatures(meltingPoint, boilingPoint);
         int metallicity = metallicityProfile;
-        MaterialProperties.MetallicityClass metallicityClass = metallicityClass(metallicity);
         boolean metal = state != MaterialProperties.PhysicalState.GAS
                 && (metallicityClass == MaterialProperties.MetallicityClass.STRONGLY_METALLIC
                 || metallicityClass == MaterialProperties.MetallicityClass.METALLIC);
@@ -795,7 +824,9 @@ public final class MaterialPropertyCalculator {
             int crystalPotential,
             int cohesion,
             int volatility,
-            MaterialProperties.PhysicalState targetState
+            MaterialProperties.PhysicalState targetState,
+            int tierIndex,
+            boolean tierBandedMetal
     ) {
         int raw = safeInt(
                 -210.0D
@@ -805,11 +836,34 @@ public final class MaterialPropertyCalculator {
                         + crystalPotential * 3.0D
                         - volatility * 5.0D
         );
+        if (targetState == MaterialProperties.PhysicalState.SOLID && tierBandedMetal) {
+            int chemistryScore = clamp(weighted(
+                    cohesion, 0.35D,
+                    atomic.bondStrength(), 0.20D,
+                    compactness, 0.15D,
+                    crystalPotential, 0.15D,
+                    100 - volatility, 0.15D
+            ), 0, 100);
+            int base = 1 + Math.round(chemistryScore * 499.0F / 100.0F);
+            return tierBandedMetalMeltingPoint(base, tierIndex);
+        }
         return switch (targetState) {
             case GAS -> clamp(Math.min(raw, -35), -260, -35);
             case LIQUID -> clamp(Math.min(raw, 8), -180, 8);
             case SOLID -> clamp(Math.max(raw, 60), 60, 6000);
         };
+    }
+
+    public static int tierBandedMetalMeltingPoint(int baseMeltingPoint, int tierIndex) {
+        int base = clamp(baseMeltingPoint, 1, METAL_MELTING_TIER_BAND_C);
+        int safeTier = Math.max(0, tierIndex);
+        return Math.addExact(base, Math.multiplyExact(safeTier, METAL_MELTING_TIER_BAND_C));
+    }
+
+    public static int normalizeMetalMeltingBase(double intrinsicMeltingPoint) {
+        double positive = Math.max(0.0D, intrinsicMeltingPoint);
+        double normalized = 1.0D - Math.exp(-positive / 900.0D);
+        return clamp(1 + safeInt(normalized * 499.0D), 1, METAL_MELTING_TIER_BAND_C);
     }
 
     private static int boilingPointC(

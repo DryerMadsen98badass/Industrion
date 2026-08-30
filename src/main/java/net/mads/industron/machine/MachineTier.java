@@ -19,6 +19,15 @@ public record MachineTier(String id, String displayName, int color) {
     public static final MachineTier HV = new MachineTier("hv", "HV", 0xE85B5B);
     public static final MachineTier EV = new MachineTier("ev", "EV", 0x9B5DE5);
     public static final MachineTier IV = new MachineTier("iv", "IV", 0x5DD9C1);
+    public static final MachineTier LUV = new MachineTier("luv", "LuV", 0xFF8C42);
+    public static final MachineTier ZPM = new MachineTier("zpm", "ZPM", 0xD84FD6);
+    public static final MachineTier UV = new MachineTier("uv", "UV", 0x5A4BFF);
+    public static final MachineTier UHV = new MachineTier("uhv", "UHV", 0x37D6FF);
+    public static final MachineTier UEV = new MachineTier("uev", "UEV", 0xF2F7FF);
+    public static final MachineTier UIV = new MachineTier("uiv", "UIV", 0xB7FF4A);
+    public static final MachineTier UXV = new MachineTier("uxv", "UXV", 0xFF3D8B);
+    public static final MachineTier OPV = new MachineTier("opv", "OpV", 0x2B2B2B);
+    public static final MachineTier MAX = new MachineTier("max", "MAX", 0xFFFFFF);
 
     public static final MachineTier STEAM_COPPER =
             new MachineTier("steam_copper", "Copper", 0xC87533);
@@ -32,7 +41,16 @@ public record MachineTier(String id, String displayName, int color) {
             MV,
             HV,
             EV,
-            IV
+            IV,
+            LUV,
+            ZPM,
+            UV,
+            UHV,
+            UEV,
+            UIV,
+            UXV,
+            OPV,
+            MAX
     );
 
     public static final List<MachineTier> ELECTRIC_TIERS = ALL;

@@ -3,7 +3,7 @@ package net.mads.industron.registry;
 import com.simibubi.create.AllBlockEntityTypes;
 import com.simibubi.create.content.decoration.slidingDoor.SlidingDoorBlockEntity;
 import net.mads.industron.Industron;
-import net.mads.industron.assembly.AssemblyWorkbenchBlockEntity;
+import net.mads.industron.recipe.recipetypes.assembly.workbench.AssemblyWorkbenchBlockEntity;
 import net.mads.industron.compat.create.BlazeBurnerFuelHandler;
 import net.mads.industron.energy.CreativeEnergyBlockEntity;
 import net.mads.industron.energy.EnergyWireBlockEntity;

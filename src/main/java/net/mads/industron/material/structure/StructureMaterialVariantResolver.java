@@ -1,5 +1,7 @@
 package net.mads.industron.material.structure;
 
+import net.mads.industron.material.MaterialPart;
+
 import net.mads.industron.Industron;
 import net.minecraft.resources.ResourceLocation;
 
@@ -23,7 +25,7 @@ public final class StructureMaterialVariantResolver {
     private StructureMaterialVariantResolver() {
     }
 
-    public static Optional<ItemTextureSet> itemTextures(StructureMaterial material, StructureMaterialPart part) {
+    public static Optional<ItemTextureSet> itemTextures(StructureMaterial material, MaterialPart part) {
         TextureFamily family = textureFamily(part);
         if (family == null) {
             return Optional.empty();
@@ -46,7 +48,7 @@ public final class StructureMaterialVariantResolver {
         return Optional.of(new ItemTextureSet(base, secondary, overlay));
     }
 
-    private static TextureFamily textureFamily(StructureMaterialPart part) {
+    private static TextureFamily textureFamily(MaterialPart part) {
         return switch (part) {
             case TINY_DUST, TINY_WOOD_PULP -> new TextureFamily("dust", "tiny");
             case SMALL_DUST, SMALL_WOOD_PULP -> new TextureFamily("dust", "small");

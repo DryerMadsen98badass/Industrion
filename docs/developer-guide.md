@@ -114,3 +114,8 @@ Create er integration provider. Industron eier material-/assembly-reglene. Creat
 ## Om resten av docs-pakken
 
 `Industron/development docs/to do/` beholder også eldre roadmap- og designnotater. De er nyttige for framtidige features, men implementert Assembly skal alltid leses fra `code/recipes/assembly-recipes.md` og siste prosjektkode.
+
+
+## Current material/geology task
+
+For the current task, use `Industron/development docs/CURRENT_TASK.md` and `Industron/development docs/to do/23-material-geology-autorecipe-integration.md` as the canonical handoff and execution plan.

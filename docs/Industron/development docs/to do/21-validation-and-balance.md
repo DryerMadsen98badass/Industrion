@@ -71,3 +71,7 @@
 ## Ferdig når
 
 De nye domain-systemene er deterministiske, boundary-testet og kan kjøres i stor skala uten combinatorial explosion, runtime-search eller skjulte invalid states.
+
+## Geology integration
+
+Ore generation additionally validates 9x9-region selection, deposit geometry, source coverage, surface indicators, IO limits, material forms, and complete recovery/waste balance. See `22-geology-and-ore-generation.md`.

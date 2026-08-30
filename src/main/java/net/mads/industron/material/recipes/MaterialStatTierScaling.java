@@ -2,8 +2,8 @@ package net.mads.industron.material.recipes;
 
 import net.mads.industron.machine.MachineTier;
 import net.mads.industron.material.MaterialPropertyCalculator;
-import net.mads.industron.recipe.recipetypes.AssemblyCapability;
-import net.mads.industron.recipe.recipetypes.AssemblyRequirement;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyCapability;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyRequirement;
 
 import java.util.Objects;
 

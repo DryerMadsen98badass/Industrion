@@ -2,6 +2,8 @@ package net.mads.industron.material.structure;
 
 import net.mads.industron.material.IndustrialSubstance;
 import net.mads.industron.material.MaterialComponent;
+import net.mads.industron.material.defenitions.StoneMaterials;
+import net.mads.industron.material.defenitions.WoodMaterials;
 
 import java.util.ArrayList;
 import java.util.List;

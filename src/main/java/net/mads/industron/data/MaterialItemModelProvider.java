@@ -4,7 +4,7 @@ import net.mads.industron.Industron;
 import net.mads.industron.item.SimpleItemDefinition;
 import net.mads.industron.item.SimpleItems;
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.material.IndustrialMaterials;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.MaterialPart;
 import net.mads.industron.material.MaterialTextures;
 import net.mads.industron.registry.FluidRegistry;
@@ -110,21 +110,24 @@ public class MaterialItemModelProvider extends ItemModelProvider {
                 }
 
                 if (net.mads.industron.material.MaterialFormGenerator.hasMagneticVariant(material, part)) {
-                    var magneticModel = getBuilder(part.magneticRegistryName(material))
-                            .parent(new ModelFile.UncheckedModelFile(ResourceLocation.withDefaultNamespace("item/generated")))
-                            .texture("layer0", textures.get().base());
                     int magneticLayer = 1;
                     if (textures.get().secondary().isPresent()) {
-                        magneticModel.texture("layer" + magneticLayer++, textures.get().secondary().get());
+                        magneticLayer++;
                     }
                     if (textures.get().overlay().isPresent()) {
-                        magneticModel.texture("layer" + magneticLayer++, textures.get().overlay().get());
+                        magneticLayer++;
                     }
-                    if (part == MaterialPart.HOT_INGOT) {
-                        var hotOverlay = net.mads.industron.material.MaterialVariantResolver.hotIngotOverlayTexture(material);
-                        if (hotOverlay.isPresent()) magneticModel.texture("layer" + magneticLayer++, hotOverlay.get());
+                    if (part == MaterialPart.HOT_INGOT
+                            && net.mads.industron.material.MaterialVariantResolver.hotIngotOverlayTexture(material).isPresent()) {
+                        magneticLayer++;
                     }
-                    magneticModel.texture("layer" + magneticLayer, magneticOverlay);
+
+                    // Magnetic items reuse the normal item's complete parent/layer chain and
+                    // add only the magnetic overlay. This keeps every magnetic item fully
+                    // functional while avoiding a second copy of all normal layers.
+                    getBuilder(part.magneticRegistryName(material))
+                            .parent(getBuilder(name))
+                            .texture("layer" + magneticLayer, magneticOverlay);
                 }
             }
         }

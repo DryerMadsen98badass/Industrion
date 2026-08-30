@@ -2,7 +2,7 @@ package net.mads.industron.validation;
 
 import net.mads.industron.material.ElementDefinition;
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.material.IndustrialMaterials;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.structure.StructureMaterial;
 import net.mads.industron.material.structure.StructureMaterials;
 

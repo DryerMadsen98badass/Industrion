@@ -1,6 +1,6 @@
 package net.mads.industron.transport.color;
 
-import net.mads.industron.input.ControlKeyState;
+import net.mads.industron.control.ControlKeyState;
 import net.minecraft.world.entity.player.Player;
 
 /** Compatibility facade: pipe painting and assembly share the same physical Ctrl key state. */

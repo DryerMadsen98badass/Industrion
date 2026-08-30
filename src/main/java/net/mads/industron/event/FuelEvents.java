@@ -6,7 +6,7 @@ import net.mads.industron.block.SimpleBlocks;
 import net.mads.industron.item.SimpleItemDefinition;
 import net.mads.industron.item.SimpleItems;
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.material.IndustrialMaterials;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.MaterialPart;
 import net.mads.industron.registry.ItemRegistry;
 import net.minecraft.core.registries.BuiltInRegistries;

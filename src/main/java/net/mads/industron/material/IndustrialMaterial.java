@@ -13,6 +13,7 @@ public record IndustrialMaterial(
         String displayName,
         int atomicNumber,
         MachineTier tier,
+        MaterialContentProfile contentProfile,
         MaterialProperties properties,
         String itemMaterialSet,
         String blockMaterialSet,
@@ -49,12 +50,17 @@ public record IndustrialMaterial(
         if (tier == null || tier == MachineTier.NONE) {
             throw new IllegalArgumentException("Industrial material tier must be a real tier: " + id);
         }
+        if (contentProfile == null) {
+            throw new IllegalArgumentException("Industrial material content profile cannot be null: " + id);
+        }
         if (properties == null) {
             throw new IllegalArgumentException("Industrial material properties cannot be null: " + id);
         }
     }
 
     public boolean has(MaterialPart part) { return parts.contains(part); }
+    public boolean isMineralDust() { return contentProfile == MaterialContentProfile.MINERAL_DUST; }
+    public boolean isOreMaterial() { return contentProfile == MaterialContentProfile.ORE; }
     public boolean hasExistingPart(MaterialPart part) { return existingParts.containsKey(part); }
     public ResourceLocation existingPart(MaterialPart part) { return existingParts.get(part); }
     public boolean hasExistingRecipe(MaterialPart part) { return existingRecipeParts.contains(part); }
@@ -98,19 +104,7 @@ public record IndustrialMaterial(
     @Override
     public String formula(boolean nested) {
         if (elementSymbol.isPresent()) return elementSymbol.get();
-        if (components.isEmpty()) return "";
-
-        StringBuilder formula = new StringBuilder();
-        for (MaterialComponent component : components) {
-            IndustrialSubstance substance = component.substance();
-            String componentFormula = substance.formula(true);
-            if (componentFormula.isBlank()) componentFormula = substance.displayName();
-            formula.append(componentFormula);
-            if (component.amount() > 1) formula.append(component.amount());
-        }
-
-        String result = formula.toString();
-        return nested ? "(" + result + ")" : result;
+        return MaterialFormulaFormatter.compound(components, nested);
     }
 
     public String compoundFormula(boolean nested) { return formula(nested); }

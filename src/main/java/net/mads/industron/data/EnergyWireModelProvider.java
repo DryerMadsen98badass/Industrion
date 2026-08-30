@@ -6,7 +6,7 @@ import net.mads.industron.Industron;
 import net.mads.industron.energy.EnergyWireBlock;
 import net.mads.industron.energy.WireThickness;
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.material.IndustrialMaterials;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.minecraft.core.Direction;
 import net.minecraft.data.CachedOutput;
 import net.minecraft.data.DataProvider;

@@ -21,3 +21,9 @@ Generated recipe IDs må være stabile mellom oppstarter. ID skal bygges fra req
 ## Duration
 
 Hvordan duration beregnes er åpent. Foretrukket retning er en formel basert på process family, reaction complexity, temperature/pressure og tier. Energy rate skal fortsatt komme kun fra tier-profilen.
+
+## Current material-autorecipe integration
+
+For the current implementation, generated composition processing is scoped to StoneMaterial, WoodMaterial and raw ore-source materials. See `material-autorecipes.md`.
+
+The feed boundary is DUST for stone/raw ore-source and WOOD_PULP for wood. Ore-to-dust processing is deliberately later. Recipe tier is one tier below the resolved source tier, clamped at ULV. Process choice must be topology/property/phase driven and must respect actual RecipeType IO limits.

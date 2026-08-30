@@ -1,9 +1,9 @@
 package net.mads.industron.material.recipes;
 
 import net.mads.industron.machine.MachineTier;
-import net.mads.industron.recipe.recipetypes.Component;
-import net.mads.industron.recipe.recipetypes.Material;
-import net.mads.industron.recipe.recipetypes.Stats;
+import net.mads.industron.recipe.recipes.assembly.Component;
+import net.mads.industron.recipe.recipes.assembly.Material;
+import net.mads.industron.recipe.recipes.assembly.Stats;
 
 import java.util.List;
 

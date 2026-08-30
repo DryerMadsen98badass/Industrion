@@ -1,5 +1,7 @@
 package net.mads.industron.material.structure;
 
+import net.mads.industron.material.MaterialPart;
+
 import java.util.Map;
 import java.util.Optional;
 
@@ -13,8 +15,8 @@ public record StructureBlockDefinition(
         Optional<String> bottomTextureFile,
         Optional<String> itemTextureFile,
         Optional<String> baseRegistryName,
-        Optional<StructureMaterialPart> part,
-        Optional<StructureMaterialPart> basePart,
+        Optional<MaterialPart> part,
+        Optional<MaterialPart> basePart,
         ModelKind modelKind,
         Optional<String> modelTemplate,
         Map<String, String> textureFiles
@@ -30,8 +32,8 @@ public record StructureBlockDefinition(
             Optional<String> bottomTextureFile,
             Optional<String> itemTextureFile,
             Optional<String> baseRegistryName,
-            Optional<StructureMaterialPart> part,
-            Optional<StructureMaterialPart> basePart
+            Optional<MaterialPart> part,
+            Optional<MaterialPart> basePart
     ) {
         this(
                 material,

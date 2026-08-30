@@ -84,7 +84,7 @@ Når et materiale kvalifiserer skal generatoren kunne lage hele content-settet s
 - [ ] Validation for missing template/model/texture references.
 - [ ] Existing/generated collision protection.
 
-Recipes for generated material-content skal **ikke** spres i casing-generatoren. `material/recipes/` er reservert for de senere automatiske recipe-generatorene for blant annet `StoneMaterial`, `GemMaterial`, `WoodMaterial`, `IndustrialMaterial` og senere generated substances.
+Recipes for generated material-content skal **ikke** spres i casing-generatoren. `material/recipes/` er reservert for de senere automatiske recipe-generatorene for blant annet `StoneMaterial`, `WoodMaterial` og raw ore-source-materialer i den aktive integrasjonen; andre familier er senere scope.
 
 ## 6. Fremtidig generated substance support
 

@@ -1,0 +1,14 @@
+package net.mads.industron.material.chemistry;
+
+public enum MaterialSourceType {
+    WORLD_DEPOSIT,
+    NATURAL_FLUID_DEPOSIT,
+    NATURAL_GAS_DEPOSIT,
+    STRUCTURE_LOOT,
+    BIOLOGICAL_EXTRACTION,
+    EXTERNAL_MAPPING,
+    PROCESS_OUTPUT,
+    PROCESS_BYPRODUCT,
+    CHEMICAL_SYNTHESIS,
+    MANUAL_OVERRIDE
+}

@@ -7,12 +7,12 @@ import net.mads.industron.block.SimpleBlocks;
 import net.mads.industron.item.SimpleItemDefinition;
 import net.mads.industron.item.SimpleItems;
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.material.IndustrialMaterials;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.MaterialFormGenerator;
 import net.mads.industron.material.MaterialPart;
+import net.mads.industron.material.MaterialOreHost;
 import net.mads.industron.material.structure.StructureMaterial;
 import net.mads.industron.material.structure.StructureMaterialGenerator;
-import net.mads.industron.material.structure.StructureMaterialPart;
 import net.mads.industron.material.structure.StructureMaterials;
 import net.mads.industron.registry.BlockRegistry;
 import net.mads.industron.registry.ItemRegistry;
@@ -119,6 +119,23 @@ public final class ClientColorHandlers {
                         holder.get()
                 );
             }
+
+            if (MaterialOreHost.hasNaturalOre(material)) {
+                for (MaterialOreHost host : MaterialOreHost.all()) {
+                    for (boolean small : new boolean[]{false, true}) {
+                        var holder = BlockRegistry.getMaterialOreHostBlock(material, host, small);
+                        if (holder == null) continue;
+                        event.register(
+                                (state, level, position, tintIndex) -> switch (tintIndex) {
+                                    case 0 -> baseColor;
+                                    case 1 -> secondaryColor;
+                                    default -> 0xFFFFFFFF;
+                                },
+                                holder.get()
+                        );
+                    }
+                }
+            }
         }
     }
 
@@ -152,6 +169,23 @@ public final class ClientColorHandlers {
                     }
                 }
             }
+
+            if (MaterialOreHost.hasNaturalOre(material)) {
+                for (MaterialOreHost host : MaterialOreHost.all()) {
+                    for (boolean small : new boolean[]{false, true}) {
+                        var item = ItemRegistry.getMaterialOreHostItem(material, host, small);
+                        if (item == null) continue;
+                        event.register(
+                                (stack, tintIndex) -> switch (tintIndex) {
+                                    case 0 -> baseColor;
+                                    case 1 -> secondaryColor;
+                                    default -> 0xFFFFFFFF;
+                                },
+                                item.get()
+                        );
+                    }
+                }
+            }
         }
     }
 
@@ -180,7 +214,7 @@ public final class ClientColorHandlers {
     ) {
         for (StructureMaterial material : StructureMaterials.ALL) {
             int color = argb(material.color());
-            for (StructureMaterialPart part : StructureMaterialGenerator.generatedItemForms(material)) {
+            for (MaterialPart part : StructureMaterialGenerator.generatedItemForms(material)) {
                 var item = ItemRegistry.getStructureMaterialFormItem(material, part);
                 if (item == null) {
                     continue;

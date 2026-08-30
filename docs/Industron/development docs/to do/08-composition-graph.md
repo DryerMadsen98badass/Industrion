@@ -31,3 +31,7 @@ Minecraft registry freeze betyr at vilkårlige nye item/block registry IDs ikke 
 ## Ferdig når
 
 Enhver substance har stabil composition-identitet, kan flattenes uten cycles, og systemet skiller fysisk mixture fra en faktisk bonded/structured substance.
+
+## Geology integration
+
+Geology note: ore minerals use the same top-level composition graph. Their `.contains(...)` ratios are authoritative for recovery and waste-stream balance. See `22-geology-and-ore-generation.md`.

@@ -2,7 +2,7 @@ package net.mads.industron.recipe.recipes.assembly;
 
 import net.mads.industron.material.recipes.MaterialCasingAssemblyRecipes;
 import net.mads.industron.material.recipes.MaterialFrameAssemblyRecipes;
-import net.mads.industron.recipe.recipetypes.AssemblyRecipeDefinition;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyRecipeDefinition;
 
 import java.util.ArrayList;
 import java.util.List;

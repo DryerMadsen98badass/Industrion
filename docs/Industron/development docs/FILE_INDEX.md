@@ -1,9 +1,11 @@
 # File index
 
-Dette er den faktiske listen over filer under `development docs/` i denne docs-pakken. Listen er generert fra den korrigerte basen og skal oppdateres når filer legges til/fjernes.
+Generated from this docs package. Update it whenever files are added or removed.
 
 - `API_CONVENTIONS.md`
+- `CURRENT_TASK.md`
 - `DECISIONS.md`
+- `DOCS_PACKAGE_VALIDATION.md`
 - `FILE_INDEX.md`
 - `README.md`
 - `START_HERE.md`
@@ -22,6 +24,7 @@ Dette er den faktiske listen over filer under `development docs/` i denne docs-p
 - `code/elements/atomic-model.md`
 - `code/elements/ion-model.md`
 - `code/energy/README.md`
+- `code/geology/README.md`
 - `code/integration/create.md`
 - `code/machines/README.md`
 - `code/machines/how-to-add-a-machine.md`
@@ -30,11 +33,13 @@ Dette er den faktiske listen over filer under `development docs/` i denne docs-p
 - `code/materials/README.md`
 - `code/materials/color-generation.md`
 - `code/materials/generated-forms.md`
+- `code/materials/stone-wood-ore-model.md`
 - `code/materials/tools-ores-cables.md`
 - `code/multiblocks/README.md`
 - `code/recipes/README.md`
 - `code/recipes/assembly-recipes.md`
 - `code/recipes/generation-pipeline.md`
+- `code/recipes/material-autorecipes.md`
 - `preferences/README.md`
 - `preferences/delivery-workflow.md`
 - `preferences/documentation-rules.md`
@@ -68,6 +73,8 @@ Dette er den faktiske listen over filer under `development docs/` i denne docs-p
 - `to do/19-maintenance.md`
 - `to do/20-create-integration.md`
 - `to do/21-validation-and-balance.md`
+- `to do/22-geology-and-ore-generation.md`
+- `to do/23-material-geology-autorecipe-integration.md`
 - `to do/Industron Checklist.xlsx`
 - `to do/README.md`
 - `to do/open-decisions.md`

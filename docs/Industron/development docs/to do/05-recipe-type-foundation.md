@@ -142,9 +142,8 @@ Automatiske material-recipes skal **ikke** blandes inn i de håndskrevne tier-fi
 
 ```text
 StoneMaterial
-GemMaterial
 WoodMaterial
-IndustrialMaterial
+Raw ore-source material
 ```
 
 og senere generated alloys/compounds/substances.

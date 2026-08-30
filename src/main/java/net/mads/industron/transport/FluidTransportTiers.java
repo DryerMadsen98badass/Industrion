@@ -1,7 +1,7 @@
 package net.mads.industron.transport;
 
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.material.IndustrialMaterials;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.MaterialProperties;
 
 import static net.mads.industron.transport.FluidTransportTier.transportTier;

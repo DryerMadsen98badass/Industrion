@@ -41,15 +41,26 @@ public final class MetalStructureModelProvider implements DataProvider {
 
     @Override
     public CompletableFuture<?> run(CachedOutput output) {
-        List<CompletableFuture<?>> futures = new ArrayList<>();
+        // Keep only one structure definition's JSON objects and save futures alive at once.
+        // The old implementation accumulated the whole custom-metal family in one list,
+        // which created a large peak heap when many materials were present.
+        CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
+
         for (MetalMaterial material : MetalMaterials.ALL) {
             for (StructureBlockDefinition definition : StructureMaterialGenerator.generatedBlockDefinitions(material)) {
-                if (isCustom(definition)) {
-                    generate(output, futures, definition);
+                if (!isCustom(definition)) {
+                    continue;
                 }
+
+                chain = chain.thenCompose(ignored -> {
+                    List<CompletableFuture<?>> futures = new ArrayList<>();
+                    generate(output, futures, definition);
+                    return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
+                });
             }
         }
-        return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
+
+        return chain;
     }
 
     private static boolean isCustom(StructureBlockDefinition definition) {

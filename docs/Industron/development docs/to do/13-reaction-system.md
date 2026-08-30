@@ -54,3 +54,7 @@ Phase 06 kan da finne en kompatibel electrochemical RecipeType når operation-se
 ## Ferdig når
 
 Reactions er atom- og charge-balanced, products er structurally valid, og hver reaction kan beskrive nødvendige process operations/conditions uten å kjenne konkret machine/controller.
+
+## Geology integration
+
+Ore-processing reactions must conserve every consumed substance and may use roasting, leaching, extraction, precipitation, electrolysis, electrowinning, electrorefining, and other existing recipe types when chemically valid. See `22-geology-and-ore-generation.md`.

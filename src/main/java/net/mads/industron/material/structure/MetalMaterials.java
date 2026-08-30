@@ -1,6 +1,6 @@
 package net.mads.industron.material.structure;
 
-import net.mads.industron.material.IndustrialMaterials;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
 
 import java.util.List;
 

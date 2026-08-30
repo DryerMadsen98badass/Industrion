@@ -1,10 +1,10 @@
 package net.mads.industron.material.recipes;
 
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.material.IndustrialMaterials;
-import net.mads.industron.recipe.recipetypes.AssemblyRecipeDefinition;
-import net.mads.industron.recipe.recipetypes.Component;
-import net.mads.industron.recipe.recipetypes.Material;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyRecipeDefinition;
+import net.mads.industron.recipe.recipes.assembly.Component;
+import net.mads.industron.recipe.recipes.assembly.Material;
 import net.mads.industron.recipe.recipes.assembly.ComponentDefinitions;
 
 import java.util.ArrayList;

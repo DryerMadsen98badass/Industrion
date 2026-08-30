@@ -8,16 +8,9 @@ import java.util.Set;
  * texture availability never decides whether a form exists.
  */
 public final class MaterialFormGenerator {
+    /** Processing forms stay available for elemental outputs, but elements no longer
+     * receive generated natural ore blocks merely because they are solid. */
     private static final EnumSet<MaterialPart> ORE_PROCESSING = EnumSet.of(
-            MaterialPart.ORE, MaterialPart.SMALL_ORE,
-            MaterialPart.DEEPSLATE_ORE, MaterialPart.SMALL_DEEPSLATE_ORE,
-            MaterialPart.DIORITE_ORE, MaterialPart.SMALL_DIORITE_ORE,
-            MaterialPart.ANDESITE_ORE, MaterialPart.SMALL_ANDESITE_ORE,
-            MaterialPart.GRANITE_ORE, MaterialPart.SMALL_GRANITE_ORE,
-            MaterialPart.TUFF_ORE, MaterialPart.SMALL_TUFF_ORE,
-            MaterialPart.NETHERRACK_ORE, MaterialPart.SMALL_NETHERRACK_ORE,
-            MaterialPart.BLACKSTONE_ORE, MaterialPart.SMALL_BLACKSTONE_ORE,
-            MaterialPart.END_STONE_ORE, MaterialPart.SMALL_END_STONE_ORE,
             MaterialPart.RAW_ORE, MaterialPart.RAW_BLOCK, MaterialPart.CRUSHED_ORE,
             MaterialPart.WASHED_CRUSHED_ORE, MaterialPart.REFINED_ORE,
             MaterialPart.TINY_DUST, MaterialPart.SMALL_DUST, MaterialPart.DUST,

@@ -1,6 +1,7 @@
 package net.mads.industron.fluid;
 
 import net.mads.industron.material.IndustrialSubstance;
+import net.mads.industron.material.MaterialFormulaFormatter;
 import net.mads.industron.material.MaterialComponent;
 import net.mads.industron.recipe.ChemicalBalanceRange;
 import net.minecraft.resources.ResourceLocation;
@@ -67,17 +68,7 @@ public record IndustrialFluid(
 
     @Override
     public String formula(boolean nested) {
-        if (components.isEmpty()) return "";
-        StringBuilder formula = new StringBuilder();
-        for (MaterialComponent component : components) {
-            IndustrialSubstance substance = component.substance();
-            String componentFormula = substance.formula(true);
-            if (componentFormula.isBlank()) componentFormula = substance.displayName();
-            formula.append(componentFormula);
-            if (component.amount() > 1) formula.append(component.amount());
-        }
-        String result = formula.toString();
-        return nested ? "(" + result + ")" : result;
+        return MaterialFormulaFormatter.compound(components, nested);
     }
 
     public String textureName() {

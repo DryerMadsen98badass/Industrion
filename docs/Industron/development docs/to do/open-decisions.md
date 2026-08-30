@@ -101,3 +101,13 @@ Beslutninger som allerede er låst/implementert skal ikke stå som åpne her.
 - [ ] Om og hvordan stone molten forms aktiveres per stone.
 - [ ] Maintenance persistence + repair UX.
 - [ ] TreeDefinition API, growth algorithm og worldgen-regler.
+
+## Current material/geology integration - only still-open details
+
+The main architecture is locked in `23-material-geology-autorecipe-integration.md`. Do not reopen already-decided questions from older sections that conflict with it.
+
+- [ ] Decide the explicit failed-roll result for non-Silk stone mining when the dust chance fails; do not retain current self/cobbled fallback accidentally.
+- [ ] Calibrate deterministic process-selection thresholds from actual generated property ranges.
+- [ ] Reuse/confirm the central duration/power scaling for generated routes rather than adding new constants.
+- [ ] Add a new processing-override API only if `ChemicalStructure` proves insufficient for real source definitions.
+- [ ] Verify the complete Minecraft/Create block ID mapping table against the actual loaded versions while implementing StoneMaterials/WoodMaterials.

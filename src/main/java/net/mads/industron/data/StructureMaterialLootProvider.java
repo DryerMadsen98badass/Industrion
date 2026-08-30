@@ -3,6 +3,7 @@ package net.mads.industron.data;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.mads.industron.Industron;
+import net.mads.industron.material.MaterialPart;
 import net.mads.industron.material.structure.StructureBlockDefinition;
 import net.mads.industron.material.structure.StructureMaterial;
 import net.mads.industron.material.structure.StructureMaterialGenerator;
@@ -30,6 +31,13 @@ public final class StructureMaterialLootProvider implements DataProvider {
         List<CompletableFuture<?>> futures = new ArrayList<>();
         for (StructureMaterial material : StructureMaterials.ALL) {
             for (StructureBlockDefinition definition : StructureMaterialGenerator.generatedBlockDefinitions(material)) {
+                // STONE and COBBLED_STONE have special loot semantics and are owned by
+                // MaterialStoneLootProvider. Do not generate a normal self-drop table here.
+                MaterialPart part = definition.part().orElse(null);
+                if (part == MaterialPart.STONE || part == MaterialPart.COBBLED_STONE) {
+                    continue;
+                }
+
                 JsonObject table = switch (definition.shape()) {
                     case SLAB -> slabLoot(definition.registryName());
                     case DOOR -> doorLoot(definition.registryName());

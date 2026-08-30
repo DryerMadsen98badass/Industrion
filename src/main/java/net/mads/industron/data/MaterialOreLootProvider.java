@@ -4,9 +4,12 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.mads.industron.Industron;
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.material.IndustrialMaterials;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.MaterialPart;
+import net.mads.industron.material.MaterialOreHost;
 import net.mads.industron.material.recipes.MaterialRecipeHelper;
+import net.mads.industron.material.structure.StoneMaterial;
+import net.mads.industron.material.structure.StructureMaterialGenerator;
 import net.mads.industron.registry.BlockRegistry;
 import net.minecraft.data.CachedOutput;
 import net.minecraft.data.DataProvider;
@@ -19,6 +22,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
@@ -33,18 +37,12 @@ public final class MaterialOreLootProvider implements DataProvider {
             MaterialPart.SMALL_ORE,
             MaterialPart.DEEPSLATE_ORE,
             MaterialPart.SMALL_DEEPSLATE_ORE,
-            MaterialPart.DIORITE_ORE,
-            MaterialPart.SMALL_DIORITE_ORE,
-            MaterialPart.ANDESITE_ORE,
-            MaterialPart.SMALL_ANDESITE_ORE,
-            MaterialPart.GRANITE_ORE,
-            MaterialPart.SMALL_GRANITE_ORE,
-            MaterialPart.TUFF_ORE,
-            MaterialPart.SMALL_TUFF_ORE,
             MaterialPart.NETHERRACK_ORE,
             MaterialPart.SMALL_NETHERRACK_ORE,
             MaterialPart.BLACKSTONE_ORE,
             MaterialPart.SMALL_BLACKSTONE_ORE,
+            MaterialPart.BASALT_ORE,
+            MaterialPart.SMALL_BASALT_ORE,
             MaterialPart.END_STONE_ORE,
             MaterialPart.SMALL_END_STONE_ORE
     );
@@ -67,8 +65,8 @@ public final class MaterialOreLootProvider implements DataProvider {
                     >> materialBlocks =
                     BlockRegistry.MATERIAL_BLOCKS.get(material.id());
 
-            if (materialBlocks == null || materialBlocks.isEmpty()) {
-                continue;
+            if (materialBlocks == null) {
+                materialBlocks = Map.of();
             }
 
             if (!MaterialRecipeHelper.hasItems(
@@ -77,12 +75,6 @@ public final class MaterialOreLootProvider implements DataProvider {
             )) {
                 continue;
             }
-
-            addExistingOreLootTables(
-                    futures,
-                    output,
-                    material
-            );
 
             for (Map.Entry<MaterialPart, DeferredHolder<
                     net.minecraft.world.level.block.Block,
@@ -107,43 +99,39 @@ public final class MaterialOreLootProvider implements DataProvider {
                                 output,
                                 createOreLootTable(
                                         material,
-                                        blockId
+                                        blockId,
+                                        part,
+                                        hostForLegacyPart(part).orElse(null)
                                 ),
                                 lootTablePath(blockHolder.getId())
                         )
                 );
+            }
+
+            if (MaterialOreHost.hasNaturalOre(material)) {
+                Map<String, DeferredHolder<net.minecraft.world.level.block.Block, ? extends net.minecraft.world.level.block.Block>> hostBlocks =
+                        BlockRegistry.MATERIAL_ORE_HOST_BLOCKS.get(material.id());
+                if (hostBlocks != null) {
+                    for (MaterialOreHost host : MaterialOreHost.compatibleHosts(material)) {
+                        for (boolean small : new boolean[]{false, true}) {
+                            DeferredHolder<net.minecraft.world.level.block.Block, ? extends net.minecraft.world.level.block.Block> blockHolder =
+                                    hostBlocks.get(host.key(small));
+                            if (blockHolder == null) continue;
+                            String blockId = blockHolder.getId().toString();
+                            futures.add(DataProvider.saveStable(
+                                    output,
+                                    createOreLootTable(material, blockId, small, host),
+                                    lootTablePath(blockHolder.getId())
+                            ));
+                        }
+                    }
+                }
             }
         }
 
         return CompletableFuture.allOf(
                 futures.toArray(CompletableFuture[]::new)
         );
-    }
-
-    private void addExistingOreLootTables(
-            List<CompletableFuture<?>> futures,
-            CachedOutput output,
-            IndustrialMaterial material
-    ) {
-        for (MaterialPart part : ORE_PARTS) {
-            if (!material.hasExistingPart(part)) {
-                continue;
-            }
-
-            ResourceLocation blockId =
-                    material.existingPart(part);
-
-            futures.add(
-                    DataProvider.saveStable(
-                            output,
-                            createOreLootTable(
-                                    material,
-                                    blockId.toString()
-                            ),
-                            lootTablePath(blockId)
-                    )
-            );
-        }
     }
 
     private Path lootTablePath(
@@ -158,7 +146,18 @@ public final class MaterialOreLootProvider implements DataProvider {
 
     private static JsonObject createOreLootTable(
             IndustrialMaterial material,
-            String blockId
+            String blockId,
+            MaterialPart orePart,
+            MaterialOreHost host
+    ) {
+        return createOreLootTable(material, blockId, orePart.isSmallOre(), host);
+    }
+
+    private static JsonObject createOreLootTable(
+            IndustrialMaterial material,
+            String blockId,
+            boolean smallOre,
+            MaterialOreHost host
     ) {
         JsonObject table = new JsonObject();
         table.addProperty("type", "minecraft:block");
@@ -172,9 +171,12 @@ public final class MaterialOreLootProvider implements DataProvider {
          * Uten Silk Touch:
          * Dropper raw ore, påvirket av Fortune.
          */
+        float yieldScale = smallOre ? 0.50F : 1.00F;
+
         pools.add(createMainDropPool(
                 material,
-                blockId
+                blockId,
+                yieldScale
         ));
 
         /*
@@ -189,7 +191,7 @@ public final class MaterialOreLootProvider implements DataProvider {
                             material,
                             MaterialPart.CRUSHED_ORE
                     ),
-                    CRUSHED_ORE_CHANCE
+                    CRUSHED_ORE_CHANCE * yieldScale
             ));
         }
 
@@ -205,7 +207,7 @@ public final class MaterialOreLootProvider implements DataProvider {
                             material,
                             MaterialPart.IMPURE_DUST
                     ),
-                    IMPURE_DUST_CHANCE
+                    IMPURE_DUST_CHANCE * yieldScale
             ));
         }
 
@@ -221,8 +223,15 @@ public final class MaterialOreLootProvider implements DataProvider {
                             material,
                             MaterialPart.TINY_DUST
                     ),
-                    TINY_DUST_CHANCE
+                    TINY_DUST_CHANCE * yieldScale
             ));
+        }
+
+        // Mining an ore can also recover one dust from the actual host rock. The chance is
+        // exactly the vanilla gravel -> flint Fortune curve and is independent of the ore
+        // material's own bonus drops. Silk Touch suppresses this pool.
+        if (host != null) {
+            resolveStoneDust(host.stone()).ifPresent(dust -> pools.add(createHostDustPool(dust)));
         }
 
         table.add("pools", pools);
@@ -230,9 +239,69 @@ public final class MaterialOreLootProvider implements DataProvider {
         return table;
     }
 
+
+    private static Optional<MaterialOreHost> hostForLegacyPart(MaterialPart part) {
+        boolean small = part.isSmallOre();
+        return MaterialOreHost.all().stream()
+                .filter(host -> host.legacyPart(small).orElse(null) == part)
+                .findFirst();
+    }
+
+    private static Optional<ResourceLocation> resolveStoneDust(StoneMaterial stone) {
+        if (stone.isWithout(MaterialPart.DUST)) return Optional.empty();
+        if (stone.hasExistingPart(MaterialPart.DUST)) return Optional.of(stone.existingPart(MaterialPart.DUST));
+        if (StructureMaterialGenerator.generatedItemForms(stone).contains(MaterialPart.DUST)) {
+            return Optional.of(ResourceLocation.fromNamespaceAndPath(
+                    Industron.MOD_ID,
+                    MaterialPart.DUST.registryName(stone)
+            ));
+        }
+        return Optional.empty();
+    }
+
+    private static JsonObject createHostDustPool(ResourceLocation dustItem) {
+        JsonObject pool = new JsonObject();
+        pool.addProperty("rolls", 1);
+
+        JsonArray conditions = new JsonArray();
+        conditions.add(noSilkTouchCondition());
+        conditions.add(hostDustChanceCondition());
+        pool.add("conditions", conditions);
+
+        JsonObject entry = new JsonObject();
+        entry.addProperty("type", "minecraft:item");
+        entry.addProperty("name", dustItem.toString());
+
+        JsonArray functions = new JsonArray();
+        JsonObject explosionDecay = new JsonObject();
+        explosionDecay.addProperty("function", "minecraft:explosion_decay");
+        functions.add(explosionDecay);
+        entry.add("functions", functions);
+
+        JsonArray entries = new JsonArray();
+        entries.add(entry);
+        pool.add("entries", entries);
+        return pool;
+    }
+
+    private static JsonObject hostDustChanceCondition() {
+        JsonObject condition = new JsonObject();
+        condition.addProperty("condition", "minecraft:table_bonus");
+        condition.addProperty("enchantment", "minecraft:fortune");
+
+        JsonArray chances = new JsonArray();
+        chances.add(0.1F);
+        chances.add(1.0F / 7.0F);
+        chances.add(0.25F);
+        chances.add(1.0F);
+        condition.add("chances", chances);
+        return condition;
+    }
+
     private static JsonObject createMainDropPool(
             IndustrialMaterial material,
-            String blockId
+            String blockId,
+            float yieldScale
     ) {
         JsonObject pool = new JsonObject();
         pool.addProperty("rolls", 1);
@@ -292,6 +361,12 @@ public final class MaterialOreLootProvider implements DataProvider {
                 "functions",
                 fortuneFunctions()
         );
+
+        if (yieldScale < 1.0F) {
+            JsonArray rawOreConditions = new JsonArray();
+            rawOreConditions.add(randomChanceCondition(yieldScale));
+            rawOreEntry.add("conditions", rawOreConditions);
+        }
 
         children.add(rawOreEntry);
 

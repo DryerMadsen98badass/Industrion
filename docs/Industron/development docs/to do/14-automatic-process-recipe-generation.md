@@ -1,82 +1,71 @@
-# Phase 14 – Automatic process- og recipe-generation
+# Phase 14 - Automatic process recipe generation
 
-Den generelle CE recipe/runtime-infrastrukturen finnes allerede. Phase 05 definerer recipe types, Phase 06 deres fysiske process rules, og Phase 08–13 produserer validated substances/reactions. Denne fasen kobler dem sammen.
+For the current implementation slice, this phase is scoped to `StoneMaterial`, `WoodMaterial` and raw ore-source materials. The detailed canonical design is `../code/recipes/material-autorecipes.md`; execution order is in `23-material-geology-autorecipe-integration.md`.
 
-## 1. Typed RecipeRequest
+## Goal
 
-- [ ] Definer typed `RecipeRequest` som peker på canonical substance/material/component references, ikke string material-lookups.
-- [ ] `RecipeRequest` skal inneholde inputs/outputs, process intent, conditions, amount, complexity/difficulty og stable source identity.
-- [ ] Ikke balansere chemistry på nytt her; requesten skal allerede være validert av Phase 13.
+Turn an already-declared composition into a physically justified CE process route and generated recipe without hardcoding a machine per material name.
 
-## 2. Process selection
-
-- [ ] Map `ProcessIntent` til en recipe type som støtter alle nødvendige operations fra Phase 06.
-- [ ] Ingen «best guess» fallback dersom process physics ikke matcher.
-- [ ] Hvis flere processes er gyldige kan en deterministic priority/cost rule velge default eller generere flere legitime process paths.
-
-Fiktive eksempelretninger:
+## Feed forms
 
 ```text
-Physical Material-A / Material-B particle mixture
--> SEPARATE_PHYSICAL_PHASES
--> passende physical separator kan være kandidat
-
-Bonded Compound X decomposition
--> bond breaking + eventuell electron transfer
--> electrochemical/chemical process kan være kandidat
--> physical separator er ugyldig
-
-Fluid mixture of Substance C + Substance D
--> fractionate by boiling/volatility
--> DISTILLATION/FRACTIONATION kan være kandidat etter Process Rules
+StoneMaterial -> DUST
+WoodMaterial -> WOOD_PULP
+Raw ore-source -> DUST
 ```
 
-## 3. Inputs/outputs
+Ore block -> dust processing is a later system and is not part of this phase.
 
-- [ ] Støtt exact item/block IDs når process faktisk krever akkurat den vanilla/mod itemen.
-- [ ] Støtt typed item tags når enhver item i taggen er valid.
-- [ ] Støtt substance/material-form inputs for generated materials.
-- [ ] Støtt fluids/gases og amounts gjennom typed fluid/substance-system.
-- [ ] Hold process recipe inputs atskilt fra capability-based assembly requirements; de løser forskjellige problemer.
+## Composition API
 
-## 4. Tier, duration og energy
+Use the real project syntax:
 
-Rekkefølgen skal være:
-
-```text
-Er reaction/process fysisk mulig?
--> Hvilken process kan utføre den?
--> Hvor vanskelig er den?
--> minimum tier / temperature / CB/andre relevante conditions
--> base duration
--> machine-owned CE/t/resource usage
+```java
+.contains(component(VERNIUM, 1), component(ORLUNE, 3))
 ```
 
-- [ ] Generer stable recipe IDs fra request ID eller canonical reaction/process signature.
-- [ ] Deriver minimum tier fra process complexity, material/reaction properties og required conditions.
-- [ ] Deriver base duration fra process family/type, bond/phase work, amount, temperature/CB/condition distance og tier.
-- [ ] Duration skal være deterministisk og testbar.
-- [ ] Recipe angir processing requirement/tier; machine/tier-systemet eier CE/t der dagens arkitektur bestemmer det.
-- [ ] Definer overclocking separat fra canonical base duration.
+Do not invent a second composition format.
 
-## 5. Alloys
+## Rules
 
-- [ ] Alloy mixing/smelting requests skal bruke actual component ratios og alloy phase requirements.
-- [ ] Powder mixture recipe og finished alloy recipe er forskjellige states/operations.
-- [ ] Generated alloy properties/tier kan påvirke required temperature, process tier og duration; Foundry integration følger Phase 07 heat/melting contract.
+- `.contains(...)` is composition, not proof of topology.
+- Stone/wood composition is authoritative even for unusual cross-type components.
+- Prefer explicit `ChemicalStructure` when inference is ambiguous.
+- Physical separators only perform physical separation.
+- Bonded material requires a process that can actually alter bonds.
+- Process selection uses phase/properties/structure and registered process semantics, never material-name families.
+- Multiple valid routes are ranked deterministically.
+- Complex/large-output sources may use justified multi-step routes.
+- Never silently drop an output to fit recipe slots.
+- Generated recipe tier is one tier below source tier, clamped at ULV.
+- Generated recipes reuse the existing CE recipe infrastructure and do not live in hand-written tier classes.
 
-## 6. Generated material recipe paths og diagnostics
+## Current implementation tasks
 
-- [ ] `material/recipes/` er canonical home for automatic recipes fra `StoneMaterial`, `GemMaterial`, `WoodMaterial`, `IndustrialMaterial` og senere generated substances.
-- [ ] Hold generated material recipes atskilt fra håndskrevne `recipe/recipes/<type>/<tier>...` files.
+- [ ] Add normalized source adapter for stone/wood/raw ore-source.
+- [ ] Add central previous-electric-tier utility.
+- [ ] Add form resolver for DUST/WOOD_PULP/component outputs.
+- [ ] Replace simplistic separation choice with topology/property-aware selection.
+- [ ] Add ambiguity diagnostics.
+- [ ] Add multi-step route representation.
+- [ ] Add ratio-to-item/fluid amount normalization.
+- [ ] Read/enforce each selected RecipeType's actual max IO.
+- [ ] Emit deterministic generated recipes.
+- [ ] Emit route report explaining every selected step.
+- [ ] Test all three source families and invalid/ambiguous cases.
 
-## 7. Diagnostics og generated content
+## Not in this phase
 
-- [ ] Rapporter rejected generated recipes med konkret reason/path.
-- [ ] Implementer datapack reload bare for rules/requests som faktisk kan endres etter registry freeze.
-- [ ] Lag custom Industron recipes som erstatter suppressede Minecraft/Create material recipes.
-- [ ] Verifiser at reachable-substance + reaction + recipe generation ikke lager uendelige chains.
+- universal recipe generation for every gem/alloy/compound;
+- ore mining/crushing/washing chain;
+- source name generation;
+- automatic Java source edits.
 
-## Ferdig når
+## Done when
 
-Alloy/chemistry-systemet kan produsere deterministic CE recipes med fysisk korrekt process type, riktige inputs/outputs, tier og duration uten håndskrevne per-material copies.
+- [ ] representative stone, wood and ore-source compositions generate stable valid routes;
+- [ ] invalid/ambiguous definitions produce diagnostics rather than nonsense recipes;
+- [ ] all emitted recipes fit actual IO;
+- [ ] two unchanged `runData` runs are byte-stable;
+- [ ] generated recipes load in runtime/JEI;
+- [ ] one-tier-below behavior is tested at boundaries.

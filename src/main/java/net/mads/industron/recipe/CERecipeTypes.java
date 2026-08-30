@@ -60,6 +60,7 @@ import net.mads.industron.recipe.recipetypes.WireDrawingRecipeType;
 import net.mads.industron.recipe.recipetypes.WindingRecipeType;
 import net.mads.industron.recipe.recipetypes.PrecisionMachiningRecipeType;
 import net.mads.industron.recipe.recipetypes.AssemblingRecipeType;
+import net.mads.industron.recipe.recipetypes.MagneticSeparationRecipeType;
 import net.mads.industron.recipe.recipetypes.MagnetizingRecipeType;
 import net.mads.industron.recipe.recipetypes.PolishingRecipeType;
 import net.minecraft.resources.ResourceLocation;
@@ -130,6 +131,7 @@ public final class CERecipeTypes {
     public static final RecipeTypeDefinition WINDING = WindingRecipeType.DEFINITION;
     public static final RecipeTypeDefinition PRECISION_MACHINING = PrecisionMachiningRecipeType.DEFINITION;
     public static final RecipeTypeDefinition ASSEMBLING = AssemblingRecipeType.DEFINITION;
+    public static final RecipeTypeDefinition MAGNETIC_SEPARATION = MagneticSeparationRecipeType.DEFINITION;
     public static final RecipeTypeDefinition MAGNETIZING = MagnetizingRecipeType.DEFINITION;
     public static final RecipeTypeDefinition POLISHING = PolishingRecipeType.DEFINITION;
 
@@ -194,6 +196,7 @@ public final class CERecipeTypes {
             WINDING,
             PRECISION_MACHINING,
             ASSEMBLING,
+            MAGNETIC_SEPARATION,
             MAGNETIZING,
             POLISHING
     );

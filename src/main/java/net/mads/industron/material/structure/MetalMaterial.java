@@ -1,5 +1,7 @@
 package net.mads.industron.material.structure;
 
+import net.mads.industron.material.MaterialPart;
+
 import net.mads.industron.material.IndustrialMaterial;
 import net.mads.industron.material.MaterialComponent;
 import net.minecraft.resources.ResourceLocation;
@@ -45,12 +47,12 @@ public record MetalMaterial(IndustrialMaterial source) implements StructureMater
     }
 
     @Override
-    public Map<StructureMaterialPart, ResourceLocation> existingParts() {
+    public Map<MaterialPart, ResourceLocation> existingParts() {
         return Map.of();
     }
 
     @Override
-    public Set<StructureMaterialPart> generatedForms() {
+    public Set<MaterialPart> generatedForms() {
         return Set.of();
     }
 

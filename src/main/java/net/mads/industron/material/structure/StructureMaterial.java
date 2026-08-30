@@ -1,5 +1,8 @@
 package net.mads.industron.material.structure;
 
+import net.mads.industron.material.MaterialPart;
+import net.mads.industron.material.MaterialFormulaFormatter;
+
 import net.mads.industron.material.IndustrialSubstance;
 import net.mads.industron.material.MaterialComponent;
 import net.minecraft.resources.ResourceLocation;
@@ -13,15 +16,15 @@ public interface StructureMaterial extends IndustrialSubstance {
 
     List<MaterialComponent> components();
 
-    Map<StructureMaterialPart, ResourceLocation> existingParts();
+    Map<MaterialPart, ResourceLocation> existingParts();
 
-    Set<StructureMaterialPart> generatedForms();
+    Set<MaterialPart> generatedForms();
 
-    default boolean hasExistingPart(StructureMaterialPart part) {
+    default boolean hasExistingPart(MaterialPart part) {
         return existingParts().containsKey(part);
     }
 
-    default ResourceLocation existingPart(StructureMaterialPart part) {
+    default ResourceLocation existingPart(MaterialPart part) {
         return existingParts().get(part);
     }
 
@@ -32,25 +35,7 @@ public interface StructureMaterial extends IndustrialSubstance {
 
     @Override
     default String formula(boolean nested) {
-        if (components().isEmpty()) {
-            return "";
-        }
-
-        StringBuilder formula = new StringBuilder();
-        for (MaterialComponent component : components()) {
-            IndustrialSubstance substance = component.substance();
-            String componentFormula = substance.formula(true);
-            if (componentFormula.isBlank()) {
-                componentFormula = substance.displayName();
-            }
-            formula.append(componentFormula);
-            if (component.amount() > 1) {
-                formula.append(component.amount());
-            }
-        }
-
-        String result = formula.toString();
-        return nested ? "(" + result + ")" : result;
+        return MaterialFormulaFormatter.compound(components(), nested);
     }
 
     @Override

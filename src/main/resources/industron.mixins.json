@@ -10,7 +10,8 @@
     "PumpFluidTransferBehaviourMixin",
     "FluidPipeBlockMixin",
     "FluidTransportBehaviourPipeColorMixin",
-    "RecipeManagerMixin"
+    "RecipeManagerMixin",
+    "SurfaceRuleDataMixin"
   ],
   "minVersion": "0.8.5"
 }

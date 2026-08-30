@@ -1,3 +1,18 @@
+# Materials - current canonical note
+
+For current stone/wood/ore-source work, read `stone-wood-ore-model.md` and `../../to do/23-material-geology-autorecipe-integration.md` first.
+
+Locked current rules:
+
+- `MaterialPart` becomes the common form model for stone/wood.
+- All existing Minecraft/Create family forms are mapped with `.existing(...)`.
+- Stone and wood `.contains(...)` accept arbitrary registered substances as authoritative definitions.
+- Every stone has a cobbled family and dust forms.
+- Registered stones become ore hosts automatically.
+- Natural resource worldgen is based on composed ore-source materials, not one elemental ore per element.
+
+---
+
 # Materials – målarkitektur
 
 Et material/substance er en spillrepresentasjon som kan ha identity, derived properties, composition og generated forms.

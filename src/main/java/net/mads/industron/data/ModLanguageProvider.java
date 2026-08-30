@@ -14,13 +14,13 @@ import net.mads.industron.machine.SingleBlockMachineInstance;
 import net.mads.industron.machine.StaticMachinePortType;
 import net.mads.industron.machine.machines.electric.multiblock.MultiblockDefinitions;
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.material.IndustrialMaterials;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.MaterialPart;
+import net.mads.industron.material.MaterialOreHost;
 import net.mads.industron.material.recipes.MaterialCasingGenerator;
 import net.mads.industron.material.structure.StructureBlockDefinition;
 import net.mads.industron.material.structure.StructureMaterial;
 import net.mads.industron.material.structure.StructureMaterialGenerator;
-import net.mads.industron.material.structure.StructureMaterialPart;
 import net.mads.industron.material.structure.StructureMaterials;
 import net.mads.industron.registry.FluidRegistry;
 import net.mads.industron.transport.FluidTransportTier;
@@ -123,8 +123,18 @@ public class ModLanguageProvider extends LanguageProvider {
                     add(blockKey(stoneSource.registryName(material)), stoneSource.displayName(material));
                 }
             }
+            if (MaterialOreHost.hasNaturalOre(material)) {
+                for (MaterialOreHost host : MaterialOreHost.compatibleHosts(material)) {
+                    for (boolean small : new boolean[]{false, true}) {
+                        if (host.shouldGenerate(material, small)) {
+                            add(blockKey(host.registryName(material, small)), host.displayName(material, small));
+                        }
+                    }
+                }
+            }
             for (MaterialPart part : material.parts()) {
                 if (material.hasExistingPart(part) || part.isFluid()
+                        || (part.isOre() && MaterialOreHost.hasNaturalOre(material))
                         || WireThickness.ALL.stream().anyMatch(thickness -> thickness.materialPart() == part)) {
                     continue;
                 }
@@ -144,7 +154,7 @@ public class ModLanguageProvider extends LanguageProvider {
             for (StructureBlockDefinition definition : StructureMaterialGenerator.generatedBlockDefinitions(material)) {
                 add(blockKey(definition.registryName()), definition.displayName());
             }
-            for (StructureMaterialPart part : StructureMaterialGenerator.generatedItemForms(material)) {
+            for (MaterialPart part : StructureMaterialGenerator.generatedItemForms(material)) {
                 add(itemKey(part.registryName(material)), part.readableName(material));
             }
         }

@@ -1,7 +1,7 @@
 package net.mads.industron.integration.jei.assembly;
 
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.recipe.recipetypes.ComponentDefinition;
+import net.mads.industron.recipe.recipetypes.assembly.ComponentDefinition;
 
 import java.util.Objects;
 

@@ -1,5 +1,7 @@
 package net.mads.industron.material.structure;
 
+import net.mads.industron.material.MaterialPart;
+
 import net.mads.industron.material.MaterialComponent;
 import net.minecraft.resources.ResourceLocation;
 
@@ -10,10 +12,10 @@ import java.util.Map;
 import java.util.Set;
 
 public final class WoodMaterial implements StructureMaterial {
-    private static final Set<StructureMaterialPart> DEFAULT_FORMS = Set.of(
-            StructureMaterialPart.TINY_WOOD_PULP,
-            StructureMaterialPart.SMALL_WOOD_PULP,
-            StructureMaterialPart.WOOD_PULP
+    private static final Set<MaterialPart> DEFAULT_FORMS = Set.of(
+            MaterialPart.TINY_WOOD_PULP,
+            MaterialPart.SMALL_WOOD_PULP,
+            MaterialPart.WOOD_PULP
     );
 
     private final String id;
@@ -21,7 +23,7 @@ public final class WoodMaterial implements StructureMaterial {
     private final int color;
     private final WoodModel model;
     private final List<MaterialComponent> components;
-    private final Map<StructureMaterialPart, ResourceLocation> existingParts;
+    private final Map<MaterialPart, ResourceLocation> existingParts;
 
     public WoodMaterial(String id, String displayName, int color, WoodModel model) {
         this(id, displayName, color, model, List.of(), Map.of());
@@ -33,7 +35,7 @@ public final class WoodMaterial implements StructureMaterial {
             int color,
             WoodModel model,
             List<MaterialComponent> components,
-            Map<StructureMaterialPart, ResourceLocation> existingParts
+            Map<MaterialPart, ResourceLocation> existingParts
     ) {
         if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("Wood material id cannot be blank");
@@ -65,7 +67,7 @@ public final class WoodMaterial implements StructureMaterial {
         return new WoodMaterial(id, displayName, color, model, updated, existingParts);
     }
 
-    public WoodMaterial existing(StructureMaterialPart part, String resourceLocation) {
+    public WoodMaterial existing(MaterialPart part, String resourceLocation) {
         ResourceLocation parsed = ResourceLocation.tryParse(resourceLocation);
         if (parsed == null) {
             throw new IllegalArgumentException("Invalid existing resource location '" + resourceLocation + "' for " + id);
@@ -73,13 +75,18 @@ public final class WoodMaterial implements StructureMaterial {
         return existing(part, parsed);
     }
 
-    public WoodMaterial existing(StructureMaterialPart part, ResourceLocation resourceLocation) {
+    public WoodMaterial existing(MaterialPart part, ResourceLocation resourceLocation) {
         if (part == null || resourceLocation == null) {
             throw new IllegalArgumentException("Existing wood part and resource cannot be null: " + id);
         }
-        Map<StructureMaterialPart, ResourceLocation> updated = new EnumMap<>(StructureMaterialPart.class);
+        Map<MaterialPart, ResourceLocation> updated = new EnumMap<>(MaterialPart.class);
         updated.putAll(existingParts);
-        updated.put(part, resourceLocation);
+        ResourceLocation previous = updated.put(part, resourceLocation);
+        if (previous != null && !previous.equals(resourceLocation)) {
+            throw new IllegalArgumentException(
+                    "Wood material " + id + " already maps " + part + " to " + previous
+            );
+        }
         return new WoodMaterial(id, displayName, color, model, components, updated);
     }
 
@@ -109,12 +116,12 @@ public final class WoodMaterial implements StructureMaterial {
     }
 
     @Override
-    public Map<StructureMaterialPart, ResourceLocation> existingParts() {
+    public Map<MaterialPart, ResourceLocation> existingParts() {
         return existingParts;
     }
 
     @Override
-    public Set<StructureMaterialPart> generatedForms() {
+    public Set<MaterialPart> generatedForms() {
         return DEFAULT_FORMS;
     }
 }

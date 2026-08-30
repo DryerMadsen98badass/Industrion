@@ -3,8 +3,9 @@ package net.mads.industron.data;
 import com.simibubi.create.AllTags.AllItemTags;
 import net.mads.industron.Industron;
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.material.IndustrialMaterials;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.MaterialPart;
+import net.mads.industron.material.MaterialOreHost;
 import net.mads.industron.material.structure.StructureBlockDefinition;
 import net.mads.industron.material.structure.StructureMaterial;
 import net.mads.industron.material.structure.StructureMaterialGenerator;
@@ -38,18 +39,12 @@ public class MaterialItemTagProvider extends ItemTagsProvider {
             Map.entry(MaterialPart.SMALL_ORE, cTag("ores")),
             Map.entry(MaterialPart.DEEPSLATE_ORE, cTag("ores")),
             Map.entry(MaterialPart.SMALL_DEEPSLATE_ORE, cTag("ores")),
-            Map.entry(MaterialPart.DIORITE_ORE, cTag("ores")),
-            Map.entry(MaterialPart.SMALL_DIORITE_ORE, cTag("ores")),
-            Map.entry(MaterialPart.ANDESITE_ORE, cTag("ores")),
-            Map.entry(MaterialPart.SMALL_ANDESITE_ORE, cTag("ores")),
-            Map.entry(MaterialPart.GRANITE_ORE, cTag("ores")),
-            Map.entry(MaterialPart.SMALL_GRANITE_ORE, cTag("ores")),
-            Map.entry(MaterialPart.TUFF_ORE, cTag("ores")),
-            Map.entry(MaterialPart.SMALL_TUFF_ORE, cTag("ores")),
             Map.entry(MaterialPart.NETHERRACK_ORE, cTag("ores")),
             Map.entry(MaterialPart.SMALL_NETHERRACK_ORE, cTag("ores")),
             Map.entry(MaterialPart.BLACKSTONE_ORE, cTag("ores")),
             Map.entry(MaterialPart.SMALL_BLACKSTONE_ORE, cTag("ores")),
+            Map.entry(MaterialPart.BASALT_ORE, cTag("ores")),
+            Map.entry(MaterialPart.SMALL_BASALT_ORE, cTag("ores")),
             Map.entry(MaterialPart.END_STONE_ORE, cTag("ores")),
             Map.entry(MaterialPart.SMALL_END_STONE_ORE, cTag("ores")),
             Map.entry(MaterialPart.RAW_ORE, cTag("raw_materials")),
@@ -115,6 +110,17 @@ public class MaterialItemTagProvider extends ItemTagsProvider {
 
                 if (isColdMold(part) || isHotMold(part)) {
                     addMoldTags(material, part);
+                }
+            }
+
+            if (MaterialOreHost.hasNaturalOre(material)) {
+                for (MaterialOreHost host : MaterialOreHost.compatibleHosts(material)) {
+                    for (boolean small : new boolean[]{false, true}) {
+                        var item = ItemRegistry.getMaterialOreHostItem(material, host, small);
+                        if (item == null) continue;
+                        tag(cTag("ores")).add(item.get());
+                        tag(cTag("ores/" + material.id())).add(item.get());
+                    }
                 }
             }
         }

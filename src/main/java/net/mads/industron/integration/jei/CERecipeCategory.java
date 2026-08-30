@@ -183,8 +183,7 @@ public class CERecipeCategory implements IRecipeCategory<RecipeHolder<CERecipe>>
             recipe.circuit().ifPresent(circuit -> tooltip.add(Component.literal("Circuit: " + circuit)));
             recipe.minimumRuntimeTier().ifPresent(tier -> tooltip.add(Component.literal("Required Tier: " + tier.displayName() + "+")));
             recipe.chemicalBalanceRange().ifPresent(range -> tooltip.add(Component.literal(
-                    "Required CB: " + ChemicalBalanceRange.formatHundredths(range.minHundredths())
-                            + "-" + ChemicalBalanceRange.formatHundredths(range.maxHundredths())
+                    "Required CB: " + cbRangeText(range)
             )));
         }
     }
@@ -402,14 +401,21 @@ public class CERecipeCategory implements IRecipeCategory<RecipeHolder<CERecipe>>
         recipe.circuit().ifPresent(circuit -> lines.add("Circuit: " + circuit));
         recipe.minimumRuntimeTier().ifPresent(tier -> lines.add("Tier: " + tier.displayName() + "+"));
         recipe.chemicalBalanceRange().ifPresent(range -> lines.add(
-                "CB: " + ChemicalBalanceRange.formatHundredths(range.minHundredths())
-                        + "-" + ChemicalBalanceRange.formatHundredths(range.maxHundredths())
+                "CB: " + cbRangeText(range)
         ));
 
         for (int i = 0; i < lines.size(); i++) {
             int y = startY + i * INFO_ROW_HEIGHT;
             guiGraphics.drawString(font, lines.get(i), 12, y, 0xFF404040, false);
         }
+    }
+
+    private static String cbRangeText(ChemicalBalanceRange range) {
+        return formatCbValue(range.minHundredths()) + "–" + formatCbValue(range.maxHundredths());
+    }
+
+    private static String formatCbValue(int hundredths) {
+        return String.format(java.util.Locale.ROOT, "%.2f", ChemicalBalanceRange.fromHundredths(hundredths));
     }
 
     private static String durationText(CERecipe recipe, MachineTier selectedTier) {

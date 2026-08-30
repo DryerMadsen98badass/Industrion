@@ -20,3 +20,9 @@ Dette området beskriver målarkitektur og videre plan, ikke en historikk over e
 `recipes/assembly-recipes.md` beskriver dagens faktiske Assembly API/runtime. `recipes/`, `casings/` og `integration/create.md` skal være konsistente med den guiden. Eldre roadmap-eksempler kan beskrive framtidige features som ikke er del av dagens API.
 
 Nærmeste fokus ligger i `materials`: få Wood/Stone generation stabil på 1.21.1, deretter dynamiske stone ore-hosts.
+
+## Current integration docs
+
+- `materials/stone-wood-ore-model.md` - common parts, stone/wood forms and ore-source identity.
+- `geology/README.md` - deposits, hosts, dimension rules and runtime worldgen.
+- `recipes/material-autorecipes.md` - automatic processing for stone, wood and raw ore sources.

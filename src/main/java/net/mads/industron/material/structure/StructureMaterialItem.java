@@ -1,12 +1,14 @@
 package net.mads.industron.material.structure;
 
+import net.mads.industron.material.MaterialPart;
+
 import net.minecraft.world.item.Item;
 
 public final class StructureMaterialItem extends Item {
     private final StructureMaterial material;
-    private final StructureMaterialPart part;
+    private final MaterialPart part;
 
-    public StructureMaterialItem(StructureMaterial material, StructureMaterialPart part) {
+    public StructureMaterialItem(StructureMaterial material, MaterialPart part) {
         super(new Item.Properties());
         this.material = material;
         this.part = part;
@@ -16,7 +18,7 @@ public final class StructureMaterialItem extends Item {
         return material;
     }
 
-    public StructureMaterialPart part() {
+    public MaterialPart part() {
         return part;
     }
 }

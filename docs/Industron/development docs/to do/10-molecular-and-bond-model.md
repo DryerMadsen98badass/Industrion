@@ -56,3 +56,7 @@ A≡B    -> triple bond structure
 ## Ferdig når
 
 Systemet kan avgjøre om en proposed molecular structure er electron/valence-messig gyldig, skille single/double/triple bonds, og representere samme formula med forskjellig structure uten identity-kollisjon.
+
+## Geology integration
+
+Geology note: phase and bonding decide whether a natural resource is an ore mineral, brine, gas, reservoir fluid, or synthetic-only substance. Centrifuging never breaks bonds. See `22-geology-and-ore-generation.md`.

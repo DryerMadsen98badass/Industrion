@@ -7,7 +7,7 @@ import com.simibubi.create.content.decoration.bracket.BracketBlock;
 import com.simibubi.create.content.decoration.palettes.ConnectedGlassPaneBlock;
 import com.simibubi.create.content.decoration.palettes.WindowBlock;
 import net.mads.industron.Industron;
-import net.mads.industron.assembly.AssemblyWorkbenchBlock;
+import net.mads.industron.recipe.recipetypes.assembly.workbench.AssemblyWorkbenchBlock;
 import net.mads.industron.block.DirectionalSimpleBlock;
 import net.mads.industron.block.SimpleBlockDefinition;
 import net.mads.industron.block.SimpleBlocks;
@@ -27,15 +27,15 @@ import net.mads.industron.machine.StaticMachinePortType;
 import net.mads.industron.machine.machines.electric.multiblock.MultiblockControllerBlock;
 import net.mads.industron.machine.machines.electric.multiblock.MultiblockRegistrations;
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.material.IndustrialMaterials;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.MaterialBlock;
+import net.mads.industron.material.MaterialOreHost;
 import net.mads.industron.material.MaterialPart;
 import net.mads.industron.material.recipes.MaterialCasingGenerator;
 import net.mads.industron.material.structure.StructureBlockDefinition;
 import net.mads.industron.material.structure.GemMaterial;
 import net.mads.industron.material.structure.StructureMaterial;
 import net.mads.industron.material.structure.StructureMaterialGenerator;
-import net.mads.industron.material.structure.StructureMaterialPart;
 import net.mads.industron.material.structure.StructureSlidingDoorBlock;
 import net.mads.industron.material.structure.MetalMaterial;
 import net.mads.industron.material.structure.StructureMaterials;
@@ -81,6 +81,7 @@ public final class BlockRegistry {
     public static final Map<String, DeferredHolder<Block, Block>> SIMPLE_BLOCKS = new LinkedHashMap<>();
     public static final Map<String, Map<SimpleBlockVariant, DeferredHolder<Block, ? extends Block>>> SIMPLE_BLOCK_VARIANTS = new LinkedHashMap<>();
     public static final Map<String, Map<String, DeferredHolder<Block, Block>>> MATERIAL_STONE_BLOCKS = new LinkedHashMap<>();
+    public static final Map<String, Map<String, DeferredHolder<Block, ? extends Block>>> MATERIAL_ORE_HOST_BLOCKS = new LinkedHashMap<>();
     public static final Map<String, Map<MaterialPart, DeferredHolder<Block, ? extends Block>>> MATERIAL_BLOCKS = new LinkedHashMap<>();
     public static final Map<String, Map<WireThickness, DeferredHolder<Block, EnergyWireBlock>>> ENERGY_WIRES = new LinkedHashMap<>();
     public static final Map<String, Map<WireThickness, DeferredHolder<Block, EnergyWireBlock>>> INSULATED_ENERGY_WIRES = new LinkedHashMap<>();
@@ -150,8 +151,29 @@ public final class BlockRegistry {
             }
             MATERIAL_STONE_BLOCKS.put(material.id(), stoneBlocks);
 
+            Map<String, DeferredHolder<Block, ? extends Block>> oreHostBlocks = new LinkedHashMap<>();
+            if (MaterialOreHost.hasNaturalOre(material)) {
+                for (MaterialOreHost host : MaterialOreHost.compatibleHosts(material)) {
+                    for (boolean small : new boolean[]{false, true}) {
+                        if (!host.shouldGenerate(material, small)) {
+                            continue;
+                        }
+                        String key = host.key(small);
+                        String registryName = host.registryName(material, small);
+                        oreHostBlocks.put(
+                                key,
+                                BLOCKS.register(registryName, () -> new MaterialBlock(material, small ? MaterialPart.SMALL_ORE : MaterialPart.ORE))
+                        );
+                    }
+                }
+            }
+            MATERIAL_ORE_HOST_BLOCKS.put(material.id(), oreHostBlocks);
+
             Map<MaterialPart, DeferredHolder<Block, ? extends Block>> blocks = new LinkedHashMap<>();
             for (MaterialPart part : material.parts()) {
+                if (part.isOre() && MaterialOreHost.hasNaturalOre(material)) {
+                    continue;
+                }
                 if (!material.hasExistingPart(part) && part.isBlock()) {
                     blocks.put(part, BLOCKS.register(part.registryName(material), () -> new MaterialBlock(material, part)));
                 }
@@ -313,7 +335,7 @@ public final class BlockRegistry {
 
     private static Block resolveStructureBaseBlock(StructureBlockDefinition definition) {
         if (definition.basePart().isPresent()) {
-            StructureMaterialPart part = definition.basePart().get();
+            MaterialPart part = definition.basePart().get();
             if (definition.material().hasExistingPart(part)) {
                 return BuiltInRegistries.BLOCK.getOptional(definition.material().existingPart(part))
                         .orElseThrow(() -> new IllegalStateException(
@@ -325,7 +347,7 @@ public final class BlockRegistry {
             // structure_sets. Generated gem stairs therefore resolve their
             // state base from MATERIAL_BLOCKS instead of STRUCTURE_MATERIAL_BLOCKS.
             if (definition.material() instanceof GemMaterial gem
-                    && part == StructureMaterialPart.BLOCK) {
+                    && part == MaterialPart.BLOCK) {
                 DeferredHolder<Block, ? extends Block> holder = MATERIAL_BLOCKS
                         .getOrDefault(gem.id(), Map.of())
                         .get(MaterialPart.BLOCK);
@@ -389,6 +411,11 @@ public final class BlockRegistry {
     public static DeferredHolder<Block, ? extends Block> getMaterialBlock(IndustrialMaterial material, MaterialPart part) { return MATERIAL_BLOCKS.get(material.id()).get(part); }
     public static DeferredHolder<Block, MaterialMachineCasingBlock> getMaterialMachineCasing(String id) { return MATERIAL_MACHINE_CASINGS.get(id); }
     public static DeferredHolder<Block, Block> getMaterialStoneBlock(IndustrialMaterial material, String stoneId) { return MATERIAL_STONE_BLOCKS.get(material.id()).get(stoneId); }
+
+    public static DeferredHolder<Block, ? extends Block> getMaterialOreHostBlock(IndustrialMaterial material, MaterialOreHost host, boolean small) {
+        Map<String, DeferredHolder<Block, ? extends Block>> blocks = MATERIAL_ORE_HOST_BLOCKS.get(material.id());
+        return blocks == null ? null : blocks.get(host.key(small));
+    }
     public static DeferredHolder<Block, Block> getSimpleBlock(String id) { return SIMPLE_BLOCKS.get(id); }
     public static DeferredHolder<Block, ? extends Block> getSimpleBlockVariant(String baseId, SimpleBlockVariant variant) { return SIMPLE_BLOCK_VARIANTS.get(baseId).get(variant); }
     public static DeferredHolder<Block, SingleBlockMachineBlock> getSingleBlockMachine(String id) { return SINGLE_BLOCK_MACHINES.get(id); }
@@ -413,7 +440,12 @@ public final class BlockRegistry {
     public static Collection<DeferredHolder<Block, Block>> getAllSimpleBlocks() { return SIMPLE_BLOCKS.values(); }
     public static Collection<DeferredHolder<Block, ? extends Block>> getAllSimpleBlockVariants() { return SIMPLE_BLOCK_VARIANTS.values().stream().flatMap(variants -> variants.values().stream()).toList(); }
     public static Collection<DeferredHolder<Block, Block>> getAllMaterialStoneBlocks() { return MATERIAL_STONE_BLOCKS.values().stream().flatMap(blocks -> blocks.values().stream()).toList(); }
-    public static Collection<DeferredHolder<Block, ? extends Block>> getAllMaterialBlocks() { return MATERIAL_BLOCKS.values().stream().flatMap(blocks -> blocks.values().stream()).toList(); }
+    public static Collection<DeferredHolder<Block, ? extends Block>> getAllMaterialBlocks() {
+        return java.util.stream.Stream.concat(
+                MATERIAL_BLOCKS.values().stream().flatMap(blocks -> blocks.values().stream()),
+                MATERIAL_ORE_HOST_BLOCKS.values().stream().flatMap(blocks -> blocks.values().stream())
+        ).toList();
+    }
     public static Collection<DeferredHolder<Block, ? extends MachineCasingBlock>> getAllMachineCasings() {
         java.util.List<DeferredHolder<Block, ? extends MachineCasingBlock>> result = new java.util.ArrayList<>();
         result.addAll(MACHINE_CASINGS.values());

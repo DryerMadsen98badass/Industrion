@@ -10,8 +10,8 @@ import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.RecipeType;
 import mezz.jei.api.recipe.category.IRecipeCategory;
 import net.mads.industron.Industron;
-import net.mads.industron.material.IndustrialMaterials;
-import net.mads.industron.recipe.recipetypes.ComponentDefinition;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
+import net.mads.industron.recipe.recipetypes.assembly.ComponentDefinition;
 import net.mads.industron.recipe.recipes.assembly.ComponentDefinitions;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -116,13 +116,13 @@ public final class AssemblyComponentJeiCategory implements IRecipeCategory<Assem
 
     private static void addRelativeRequirementTooltip(
             IRecipeSlotBuilder slot,
-            List<net.mads.industron.recipe.recipetypes.AssemblyRelativeRequirement> requirements
+            List<net.mads.industron.recipe.recipetypes.assembly.AssemblyRelativeRequirement> requirements
     ) {
         if (requirements.isEmpty()) return;
         slot.addTooltipCallback((view, tooltip) -> {
             tooltip.add(Component.literal("Relative requirements (all descendant material parts):")
                     .withStyle(net.minecraft.ChatFormatting.GOLD));
-            requirements.stream().map(net.mads.industron.recipe.recipetypes.AssemblyRelativeRequirement::tooltip)
+            requirements.stream().map(net.mads.industron.recipe.recipetypes.assembly.AssemblyRelativeRequirement::tooltip)
                     .forEach(tooltip::add);
         });
     }

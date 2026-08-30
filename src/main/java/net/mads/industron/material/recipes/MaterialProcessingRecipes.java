@@ -5,7 +5,7 @@ import net.mads.industron.energy.WireThickness;
 import net.mads.industron.machine.MachineTier;
 import net.mads.industron.machine.MachineTierStats;
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.material.IndustrialMaterials;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.MaterialFormGenerator;
 import net.mads.industron.material.MaterialPart;
 import net.mads.industron.recipe.CERecipeTypes;

@@ -6,8 +6,9 @@ import net.mads.industron.block.SimpleBlockDefinition;
 import net.mads.industron.block.SimpleBlockVariant;
 import net.mads.industron.block.SimpleBlocks;
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.material.IndustrialMaterials;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.MaterialPart;
+import net.mads.industron.material.MaterialOreHost;
 import net.mads.industron.material.MaterialTextures;
 import net.mads.industron.registry.BlockRegistry;
 import net.minecraft.core.Direction;
@@ -29,12 +30,21 @@ import net.neoforged.neoforge.client.model.generators.ModelFile;
 import net.neoforged.neoforge.client.model.generators.loaders.CompositeModelBuilder;
 import net.neoforged.neoforge.common.data.ExistingFileHelper;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public class MaterialBlockStateProvider extends BlockStateProvider {
 
     private final ExistingFileHelper existingFileHelper;
+
+    private final Map<String, ResourceLocation> tintedShapeTemplates = new LinkedHashMap<>();
+    private ResourceLocation tintedCubeTemplate;
+    private ResourceLocation tintedCustomCubeTemplate;
+    private ResourceLocation tintedMaterialCubeTemplate;
+    private ResourceLocation tintedCutoutCubeTemplate;
+    private ResourceLocation tintedTwoLayerCutoutCubeTemplate;
 
     public MaterialBlockStateProvider(
             PackOutput output,
@@ -608,58 +618,20 @@ public class MaterialBlockStateProvider extends BlockStateProvider {
             String id,
             ResourceLocation texture
     ) {
-        BlockModelBuilder model = models()
+        return models()
                 .getBuilder(id)
-                .parent(
-                        new ModelFile.UncheckedModelFile(
-                                ResourceLocation.withDefaultNamespace(
-                                        "block/block"
-                                )
-                        )
-                )
-                .texture(
-                        "all",
-                        texture
-                )
-                .texture(
-                        "particle",
-                        texture
-                );
-
-        model.element()
-                .from(
-                        0,
-                        0,
-                        0
-                )
-                .to(
-                        16,
-                        16,
-                        16
-                )
-                .allFaces(
-                        (direction, face) ->
-                                face.texture("#all")
-                                        .cullface(direction)
-                                        .tintindex(0)
-                );
-
-        return model;
+                .parent(tintedCubeTemplate())
+                .texture("all", texture)
+                .texture("particle", texture);
     }
 
     private BlockModelBuilder createTintedCustomCubeModel(
             String id,
             ResolvedFaceTextures textures
     ) {
-        BlockModelBuilder model = models()
+        return models()
                 .getBuilder(id)
-                .parent(
-                        new ModelFile.UncheckedModelFile(
-                                ResourceLocation.withDefaultNamespace(
-                                        "block/block"
-                                )
-                        )
-                )
+                .parent(tintedCustomCubeTemplate())
                 .texture("front", textures.front())
                 .texture("right", textures.right())
                 .texture("back", textures.back())
@@ -667,88 +639,161 @@ public class MaterialBlockStateProvider extends BlockStateProvider {
                 .texture("up", textures.top())
                 .texture("down", textures.bottom())
                 .texture("particle", textures.front());
-
-        model.element()
-                .from(0, 0, 0)
-                .to(16, 16, 16)
-                .face(net.minecraft.core.Direction.NORTH)
-                .texture("#front")
-                .cullface(net.minecraft.core.Direction.NORTH)
-                .tintindex(0)
-                .end()
-                .face(net.minecraft.core.Direction.EAST)
-                .texture("#right")
-                .cullface(net.minecraft.core.Direction.EAST)
-                .tintindex(0)
-                .end()
-                .face(net.minecraft.core.Direction.SOUTH)
-                .texture("#back")
-                .cullface(net.minecraft.core.Direction.SOUTH)
-                .tintindex(0)
-                .end()
-                .face(net.minecraft.core.Direction.WEST)
-                .texture("#left")
-                .cullface(net.minecraft.core.Direction.WEST)
-                .tintindex(0)
-                .end()
-                .face(net.minecraft.core.Direction.UP)
-                .texture("#up")
-                .cullface(net.minecraft.core.Direction.UP)
-                .tintindex(0)
-                .end()
-                .face(net.minecraft.core.Direction.DOWN)
-                .texture("#down")
-                .cullface(net.minecraft.core.Direction.DOWN)
-                .tintindex(0)
-                .end();
-
-        return model;
     }
-
 
     private BlockModelBuilder createTintedShapeModel(
             String id,
             ResourceLocation texture,
             ModelBox... boxes
     ) {
-        BlockModelBuilder model = models()
+        return models()
                 .getBuilder(id)
-                .parent(
-                        new ModelFile.UncheckedModelFile(
-                                ResourceLocation.withDefaultNamespace(
-                                        "block/block"
-                                )
-                        )
-                )
-                .texture(
-                        "all",
-                        texture
-                )
-                .texture(
-                        "particle",
-                        texture
-                );
+                .parent(tintedShapeTemplate(boxes))
+                .texture("all", texture)
+                .texture("particle", texture);
+    }
 
-        for (ModelBox box : boxes) {
-            model.element()
-                    .from(
-                            box.fromX(),
-                            box.fromY(),
-                            box.fromZ()
-                    )
-                    .to(
-                            box.toX(),
-                            box.toY(),
-                            box.toZ()
-                    )
-                    .allFaces(
-                            (direction, face) ->
-                                    face.texture("#all")
-                                            .tintindex(0)
-                    );
+    private ModelFile tintedCubeTemplate() {
+        if (tintedCubeTemplate != null) {
+            return new ModelFile.UncheckedModelFile(tintedCubeTemplate);
         }
 
-        return model;
+        String name = "templates/tinted_full_cube";
+        BlockModelBuilder template = models()
+                .getBuilder(name)
+                .parent(new ModelFile.UncheckedModelFile(
+                        ResourceLocation.withDefaultNamespace("block/block")
+                ));
+        template.element()
+                .from(0, 0, 0)
+                .to(16, 16, 16)
+                .allFaces((direction, face) -> face.texture("#all")
+                        .cullface(direction)
+                        .tintindex(0));
+
+        tintedCubeTemplate = modLoc("block/" + name);
+        return new ModelFile.UncheckedModelFile(tintedCubeTemplate);
+    }
+
+    private ModelFile tintedCustomCubeTemplate() {
+        if (tintedCustomCubeTemplate != null) {
+            return new ModelFile.UncheckedModelFile(tintedCustomCubeTemplate);
+        }
+
+        String name = "templates/tinted_custom_cube";
+        BlockModelBuilder template = models()
+                .getBuilder(name)
+                .parent(new ModelFile.UncheckedModelFile(
+                        ResourceLocation.withDefaultNamespace("block/block")
+                ));
+        template.element().from(0, 0, 0).to(16, 16, 16)
+                .face(Direction.NORTH).texture("#front").cullface(Direction.NORTH).tintindex(0).end()
+                .face(Direction.EAST).texture("#right").cullface(Direction.EAST).tintindex(0).end()
+                .face(Direction.SOUTH).texture("#back").cullface(Direction.SOUTH).tintindex(0).end()
+                .face(Direction.WEST).texture("#left").cullface(Direction.WEST).tintindex(0).end()
+                .face(Direction.UP).texture("#up").cullface(Direction.UP).tintindex(0).end()
+                .face(Direction.DOWN).texture("#down").cullface(Direction.DOWN).tintindex(0).end();
+
+        tintedCustomCubeTemplate = modLoc("block/" + name);
+        return new ModelFile.UncheckedModelFile(tintedCustomCubeTemplate);
+    }
+
+    private ModelFile tintedMaterialCubeTemplate() {
+        if (tintedMaterialCubeTemplate != null) {
+            return new ModelFile.UncheckedModelFile(tintedMaterialCubeTemplate);
+        }
+
+        String name = "templates/tinted_material_full_cube";
+        BlockModelBuilder template = models()
+                .getBuilder(name)
+                .parent(new ModelFile.UncheckedModelFile(
+                        ResourceLocation.withDefaultNamespace("block/block")
+                ));
+        fullCube(template, "#base", 0);
+
+        tintedMaterialCubeTemplate = modLoc("block/" + name);
+        return new ModelFile.UncheckedModelFile(tintedMaterialCubeTemplate);
+    }
+
+    private ModelFile tintedCutoutCubeTemplate() {
+        if (tintedCutoutCubeTemplate != null) {
+            return new ModelFile.UncheckedModelFile(tintedCutoutCubeTemplate);
+        }
+
+        String name = "templates/tinted_cutout_full_cube";
+        BlockModelBuilder template = models()
+                .getBuilder(name)
+                .parent(new ModelFile.UncheckedModelFile(
+                        ResourceLocation.withDefaultNamespace("block/block")
+                ))
+                .renderType("minecraft:cutout");
+        fullCube(template, "#base", 0);
+
+        tintedCutoutCubeTemplate = modLoc("block/" + name);
+        return new ModelFile.UncheckedModelFile(tintedCutoutCubeTemplate);
+    }
+
+    private ModelFile tintedTwoLayerCutoutCubeTemplate() {
+        if (tintedTwoLayerCutoutCubeTemplate != null) {
+            return new ModelFile.UncheckedModelFile(tintedTwoLayerCutoutCubeTemplate);
+        }
+
+        String name = "templates/tinted_two_layer_cutout_full_cube";
+        BlockModelBuilder template = models()
+                .getBuilder(name)
+                .parent(new ModelFile.UncheckedModelFile(
+                        ResourceLocation.withDefaultNamespace("block/block")
+                ))
+                .renderType("minecraft:cutout");
+        fullCube(template, "#base", 0);
+        fullCube(template, "#secondary", 1);
+
+        tintedTwoLayerCutoutCubeTemplate = modLoc("block/" + name);
+        return new ModelFile.UncheckedModelFile(tintedTwoLayerCutoutCubeTemplate);
+    }
+
+    private ModelFile tintedShapeTemplate(ModelBox... boxes) {
+        String key = shapeKey(boxes);
+        ResourceLocation existing = tintedShapeTemplates.get(key);
+        if (existing != null) {
+            return new ModelFile.UncheckedModelFile(existing);
+        }
+
+        String baseName = "templates/tinted_shape_" + Integer.toUnsignedString(key.hashCode(), 36);
+        ResourceLocation location = modLoc("block/" + baseName);
+        int suffix = 1;
+        while (tintedShapeTemplates.containsValue(location)) {
+            location = modLoc("block/" + baseName + "_" + suffix++);
+        }
+
+        BlockModelBuilder template = models()
+                .getBuilder(location.getPath().substring("block/".length()))
+                .parent(new ModelFile.UncheckedModelFile(
+                        ResourceLocation.withDefaultNamespace("block/block")
+                ));
+        for (ModelBox box : boxes) {
+            template.element()
+                    .from(box.fromX(), box.fromY(), box.fromZ())
+                    .to(box.toX(), box.toY(), box.toZ())
+                    .allFaces((direction, face) -> face.texture("#all")
+                            .tintindex(0));
+        }
+
+        tintedShapeTemplates.put(key, location);
+        return new ModelFile.UncheckedModelFile(location);
+    }
+
+    private static String shapeKey(ModelBox... boxes) {
+        StringBuilder key = new StringBuilder();
+        for (ModelBox box : boxes) {
+            key.append(box.fromX()).append(',')
+                    .append(box.fromY()).append(',')
+                    .append(box.fromZ()).append(':')
+                    .append(box.toX()).append(',')
+                    .append(box.toY()).append(',')
+                    .append(box.toZ()).append(';');
+        }
+        return key.toString();
     }
 
     private static ModelBox box(
@@ -881,6 +926,7 @@ public class MaterialBlockStateProvider extends BlockStateProvider {
     private void registerMaterialBlocks() {
         for (IndustrialMaterial material : IndustrialMaterials.ALL) {
             registerMaterialStoneBlocks(material);
+            registerMaterialOreHostBlocks(material);
             registerMaterialPartBlocks(material);
         }
     }
@@ -910,11 +956,60 @@ public class MaterialBlockStateProvider extends BlockStateProvider {
         }
     }
 
+    private void registerMaterialOreHostBlocks(IndustrialMaterial material) {
+        if (!MaterialOreHost.hasNaturalOre(material)) {
+            return;
+        }
+        for (MaterialOreHost host : MaterialOreHost.compatibleHosts(material)) {
+            for (boolean small : new boolean[]{false, true}) {
+                Block block = BlockRegistry.getMaterialOreHostBlock(material, host, small) == null
+                        ? null
+                        : BlockRegistry.getMaterialOreHostBlock(material, host, small).get();
+                if (block == null) {
+                    continue;
+                }
+                simpleBlockWithItem(block, oreHostBlockModel(material, host, small));
+            }
+        }
+    }
+
+    private BlockModelBuilder oreHostBlockModel(IndustrialMaterial material, MaterialOreHost host, boolean small) {
+        MaterialPart texturePart = small ? MaterialPart.SMALL_ORE : MaterialPart.ORE;
+        ResourceLocation oreTexture = MaterialTextures.blockTexture(material, texturePart).orElseThrow(() ->
+                new IllegalStateException("Missing ore texture for " + material.id() + " " + texturePart));
+        ResourceLocation overlay = MaterialTextures.blockOverlayTexture(material, texturePart).orElse(oreTexture);
+
+        BlockModelBuilder baseStone = models().nested()
+                .parent(new ModelFile.UncheckedModelFile(host.blockModel()))
+                .renderType("minecraft:solid");
+
+        BlockModelBuilder oreLayer = models().nested()
+                .parent(new ModelFile.UncheckedModelFile(ResourceLocation.withDefaultNamespace("block/block")))
+                .texture("layer0", oreTexture)
+                .texture("layer1", overlay)
+                .texture("particle", oreTexture)
+                .renderType("minecraft:cutout");
+        fullCube(oreLayer, "#layer0", 0);
+        fullCube(oreLayer, "#layer1", 1);
+
+        BlockModelBuilder model = models().getBuilder(host.registryName(material, small))
+                .parent(new ModelFile.UncheckedModelFile(ResourceLocation.withDefaultNamespace("block/block")))
+                .texture("particle", oreTexture);
+        model.customLoader(CompositeModelBuilder::begin)
+                .child("base_stone", baseStone)
+                .child("ore_texture", oreLayer)
+                .itemRenderOrder("base_stone", "ore_texture");
+        return model;
+    }
+
     private void registerMaterialPartBlocks(
             IndustrialMaterial material
     ) {
         for (MaterialPart part : material.parts()) {
             if (material.hasExistingPart(part)) {
+                continue;
+            }
+            if (part.isOre() && MaterialOreHost.hasNaturalOre(material)) {
                 continue;
             }
 
@@ -941,33 +1036,12 @@ public class MaterialBlockStateProvider extends BlockStateProvider {
                 continue;
             }
 
-            boolean orePart = switch (part) {
-                case ORE, SMALL_ORE,
-                        DEEPSLATE_ORE, SMALL_DEEPSLATE_ORE,
-                        DIORITE_ORE, SMALL_DIORITE_ORE,
-                        ANDESITE_ORE, SMALL_ANDESITE_ORE,
-                        GRANITE_ORE, SMALL_GRANITE_ORE,
-                        TUFF_ORE, SMALL_TUFF_ORE,
-                        NETHERRACK_ORE, SMALL_NETHERRACK_ORE,
-                        BLACKSTONE_ORE, SMALL_BLACKSTONE_ORE,
-                        END_STONE_ORE, SMALL_END_STONE_ORE -> true;
-                default -> false;
-            };
-
-            ModelFile materialBlockModel;
-            if (orePart) {
-                if (MaterialTextures.blockTexture(material, part).isEmpty()) {
-                    continue;
-                }
-                materialBlockModel = oreBlockModel(material, part);
-            } else {
-                Optional<ResourceLocation> baseTexture = MaterialTextures.blockTexture(material, part);
-                if (baseTexture.isEmpty()) {
-                    // The block remains registered even when no visual variant exists yet.
-                    continue;
-                }
-                materialBlockModel = materialBlockModel(material, part, baseTexture.get());
+            Optional<ResourceLocation> baseTexture = MaterialTextures.blockTexture(material, part);
+            if (baseTexture.isEmpty()) {
+                // The block remains registered even when no visual variant exists yet.
+                continue;
             }
+            ModelFile materialBlockModel = materialBlockModel(material, part, baseTexture.get());
 
             simpleBlockWithItem(
                     block,
@@ -987,125 +1061,28 @@ public class MaterialBlockStateProvider extends BlockStateProvider {
 
         BlockModelBuilder model = models()
                 .getBuilder(name)
-                .parent(new ModelFile.UncheckedModelFile(
-                        ResourceLocation.withDefaultNamespace("block/block")
-                ))
+                .parent(materialBlockTemplate(part, secondaryTexture.isPresent()))
                 .texture("base", baseTexture)
-                .texture("particle", baseTexture)
-                .renderType(secondaryTexture.isPresent() || part == MaterialPart.FRAME
-                        ? "minecraft:cutout"
-                        : "minecraft:solid");
-
-        fullCube(model, "#base", 0);
+                .texture("particle", baseTexture);
 
         secondaryTexture.ifPresent(texture -> {
             model.texture("secondary", texture);
-            fullCube(model, "#secondary", 1);
         });
 
         return model;
     }
 
-    private BlockModelBuilder oreBlockModel(
-            IndustrialMaterial material,
-            MaterialPart part
+    private ModelFile materialBlockTemplate(
+            MaterialPart part,
+            boolean hasSecondaryTexture
     ) {
-        String name = part.registryName(material);
-
-        ResourceLocation oreTexture = MaterialTextures
-                .blockTexture(material, part)
-                .orElseThrow();
-
-        ResourceLocation oreOverlayTexture = MaterialTextures
-                .blockOverlayTexture(material, part)
-                .orElse(oreTexture);
-
-        ResourceLocation baseTexture =
-                baseStoneTexture(part);
-
-        BlockModelBuilder baseStone = models()
-                .nested()
-                .parent(
-                        new ModelFile.UncheckedModelFile(
-                                ResourceLocation.withDefaultNamespace(
-                                        "block/cube_all"
-                                )
-                        )
-                )
-                .texture(
-                        "all",
-                        baseTexture
-                )
-                .renderType(
-                        "minecraft:solid"
-                );
-
-        BlockModelBuilder oreTextureModel = models()
-                .nested()
-                .parent(
-                        new ModelFile.UncheckedModelFile(
-                                ResourceLocation.withDefaultNamespace(
-                                        "block/block"
-                                )
-                        )
-                )
-                .texture(
-                        "layer0",
-                        oreTexture
-                )
-                .texture(
-                        "layer1",
-                        oreOverlayTexture
-                )
-                .texture(
-                        "particle",
-                        oreTexture
-                )
-                .renderType(
-                        "minecraft:cutout"
-                );
-
-        fullCube(
-                oreTextureModel,
-                "#layer0",
-                0
-        );
-
-        fullCube(
-                oreTextureModel,
-                "#layer1",
-                1
-        );
-
-        BlockModelBuilder model = models()
-                .getBuilder(name)
-                .parent(
-                        new ModelFile.UncheckedModelFile(
-                                ResourceLocation.withDefaultNamespace(
-                                        "block/block"
-                                )
-                        )
-                )
-                .texture(
-                        "particle",
-                        baseTexture
-                );
-
-        model.customLoader(CompositeModelBuilder::begin)
-                .child(
-                        "base_stone",
-                        baseStone
-                )
-                .child(
-                        "ore_texture",
-                        oreTextureModel
-                )
-                .itemRenderOrder(
-                        "base_stone",
-                        "ore_texture"
-                );
-
-        return model;
+        if (hasSecondaryTexture) {
+            return tintedTwoLayerCutoutCubeTemplate();
+        }
+        if (part == MaterialPart.FRAME) {
+            return tintedCutoutCubeTemplate();
+        }
+        return tintedMaterialCubeTemplate();
     }
 
     private static void fullCube(
@@ -1130,63 +1107,6 @@ public class MaterialBlockStateProvider extends BlockStateProvider {
                                         .cullface(direction)
                                         .tintindex(tintIndex)
                 );
-    }
-
-    private static ResourceLocation baseStoneTexture(
-            MaterialPart part
-    ) {
-        return switch (part) {
-            case ORE, SMALL_ORE ->
-                    ResourceLocation.withDefaultNamespace(
-                            "block/stone"
-                    );
-
-            case DEEPSLATE_ORE, SMALL_DEEPSLATE_ORE ->
-                    ResourceLocation.withDefaultNamespace(
-                            "block/deepslate"
-                    );
-
-            case DIORITE_ORE, SMALL_DIORITE_ORE ->
-                    ResourceLocation.withDefaultNamespace(
-                            "block/diorite"
-                    );
-
-            case ANDESITE_ORE, SMALL_ANDESITE_ORE ->
-                    ResourceLocation.withDefaultNamespace(
-                            "block/andesite"
-                    );
-
-            case GRANITE_ORE, SMALL_GRANITE_ORE ->
-                    ResourceLocation.withDefaultNamespace(
-                            "block/granite"
-                    );
-
-            case TUFF_ORE, SMALL_TUFF_ORE ->
-                    ResourceLocation.withDefaultNamespace(
-                            "block/tuff"
-                    );
-
-            case NETHERRACK_ORE, SMALL_NETHERRACK_ORE ->
-                    ResourceLocation.withDefaultNamespace(
-                            "block/netherrack"
-                    );
-
-            case BLACKSTONE_ORE, SMALL_BLACKSTONE_ORE ->
-                    ResourceLocation.withDefaultNamespace(
-                            "block/blackstone"
-                    );
-
-            case END_STONE_ORE, SMALL_END_STONE_ORE ->
-                    ResourceLocation.withDefaultNamespace(
-                            "block/end_stone"
-                    );
-
-            default ->
-                    throw new IllegalArgumentException(
-                            "Expected an ore block part, got "
-                                    + part
-                    );
-        };
     }
 
     private static final List<String>

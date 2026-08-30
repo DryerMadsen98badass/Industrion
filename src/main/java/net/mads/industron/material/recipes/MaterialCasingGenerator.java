@@ -2,11 +2,11 @@ package net.mads.industron.material.recipes;
 
 import net.mads.industron.machine.MachineTier;
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.material.IndustrialMaterials;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.MaterialPart;
-import net.mads.industron.recipe.recipetypes.AssemblyMetal;
-import net.mads.industron.recipe.recipetypes.AssemblyRequirement;
-import net.mads.industron.recipe.recipetypes.AssemblyTools;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyMetal;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyRequirement;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyTools;
 import net.mads.industron.recipe.recipes.assembly.ComponentDefinitions;
 
 import java.util.ArrayList;
@@ -149,7 +149,7 @@ public final class MaterialCasingGenerator {
     }
 
     private static boolean componentInputAvailable(
-            net.mads.industron.recipe.recipetypes.AssemblyComponent component,
+            net.mads.industron.recipe.recipetypes.assembly.AssemblyComponent component,
             AssemblyMetal override,
             IndustrialMaterial inherited,
             List<AssemblyRequirement> requirements

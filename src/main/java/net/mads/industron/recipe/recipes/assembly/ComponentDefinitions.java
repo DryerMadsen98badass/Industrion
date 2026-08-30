@@ -1,18 +1,18 @@
 package net.mads.industron.recipe.recipes.assembly;
 
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.material.IndustrialMaterials;
-import net.mads.industron.recipe.recipetypes.AssemblyComponent;
-import net.mads.industron.recipe.recipetypes.AssemblyPlan;
-import net.mads.industron.recipe.recipetypes.AssemblyTools;
-import net.mads.industron.recipe.recipetypes.Component;
-import net.mads.industron.recipe.recipetypes.ComponentDefinition;
-import net.mads.industron.recipe.recipetypes.Material;
-import net.mads.industron.recipe.recipetypes.Tool;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyComponent;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyPlan;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyTools;
+import net.mads.industron.recipe.recipes.assembly.Component;
+import net.mads.industron.recipe.recipetypes.assembly.ComponentDefinition;
+import net.mads.industron.recipe.recipes.assembly.Material;
+import net.mads.industron.recipe.recipes.assembly.Tool;
 
 import java.util.List;
 
-import static net.mads.industron.recipe.recipetypes.ComponentDefinition.component;
+import static net.mads.industron.recipe.recipetypes.assembly.ComponentDefinition.component;
 
 /** Explicit semantic component trees. Recipe-level stats are supplied by the recipe that uses them. */
 public final class ComponentDefinitions {
@@ -63,7 +63,7 @@ public final class ComponentDefinitions {
     public static boolean canResolve(
             AssemblyComponent component,
             IndustrialMaterial material,
-            List<net.mads.industron.recipe.recipetypes.AssemblyRequirement> requirements
+            List<net.mads.industron.recipe.recipetypes.assembly.AssemblyRequirement> requirements
     ) {
         List<AssemblyPlan.Step> plan = AssemblyPlan.compileComponent(
                 java.util.Objects.requireNonNull(component, "component"),
@@ -75,7 +75,7 @@ public final class ComponentDefinitions {
 
     public static boolean canResolveFree(
             AssemblyComponent component,
-            List<net.mads.industron.recipe.recipetypes.AssemblyRequirement> requirements
+            List<net.mads.industron.recipe.recipetypes.assembly.AssemblyRequirement> requirements
     ) {
         return planCanResolve(AssemblyPlan.compileComponent(
                 java.util.Objects.requireNonNull(component, "component"),

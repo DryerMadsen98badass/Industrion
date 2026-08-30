@@ -9,7 +9,7 @@ import net.mads.industron.fluid.MaterialFluidType;
 import net.mads.industron.fluid.NonPlaceableBucketItem;
 import net.mads.industron.item.FiredBucketItem;
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.material.IndustrialMaterials;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.MaterialPart;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.Item;

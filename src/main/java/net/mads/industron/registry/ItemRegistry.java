@@ -20,16 +20,16 @@ import net.mads.industron.machine.StaticMachinePortType;
 import net.mads.industron.machine.control.MachineControlScheduleItem;
 import net.mads.industron.machine.machines.electric.multiblock.MultiblockRegistrations;
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.material.IndustrialMaterials;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.MaterialItem;
 import net.mads.industron.material.MaterialPart;
+import net.mads.industron.material.MaterialOreHost;
 import net.mads.industron.material.MaterialFormGenerator;
 import net.mads.industron.material.recipes.MaterialCasingGenerator;
 import net.mads.industron.material.structure.StructureBlockDefinition;
 import net.mads.industron.material.structure.StructureMaterial;
 import net.mads.industron.material.structure.StructureMaterialGenerator;
 import net.mads.industron.material.structure.StructureMaterialItem;
-import net.mads.industron.material.structure.StructureMaterialPart;
 import net.mads.industron.material.structure.StructureMaterials;
 import net.mads.industron.transport.FluidTransportRegistrations;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -62,12 +62,13 @@ public final class ItemRegistry {
     public static final Map<String, DeferredHolder<Item, BlockItem>> MULTIBLOCK_CONTROLLERS = new LinkedHashMap<>();
     public static final Map<String, DeferredHolder<Item, BlockItem>> SINGLE_BLOCK_MACHINES = new LinkedHashMap<>();
     public static final Map<String, Map<String, DeferredHolder<Item, BlockItem>>> MATERIAL_STONE_ITEMS = new LinkedHashMap<>();
+    public static final Map<String, Map<String, DeferredHolder<Item, BlockItem>>> MATERIAL_ORE_HOST_ITEMS = new LinkedHashMap<>();
     public static final Map<String, Map<MaterialPart, DeferredHolder<Item, ? extends Item>>> MATERIAL_ITEMS = new LinkedHashMap<>();
     public static final Map<String, Map<MaterialPart, DeferredHolder<Item, ? extends Item>>> MAGNETIC_MATERIAL_ITEMS = new LinkedHashMap<>();
     public static final Map<String, Map<WireThickness, DeferredHolder<Item, BlockItem>>> ENERGY_WIRES = new LinkedHashMap<>();
     public static final Map<String, Map<WireThickness, DeferredHolder<Item, BlockItem>>> INSULATED_ENERGY_WIRES = new LinkedHashMap<>();
     public static final Map<String, DeferredHolder<Item, BlockItem>> STRUCTURE_MATERIAL_BLOCK_ITEMS = new LinkedHashMap<>();
-    public static final Map<String, Map<StructureMaterialPart, DeferredHolder<Item, StructureMaterialItem>>> STRUCTURE_MATERIAL_FORM_ITEMS = new LinkedHashMap<>();
+    public static final Map<String, Map<MaterialPart, DeferredHolder<Item, StructureMaterialItem>>> STRUCTURE_MATERIAL_FORM_ITEMS = new LinkedHashMap<>();
     public static final Map<String, DeferredHolder<Item, Item>> SIMPLE_ITEMS = new LinkedHashMap<>();
     public static final Map<String, DeferredHolder<Item, BlockItem>> SIMPLE_BLOCK_ITEMS = new LinkedHashMap<>();
     public static final Map<String, Map<SimpleBlockVariant, DeferredHolder<Item, BlockItem>>> SIMPLE_BLOCK_VARIANT_ITEMS = new LinkedHashMap<>();
@@ -157,6 +158,24 @@ public final class ItemRegistry {
             }
             MATERIAL_STONE_ITEMS.put(material.id(), stoneItems);
 
+            Map<String, DeferredHolder<Item, BlockItem>> oreHostItems = new LinkedHashMap<>();
+            if (MaterialOreHost.hasNaturalOre(material)) {
+                for (MaterialOreHost host : MaterialOreHost.compatibleHosts(material)) {
+                    for (boolean small : new boolean[]{false, true}) {
+                        var block = BlockRegistry.getMaterialOreHostBlock(material, host, small);
+                        if (block == null) {
+                            continue;
+                        }
+                        String key = host.key(small);
+                        oreHostItems.put(
+                                key,
+                                ITEMS.register(host.registryName(material, small), () -> new BlockItem(block.get(), new Item.Properties()))
+                        );
+                    }
+                }
+            }
+            MATERIAL_ORE_HOST_ITEMS.put(material.id(), oreHostItems);
+
             Map<MaterialPart, DeferredHolder<Item, ? extends Item>> items = new LinkedHashMap<>();
             Map<MaterialPart, DeferredHolder<Item, ? extends Item>> magneticItems = new LinkedHashMap<>();
 
@@ -179,6 +198,9 @@ public final class ItemRegistry {
             }
 
             for (MaterialPart part : material.parts()) {
+                if (part.isOre() && MaterialOreHost.hasNaturalOre(material)) {
+                    continue;
+                }
                 if (material.hasExistingPart(part) || part.isFluid() || isFunctionalWirePart(part)) {
                     continue;
                 }
@@ -230,8 +252,8 @@ public final class ItemRegistry {
                 );
             }
 
-            Map<StructureMaterialPart, DeferredHolder<Item, StructureMaterialItem>> forms = new LinkedHashMap<>();
-            for (StructureMaterialPart part : StructureMaterialGenerator.generatedItemForms(material)) {
+            Map<MaterialPart, DeferredHolder<Item, StructureMaterialItem>> forms = new LinkedHashMap<>();
+            for (MaterialPart part : StructureMaterialGenerator.generatedItemForms(material)) {
                 forms.put(part, ITEMS.register(
                         part.registryName(material),
                         () -> new StructureMaterialItem(material, part)
@@ -252,18 +274,25 @@ public final class ItemRegistry {
     public static DeferredHolder<Item, BlockItem> getSimpleBlockItem(String id) { return SIMPLE_BLOCK_ITEMS.get(id); }
     public static DeferredHolder<Item, BlockItem> getSimpleBlockVariantItem(String baseId, SimpleBlockVariant variant) { return SIMPLE_BLOCK_VARIANT_ITEMS.get(baseId).get(variant); }
     public static DeferredHolder<Item, BlockItem> getStructureMaterialBlockItem(String id) { return STRUCTURE_MATERIAL_BLOCK_ITEMS.get(id); }
-    public static DeferredHolder<Item, StructureMaterialItem> getStructureMaterialFormItem(StructureMaterial material, StructureMaterialPart part) {
-        Map<StructureMaterialPart, DeferredHolder<Item, StructureMaterialItem>> forms = STRUCTURE_MATERIAL_FORM_ITEMS.get(material.id());
+    public static DeferredHolder<Item, StructureMaterialItem> getStructureMaterialFormItem(StructureMaterial material, MaterialPart part) {
+        Map<MaterialPart, DeferredHolder<Item, StructureMaterialItem>> forms = STRUCTURE_MATERIAL_FORM_ITEMS.get(material.id());
         return forms == null ? null : forms.get(part);
     }
 
     public static Collection<DeferredHolder<Item, ? extends Item>> getAllMaterialItems() {
-        return java.util.stream.Stream.concat(
-                MATERIAL_ITEMS.values().stream().flatMap(items -> items.values().stream()),
-                MAGNETIC_MATERIAL_ITEMS.values().stream().flatMap(items -> items.values().stream())
-        ).toList();
+        java.util.List<DeferredHolder<Item, ? extends Item>> result = new java.util.ArrayList<>();
+        MATERIAL_ITEMS.values().forEach(items -> result.addAll(items.values()));
+        MAGNETIC_MATERIAL_ITEMS.values().forEach(items -> result.addAll(items.values()));
+        MATERIAL_ORE_HOST_ITEMS.values().forEach(items -> result.addAll(items.values()));
+        return java.util.List.copyOf(result);
     }
     public static Collection<DeferredHolder<Item, BlockItem>> getAllMaterialStoneItems() { return MATERIAL_STONE_ITEMS.values().stream().flatMap(items -> items.values().stream()).toList(); }
+    public static Collection<DeferredHolder<Item, BlockItem>> getAllMaterialOreHostItems() { return MATERIAL_ORE_HOST_ITEMS.values().stream().flatMap(items -> items.values().stream()).toList(); }
+
+    public static DeferredHolder<Item, BlockItem> getMaterialOreHostItem(IndustrialMaterial material, MaterialOreHost host, boolean small) {
+        Map<String, DeferredHolder<Item, BlockItem>> items = MATERIAL_ORE_HOST_ITEMS.get(material.id());
+        return items == null ? null : items.get(host.key(small));
+    }
     public static Collection<DeferredHolder<Item, BlockItem>> getAllMachineCasingItems() {
         return java.util.stream.Stream.concat(
                 MACHINE_CASINGS.values().stream(),

@@ -4,7 +4,7 @@ import com.google.common.hash.HashCode;
 import com.google.common.hash.Hashing;
 import net.mads.industron.Industron;
 import net.mads.industron.material.IndustrialMaterial;
-import net.mads.industron.material.IndustrialMaterials;
+import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.MaterialProperties;
 import net.mads.industron.material.atomic.AtomicModel;
 import net.mads.industron.material.atomic.IonState;

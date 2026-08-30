@@ -183,43 +183,65 @@ public final class MaterialDefinitionValidator implements ValidationRule {
             ValidationCollector diagnostics
     ) {
         MaterialProperties properties = material.properties();
-        boolean expectedConductor = properties.metal();
         boolean actualConductor = properties.electricalBehavior() == MaterialProperties.ElectricalBehavior.CONDUCTOR;
 
-        if (expectedConductor != actualConductor) {
+        // Element definitions intentionally keep the old strict binary rule. Compounds are allowed to
+        // become conductive non-metals, semiconductors, conductive polymers, ionic conductors, etc.
+        if (material.components().isEmpty()) {
+            boolean expectedConductor = properties.metal();
+            if (expectedConductor != actualConductor) {
+                diagnostics.error(
+                        ValidationSubsystem.MATERIAL,
+                        ValidationCode.INVALID_ELECTRICAL_BEHAVIOR,
+                        subject,
+                        "Element electrical behavior must be CONDUCTOR exactly when metal=true"
+                );
+            }
+            if (actualConductor) {
+                if (properties.electricalConductivity() <= 0 || properties.insulationStrength() != 0) {
+                    diagnostics.error(
+                            ValidationSubsystem.MATERIAL,
+                            ValidationCode.INVALID_ELECTRICAL_BEHAVIOR,
+                            subject,
+                            "Element conductors require electricalConductivity > 0 and insulationStrength = 0"
+                    );
+                }
+            } else {
+                if (properties.electricalConductivity() != 0 || properties.insulationStrength() <= 0) {
+                    diagnostics.error(
+                            ValidationSubsystem.MATERIAL,
+                            ValidationCode.INVALID_ELECTRICAL_BEHAVIOR,
+                            subject,
+                            "Element insulators require electricalConductivity = 0 and insulationStrength > 0"
+                    );
+                }
+            }
+            return;
+        }
+
+        if (actualConductor && properties.electricalConductivity() <= 0) {
             diagnostics.error(
                     ValidationSubsystem.MATERIAL,
                     ValidationCode.INVALID_ELECTRICAL_BEHAVIOR,
                     subject,
-                    "Electrical behavior must be CONDUCTOR exactly when metal=true"
+                    "Compound conductors require electricalConductivity > 0"
             );
         }
-        if (actualConductor) {
-            if (properties.electricalConductivity() <= 0 || properties.insulationStrength() != 0) {
-                diagnostics.error(
-                        ValidationSubsystem.MATERIAL,
-                        ValidationCode.INVALID_ELECTRICAL_BEHAVIOR,
-                        subject,
-                        "Conductors require electricalConductivity > 0 and insulationStrength = 0"
-                );
-            }
-        } else {
-            if (properties.electricalConductivity() != 0 || properties.insulationStrength() <= 0) {
-                diagnostics.error(
-                        ValidationSubsystem.MATERIAL,
-                        ValidationCode.INVALID_ELECTRICAL_BEHAVIOR,
-                        subject,
-                        "Insulators require electricalConductivity = 0 and insulationStrength > 0"
-                );
-            }
-            if (MaterialPropertyCalculator.wireBaseAmps(properties) != 0) {
-                diagnostics.error(
-                        ValidationSubsystem.MATERIAL,
-                        ValidationCode.INVALID_ELECTRICAL_BEHAVIOR,
-                        subject,
-                        "Insulating materials must have zero bare-wire amp capacity"
-                );
-            }
+        if (!actualConductor && properties.insulationStrength() <= 0) {
+            diagnostics.error(
+                    ValidationSubsystem.MATERIAL,
+                    ValidationCode.INVALID_ELECTRICAL_BEHAVIOR,
+                    subject,
+                    "Compound insulators require insulationStrength > 0"
+            );
+        }
+        if (!actualConductor && MaterialPropertyCalculator.wireBaseAmps(properties) != 0) {
+            diagnostics.error(
+                    ValidationSubsystem.MATERIAL,
+                    ValidationCode.INVALID_ELECTRICAL_BEHAVIOR,
+                    subject,
+                    "Materials classified as insulating must have zero bare-wire amp capacity"
+            );
         }
     }
 

@@ -133,3 +133,8 @@ Metal.X
 ```
 
 En free Component-root uten `Metal.X` gir uavhengig materialvalg per material-leaf. En fixed root med `Metal.X` arver samme material gjennom normale nested branches. `inputAny(...)` kan bryte en fixed binding lokalt og parent-relative stat-krav kan hindre at erstatningsmaterialet går under/over parentens capability. Generated Frame/Casing recipes bruker den samme `AssemblyPlan`-resolusjonen som runtime for feasibility.
+
+
+## Active material/geology integration
+
+Current canonical architecture/order: `CURRENT_TASK.md` and `to do/23-material-geology-autorecipe-integration.md`. Natural resources use composed ore-source materials, registered StoneMaterial hosts, tier-driven dimensions and deterministic deposit worldgen. Automatic composition processing is currently scoped to stone, wood and raw ore-source materials.

@@ -25,7 +25,7 @@ public final class StructureSetResolver {
     private static final String ROOT = "textures/block/structure_sets";
     private static final List<Path> RESOURCE_ROOTS = discoverResourceRoots();
     private static final Map<String, List<String>> TEXTURE_FILES_CACHE = new ConcurrentHashMap<>();
-    private static final Map<String, Optional<Path>> SOURCE_PATH_CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, Optional<ResolvedTemplate>> SOURCE_TEMPLATE_CACHE = new ConcurrentHashMap<>();
 
     private StructureSetResolver() {
     }
@@ -58,7 +58,16 @@ public final class StructureSetResolver {
             }
         }
 
-        return packagedTextureFiles(model);
+        List<String> packaged = packagedTextureFiles(model);
+        if (!packaged.isEmpty()) {
+            return packaged;
+        }
+
+        if (model == StoneModel.STONE && sharedStoneTemplate("stone.png").isPresent()) {
+            return List.of("stone.png");
+        }
+
+        return List.of();
     }
 
     public static boolean hasTexture(StructureModel model, String fileName) {
@@ -82,12 +91,34 @@ public final class StructureSetResolver {
     }
 
     public static Optional<Path> sourcePath(StructureModel model, String fileName) {
-        String safeFile = safeRelative(fileName);
-        String cacheKey = modelKey(model) + '\0' + safeFile;
-        return SOURCE_PATH_CACHE.computeIfAbsent(cacheKey, ignored -> discoverSourcePath(model, safeFile));
+        return sourceTemplate(model, fileName).map(ResolvedTemplate::path);
     }
 
-    private static Optional<Path> discoverSourcePath(StructureModel model, String safeFile) {
+    /**
+     * Resolves the template and records which stone model donated a fallback sprite.
+     * The donor is used by data generation to normalize fallback luminance before
+     * applying the target material tint.
+     */
+    public static Optional<ResolvedTemplate> sourceTemplate(StructureModel model, String fileName) {
+        String safeFile = safeRelative(fileName);
+        String cacheKey = modelKey(model) + '\0' + safeFile;
+        return SOURCE_TEMPLATE_CACHE.computeIfAbsent(cacheKey, ignored -> discoverSourceTemplate(model, safeFile));
+    }
+
+    private static Optional<ResolvedTemplate> discoverSourceTemplate(StructureModel model, String safeFile) {
+        Optional<Path> direct = directSourcePath(model, safeFile);
+        if (direct.isPresent()) {
+            return Optional.of(new ResolvedTemplate(direct.get(), Optional.empty()));
+        }
+
+        if (model instanceof StoneModel stoneModel) {
+            return stoneFallbackSourceTemplate(stoneModel, safeFile);
+        }
+
+        return Optional.empty();
+    }
+
+    private static Optional<Path> directSourcePath(StructureModel model, String safeFile) {
         String relativeDirectory = relativeDirectory(model);
         for (Path assetRoot : RESOURCE_ROOTS) {
             Path directory = assetRoot.resolve(ROOT).resolve(relativeDirectory).normalize();
@@ -97,6 +128,46 @@ public final class StructureSetResolver {
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * Standard stone roles are guaranteed even when the selected Minecraft/Create family
+     * does not ship a matching sprite. Missing cobbled/polished templates therefore reuse
+     * a neutral grayscale shape and are tinted with the target StoneMaterial color later.
+     */
+    private static Optional<ResolvedTemplate> stoneFallbackSourceTemplate(StoneModel model, String safeFile) {
+        String fileName = Path.of(safeFile).getFileName().toString();
+
+        if (model == StoneModel.STONE && fileName.equals("stone.png")) {
+            return sharedStoneTemplate("stone.png");
+        }
+
+        if (fileName.equals("cobblestone.png")) {
+            return sharedStoneTemplate("cobblestone.png");
+        }
+
+        if (fileName.startsWith("polished_")) {
+            return donatedTemplate(StoneModel.DIORITE, "polished_diorite.png");
+        }
+
+        return Optional.empty();
+    }
+
+    private static Optional<ResolvedTemplate> sharedStoneTemplate(String fileName) {
+        String safeFile = safeRelative(fileName);
+        for (Path assetRoot : RESOURCE_ROOTS) {
+            Path directory = assetRoot.resolve(ROOT).resolve("stone/_shared").normalize();
+            Path path = directory.resolve(safeFile).normalize();
+            if (path.startsWith(directory) && Files.isRegularFile(path)) {
+                return Optional.of(new ResolvedTemplate(path, Optional.empty()));
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<ResolvedTemplate> donatedTemplate(StoneModel donor, String fileName) {
+        return directSourcePath(donor, fileName)
+                .map(path -> new ResolvedTemplate(path, Optional.of(donor)));
     }
 
     public static String stripPng(String fileName) {
@@ -205,4 +276,13 @@ public final class StructureSetResolver {
         } catch (Exception ignored) {
         }
     }
+    public record ResolvedTemplate(Path path, Optional<StoneModel> fallbackDonor) {
+        public ResolvedTemplate {
+            if (path == null) {
+                throw new IllegalArgumentException("Resolved structure template path cannot be null");
+            }
+            fallbackDonor = fallbackDonor == null ? Optional.empty() : fallbackDonor;
+        }
+    }
+
 }

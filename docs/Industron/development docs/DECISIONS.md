@@ -125,3 +125,26 @@
 11. Base item/block er fysisk workpiece/result og ekspanderer ikke components.
 12. Create Deployer/FakePlayer må bruke korrekt tool og fullføre samme totale tool-work; hver fake-player interaction bidrar 2 ticks = 0,1 s.
 13. JEI har `Assembly Products` for root recipe og `Assembly Components` for ett direkte component-level om gangen; root-visningen skal ikke flattene hele nested tree-et.
+
+## 2026-08-27 - Material/geology/autorecipe integration decisions
+
+These decisions override older geology/automatic-recipe text where it conflicts.
+
+- Current main project code is the API/status source of truth. The earlier geology changed-files archive is incomplete reference only.
+- `MaterialPart` is the target common part/form enum for stone and wood; remove the parallel structure-part model after migration.
+- Existing Minecraft/Create stone/wood forms are expressed with `.existing(MaterialPart.X, "namespace:id")`.
+- Every registered stone has explicit color, dust forms and a cobbled block/slab/stairs/wall set; missing cobbled forms are generated from grayscale templates tinted by the stone color.
+- A registered stone with a valid base stone form automatically becomes an ore host. Host-specific ore enum constants and a separate hardcoded host catalog are migration debt.
+- Stone/wood `.contains(...)` accepts arbitrary registered substances and is treated as authoritative user composition.
+- Natural ore worldgen is normally based on manually named composed ore-source materials, not one elemental ore per element.
+- An element may occur in multiple source materials; one source may contain multiple useful substances.
+- Ore-source definitions live under `material/defenitions`.
+- `runData` reports deterministic missing-source composition proposals and exact copyable `.contains(component(...), ...)` syntax, but never invents source names/IDs or edits Java source.
+- Material/deposit dimension is selected from highest relevant tier: ULV-HV Overworld, EV-LuV Nether, ZPM+ End.
+- Current automatic material processing scope is stone, wood and raw ore-source materials only.
+- Processing begins from DUST for stone/raw source and WOOD_PULP for wood. Ore-to-dust processing is deferred.
+- Generated processing recipe tier is one electric tier below resolved source tier, clamped at ULV.
+- Process selection is based on actual composition/phase/properties/structure. Physical separators do not break bonds. Ambiguous topology produces a diagnostic rather than a guessed recipe.
+- Multi-step routes are allowed only when each step is physically/process-semantically justified.
+- Recipe emission must respect actual IO limits and may never silently truncate outputs.
+- Geology planning is not complete until registered runtime worldgen places deterministic deposits in chunks.

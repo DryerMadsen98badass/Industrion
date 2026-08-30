@@ -1,8 +1,8 @@
 package net.mads.industron.validation.rules;
 
-import net.mads.industron.recipe.recipetypes.AssemblyComponent;
-import net.mads.industron.recipe.recipetypes.AssemblyTools;
-import net.mads.industron.recipe.recipetypes.ComponentDefinition;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyComponent;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyTools;
+import net.mads.industron.recipe.recipetypes.assembly.ComponentDefinition;
 import net.mads.industron.recipe.recipes.assembly.ComponentDefinitions;
 import net.mads.industron.validation.ValidationCode;
 import net.mads.industron.validation.ValidationCollector;

@@ -31,6 +31,14 @@ public final class ClientIndustrialFluidTooltip {
         }
 
         addChemicalBalanceLine(event.getToolTip(), fluid);
+
+        // Molten material buckets are owned by ClientMaterialTooltip, which can show the full
+        // material tier/properties. Avoid duplicate fluid lines for compounds and let that handler
+        // render the molten material exactly like every other material form.
+        if (fluid.isMolten()) {
+            return;
+        }
+
         Player player = event.getEntity();
         if (player != null && GogglesItem.isWearingGoggles(player)) {
             addLines(event.getToolTip(), fluid);
@@ -69,6 +77,14 @@ public final class ClientIndustrialFluidTooltip {
     }
 
     private static MutableComponent formulaComponent(IndustrialSubstance substance, boolean nested) {
+        // ElementDefinition is also an IndustrialSubstance. Never assume every non-fluid substance
+        // is an IndustrialMaterial; molten compound buckets contain element definitions directly.
+        if (!(substance instanceof IndustrialFluid)
+                && !(substance instanceof net.mads.industron.material.IndustrialMaterial)) {
+            String formula = substance.formula();
+            return formula.isBlank() ? null : colored(formula, substance.color());
+        }
+
         if (substance instanceof net.mads.industron.material.IndustrialMaterial material
                 && material.elementSymbol().isPresent()) {
             return colored(material.elementSymbol().get(), material.color());
