@@ -1,11 +1,15 @@
 package net.mads.industron.material.chemistry;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -70,6 +74,95 @@ public final class ChemicalStructure {
         return Collections.unmodifiableMap(result);
     }
 
+    /**
+     * Deterministic structural identity that ignores authored atom ids.
+     *
+     * <p>This is intentionally a topology signature, not a display formula. It gives Phase 8 a
+     * stable structure reference while the deeper Phase 10/13 solvers can still become stricter
+     * later.</p>
+     *
+     * <p>Refinement labels and the returned graph fingerprint use SHA-256 to keep memory
+     * linear in graph size. This remains a structural fingerprint, not an exact graph
+     * isomorphism test.</p>
+     */
+    public String canonicalSignature() {
+        if (atoms.isEmpty()) {
+            return topology.name()
+                    + "|repeat=" + valueOrEmpty(repeatUnitId) + ":" + repeatCount
+                    + "|flex=" + chainFlexibility
+                    + "|cross=" + crosslinkDensity;
+        }
+
+        MessageDigest digest = signatureDigest();
+        Map<String, List<ChemicalBond>> adjacency = new HashMap<>();
+        Map<String, String> labels = new LinkedHashMap<>();
+        for (ChemicalAtom atom : atoms.values()) {
+            adjacency.put(atom.id(), new ArrayList<>());
+            labels.put(atom.id(), digestParts(digest,
+                    List.of(atom.elementId(), Integer.toString(atom.formalCharge()))));
+        }
+        for (ChemicalBond bond : bonds) {
+            adjacency.get(bond.firstAtom()).add(bond);
+            adjacency.get(bond.secondAtom()).add(bond);
+        }
+
+        for (int i = 0; i < atoms.size(); i++) {
+            Map<String, String> next = new LinkedHashMap<>();
+            for (ChemicalAtom atom : atoms.values()) {
+                List<String> neighbours = new ArrayList<>();
+                for (ChemicalBond bond : adjacency.get(atom.id())) {
+                    String other = bond.firstAtom().equals(atom.id()) ? bond.secondAtom() : bond.firstAtom();
+                    neighbours.add(labels.get(other) + ":" + bond.type().name() + ":" + bond.order().name());
+                }
+                Collections.sort(neighbours);
+                neighbours.add(0, labels.get(atom.id()));
+                next.put(atom.id(), digestParts(digest, neighbours));
+            }
+            labels = next;
+        }
+
+        List<String> atomLabels = new ArrayList<>(labels.values());
+        Collections.sort(atomLabels);
+        List<String> bondLabels = new ArrayList<>();
+        for (ChemicalBond bond : bonds) {
+            String first = labels.get(bond.firstAtom());
+            String second = labels.get(bond.secondAtom());
+            String low = first.compareTo(second) <= 0 ? first : second;
+            String high = first.compareTo(second) <= 0 ? second : first;
+            bondLabels.add(low + "-" + bond.type().name() + ":" + bond.order().name() + "-" + high);
+        }
+        Collections.sort(bondLabels);
+
+        return topology.name()
+                + "|atoms=" + atoms.size() + ":" + digestParts(digest, atomLabels)
+                + "|bonds=" + bonds.size() + ":" + digestParts(digest, bondLabels)
+                + "|repeat=" + valueOrEmpty(repeatUnitId) + ":" + repeatCount
+                + "|flex=" + chainFlexibility
+                + "|cross=" + crosslinkDensity;
+    }
+
+    private static MessageDigest signatureDigest() {
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException error) {
+            throw new IllegalStateException("SHA-256 is required for structure signatures", error);
+        }
+    }
+
+    private static String digestParts(MessageDigest digest, List<String> parts) {
+        digest.reset();
+        for (String part : parts) {
+            byte[] bytes = part.getBytes(StandardCharsets.UTF_8);
+            // Length prefixes preserve field boundaries even when ids contain delimiters.
+            digest.update((byte) (bytes.length >>> 24));
+            digest.update((byte) (bytes.length >>> 16));
+            digest.update((byte) (bytes.length >>> 8));
+            digest.update((byte) bytes.length);
+            digest.update(bytes);
+        }
+        return HexFormat.of().formatHex(digest.digest());
+    }
+
     public boolean isConnected() {
         if (atoms.size() <= 1 || topology == Topology.PHYSICAL_MIXTURE) return true;
         Map<String, Set<String>> graph = new HashMap<>();
@@ -111,6 +204,10 @@ public final class ChemicalStructure {
     private static double clamp(double value) {
         if (!Double.isFinite(value)) return 0;
         return Math.max(0, Math.min(1, value));
+    }
+
+    private static String valueOrEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     public static final class Builder {

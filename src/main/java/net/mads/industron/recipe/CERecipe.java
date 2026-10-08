@@ -38,11 +38,14 @@ public record CERecipe(
         List<CEChancedFluidInput> chancedFluidInputs,
         List<SizedIngredient> notConsumableItems,
         List<SizedFluidIngredient> notConsumableFluids,
+        List<CEToolRequirement> tools,
         List<CEChancedItemOutput> itemOutputs,
         List<FluidStack> fluidOutputs,
         List<CEChancedFluidOutput> chancedFluidOutputs,
         Optional<ResourceLocation> treeSource,
-        int duration,
+        Optional<Integer> duration,
+        Optional<Integer> manualUses,
+        Optional<Double> fuelUnits,
         Optional<Integer> circuit,
         Optional<String> tier,
         Optional<Integer> minRpm,
@@ -72,12 +75,15 @@ public record CERecipe(
             CEChancedItemOutput.CODEC.listOf().optionalFieldOf("item_outputs", List.of()).forGetter(CERecipe::itemOutputs),
             FluidStack.CODEC.listOf().optionalFieldOf("fluid_outputs", List.of()).forGetter(CERecipe::fluidOutputs),
             CEChancedFluidOutput.CODEC.listOf().optionalFieldOf("chanced_fluid_outputs", List.of()).forGetter(CERecipe::chancedFluidOutputs),
-            ExtraCodecs.POSITIVE_INT.fieldOf("duration").forGetter(CERecipe::duration),
+            ExtraCodecs.POSITIVE_INT.optionalFieldOf("duration").forGetter(CERecipe::duration),
+            ExtraCodecs.POSITIVE_INT.optionalFieldOf("uses").forGetter(CERecipe::manualUses),
+            Codec.DOUBLE.optionalFieldOf("fuel_units").forGetter(CERecipe::fuelUnits),
             ExtraCodecs.intRange(1, 32).optionalFieldOf("circuit").forGetter(CERecipe::circuit),
             ExtraCodecs.NON_EMPTY_STRING.optionalFieldOf("tier").forGetter(CERecipe::tier),
             LegacyPowerFields.CODEC.forGetter(recipe -> LegacyPowerFields.EMPTY),
             RuntimeFields.CODEC.forGetter(recipe -> new RuntimeFields(
                     recipe.treeSource(),
+                    recipe.tools(),
                     recipe.minRpm(),
                     recipe.maxRpm(),
                     recipe.outputRpm(),
@@ -101,10 +107,17 @@ public record CERecipe(
         chancedFluidInputs = List.copyOf(chancedFluidInputs);
         notConsumableItems = List.copyOf(notConsumableItems);
         notConsumableFluids = List.copyOf(notConsumableFluids);
+        tools = tools == null ? List.of() : List.copyOf(tools);
         itemOutputs = List.copyOf(itemOutputs);
         fluidOutputs = List.copyOf(fluidOutputs);
         chancedFluidOutputs = List.copyOf(chancedFluidOutputs);
         treeSource = treeSource == null ? Optional.empty() : treeSource;
+        duration = duration == null ? Optional.empty() : duration;
+        manualUses = manualUses == null ? Optional.empty() : manualUses;
+        fuelUnits = fuelUnits == null ? Optional.empty() : fuelUnits;
+        if (fuelUnits.isPresent() && (!Double.isFinite(fuelUnits.get()) || fuelUnits.get() <= 0.0D)) {
+            throw new IllegalArgumentException("Fuel Units must be finite and positive");
+        }
         circuit = circuit == null ? Optional.empty() : circuit;
         tier = tier == null ? Optional.empty() : tier;
         minRpm = minRpm == null ? Optional.empty() : minRpm;
@@ -126,6 +139,56 @@ public record CERecipe(
                     "Output RPM must be between 1 and " + DEFAULT_MAX_RPM
             );
         }
+        RecipeTypeDefinition definition = CERecipeTypes.byId(recipeType);
+        if (definition != null && definition.ignoresTier()) {
+            tier = Optional.empty();
+        }
+        if (definition != null && definition.requiresCoilTemperature()) {
+            if (requiredTemp.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "Recipe type " + recipeType + " requires a positive coil temperature"
+                );
+            }
+            if (!requiredLogic.contains(CERecipeLogics.COIL_TEMP.id())) {
+                throw new IllegalArgumentException(
+                        "Recipe type " + recipeType + " requires " + CERecipeLogics.COIL_TEMP.id()
+                );
+            }
+        }
+    }
+
+    /** Copy used by a manual recipe type's automated parent. Manual tool actions are removed. */
+    public CERecipe automatedCopy(ResourceLocation automatedRecipeType) {
+        return new CERecipe(
+                automatedRecipeType,
+                itemInputs,
+                chancedItemInputs,
+                fluidInputs,
+                chancedFluidInputs,
+                notConsumableItems,
+                notConsumableFluids,
+                List.of(),
+                itemOutputs,
+                fluidOutputs,
+                chancedFluidOutputs,
+                treeSource,
+                duration,
+                Optional.empty(),
+                fuelUnits,
+                circuit,
+                tier,
+                minRpm,
+                maxRpm,
+                outputRpm,
+                requiredTemp,
+                chemicalBalanceRange,
+                requiredLogic,
+                optionalLogic,
+                blockInteractions,
+                conditions,
+                modifiers,
+                furnaceFuel
+        );
     }
 
     private static CERecipe fromCodec(
@@ -134,7 +197,9 @@ public record CERecipe(
             List<CEChancedItemOutput> itemOutputs,
             List<FluidStack> fluidOutputs,
             List<CEChancedFluidOutput> chancedFluidOutputs,
-            int duration,
+            Optional<Integer> duration,
+            Optional<Integer> manualUses,
+            Optional<Double> fuelUnits,
             Optional<Integer> circuit,
             Optional<String> tier,
             LegacyPowerFields legacyPowerFields,
@@ -142,6 +207,14 @@ public record CERecipe(
             LogicFields logicFields,
             InteractionFields interactionFields
     ) {
+        boolean legacyKilnFuel = isLegacyKilnFuel(recipeType);
+        Optional<Double> resolvedFuelUnits = fuelUnits.isPresent()
+                ? fuelUnits
+                : legacyKilnFuel
+                ? duration.map(ticks -> ticks / 10.0D)
+                : Optional.empty();
+        Optional<Integer> resolvedDuration = legacyKilnFuel ? Optional.empty() : duration;
+
         return new CERecipe(
                 normalizeLegacyRecipeType(recipeType),
                 inputFields.itemInputs(),
@@ -150,11 +223,14 @@ public record CERecipe(
                 inputFields.chancedFluidInputs(),
                 inputFields.notConsumableItems(),
                 inputFields.notConsumableFluids(),
+                runtimeFields.tools(),
                 itemOutputs,
                 fluidOutputs,
                 chancedFluidOutputs,
                 runtimeFields.treeSource(),
-                duration,
+                resolvedDuration,
+                manualUses,
+                resolvedFuelUnits,
                 circuit,
                 resolvedTier(tier, legacyPowerFields),
                 runtimeFields.minRpm(),
@@ -171,11 +247,19 @@ public record CERecipe(
         );
     }
 
+    private static boolean isLegacyKilnFuel(ResourceLocation recipeType) {
+        return recipeType != null
+                && Industron.MOD_ID.equals(recipeType.getNamespace())
+                && "kiln_fuel".equals(recipeType.getPath());
+    }
+
     private static ResourceLocation normalizeLegacyRecipeType(ResourceLocation recipeType) {
         if (!Industron.MOD_ID.equals(recipeType.getNamespace())) {
             return recipeType;
         }
         return switch (recipeType.getPath()) {
+            // Data migration only. kiln_fuel is no longer a registered recipe type.
+            case "kiln_fuel" -> CERecipeTypes.FUEL.id();
             default -> recipeType;
         };
     }
@@ -221,6 +305,7 @@ public record CERecipe(
 
     private record RuntimeFields(
             Optional<ResourceLocation> treeSource,
+            List<CEToolRequirement> tools,
             Optional<Integer> minRpm,
             Optional<Integer> maxRpm,
             Optional<Integer> outputRpm,
@@ -231,6 +316,7 @@ public record CERecipe(
     ) {
         private static final MapCodec<RuntimeFields> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
                 ResourceLocation.CODEC.optionalFieldOf("tree_source").forGetter(RuntimeFields::treeSource),
+                CEToolRequirement.CODEC.listOf().optionalFieldOf("tools", List.of()).forGetter(RuntimeFields::tools),
                 ExtraCodecs.intRange(1, DEFAULT_MAX_RPM).optionalFieldOf("min_rpm").forGetter(RuntimeFields::minRpm),
                 ExtraCodecs.intRange(1, DEFAULT_MAX_RPM).optionalFieldOf("max_rpm").forGetter(RuntimeFields::maxRpm),
                 ExtraCodecs.intRange(1, DEFAULT_MAX_RPM).optionalFieldOf("output_rpm").forGetter(RuntimeFields::outputRpm),
@@ -351,12 +437,12 @@ public record CERecipe(
     ) {
         int baseDuration = furnaceFuelStack(input)
                 .map(stack -> Math.max(1, stack.getBurnTime(RecipeType.SMELTING) / 10))
-                .orElse(duration);
+                .orElseGet(() -> duration.orElse(100));
         return runtimeDuration(runtimeTier, drive, rpm, baseDuration);
     }
 
     public int runtimeDuration(MachineTier runtimeTier, MachineDrive drive, int rpm) {
-        return runtimeDuration(runtimeTier, drive, rpm, duration);
+        return runtimeDuration(runtimeTier, drive, rpm, duration.orElse(100));
     }
 
     /** Compatibility overload that uses the drive supplied by the input. */
@@ -366,7 +452,7 @@ public record CERecipe(
 
     /** Compatibility overload for non-kinetic displays and callers. */
     public int runtimeDuration(MachineTier runtimeTier, int rpm) {
-        return runtimeDuration(runtimeTier, MachineDrive.NONE, rpm, duration);
+        return runtimeDuration(runtimeTier, MachineDrive.NONE, rpm, duration.orElse(100));
     }
 
     private int runtimeDuration(

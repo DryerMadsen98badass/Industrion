@@ -15,8 +15,6 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 public class MachineCasingModelProvider implements DataProvider {
-    private static final String CASING_TEXTURE = Industron.MOD_ID + ":block/casings/universal_textures/casing";
-
     private final PackOutput output;
 
     public MachineCasingModelProvider(PackOutput output) {
@@ -35,7 +33,7 @@ public class MachineCasingModelProvider implements DataProvider {
         for (MachineTier tier : MachineTier.ALL) {
             String casingName = tier.casingRegistryName();
             futures.add(DataProvider.saveStable(cache, blockstate(casingName), blockstates.resolve(casingName + ".json")));
-            futures.add(DataProvider.saveStable(cache, blockModel(CASING_TEXTURE, false), blockModels.resolve(casingName + ".json")));
+            futures.add(DataProvider.saveStable(cache, blockModel(tier.singleBlockMachineCasingSideTexture(), true), blockModels.resolve(casingName + ".json")));
             futures.add(DataProvider.saveStable(cache, itemModel(casingName), itemModels.resolve(casingName + ".json")));
         }
 

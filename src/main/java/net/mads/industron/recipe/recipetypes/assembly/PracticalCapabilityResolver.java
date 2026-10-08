@@ -23,6 +23,7 @@ public final class PracticalCapabilityResolver {
     ) {
         MaterialProperties properties = target.material().properties();
         MaterialPart part = target.part();
+        if (!capability.isAvailable(properties)) return OptionalDouble.empty();
 
         return switch (capability.practicalKind()) {
             case NONE -> capability.isRangeStat()

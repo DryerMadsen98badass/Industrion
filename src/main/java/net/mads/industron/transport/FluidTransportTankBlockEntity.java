@@ -1,6 +1,7 @@
 package net.mads.industron.transport;
 
 import com.simibubi.create.content.fluids.tank.FluidTankBlockEntity;
+import net.mads.industron.material.FluidTransportLimits;
 import com.simibubi.create.foundation.fluid.SmartFluidTank;
 import net.createmod.catnip.animation.LerpedFloat;
 import net.minecraft.core.BlockPos;
@@ -36,7 +37,7 @@ public class FluidTransportTankBlockEntity extends FluidTankBlockEntity {
 
     @Override
     public void applyFluidTankSize(int blocks) {
-        int capacity = Math.multiplyExact(blocks, tankCapacity());
+        int capacity = FluidTransportLimits.tankCapacity(tankCapacity(), blocks);
         tankInventory.setCapacity(capacity);
         int overflow = tankInventory.getFluidAmount() - capacity;
         if (overflow > 0) {
@@ -63,6 +64,16 @@ public class FluidTransportTankBlockEntity extends FluidTankBlockEntity {
         return controller == null ? getTankInventory() : controller.getTankInventory();
     }
 
+    /** Breaking any connected tank block discards the fluid stored by that tank multiblock. */
+    public void discardStoredFluid() {
+        if (level == null || level.isClientSide()) return;
+        IFluidHandler storage = fluidCapability();
+        if (storage != null) {
+            storage.drain(Integer.MAX_VALUE, FluidAction.EXECUTE);
+        }
+        setChanged();
+    }
+
     @Override
     protected void read(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
         CompoundTag savedTankContent = compound.contains("TankContent")
@@ -75,7 +86,7 @@ public class FluidTransportTankBlockEntity extends FluidTankBlockEntity {
             return;
         }
 
-        int capacity = Math.multiplyExact(Math.max(1, getTotalTankSize()), tankCapacity());
+        int capacity = FluidTransportLimits.tankCapacity(tankCapacity(), getTotalTankSize());
         tankInventory.setCapacity(capacity);
         if (savedTankContent != null) {
             tankInventory.readFromNBT(registries, savedTankContent);

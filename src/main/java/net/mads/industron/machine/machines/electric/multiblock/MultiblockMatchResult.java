@@ -14,6 +14,7 @@ public record MultiblockMatchResult(
         MachineTier tier,
         int coilHeat,
         int coilCount,
+        ResourceLocation casingModel,
         List<BlockPos> positions,
         Map<MultiblockAbility, List<BlockPos>> abilityPositions,
         Map<Integer, BlockPos> sequentialInputPositions,
@@ -21,6 +22,19 @@ public record MultiblockMatchResult(
         Map<BlockPos, ResourceLocation> overlayModels
 ) {
     public static MultiblockMatchResult failed() {
-        return new MultiblockMatchResult(false, "", 0, null, 0, 0, List.of(), Map.of(), Map.of(), Map.of(), Map.of());
+        return new MultiblockMatchResult(
+                false,
+                "",
+                0,
+                null,
+                0,
+                0,
+                null,
+                List.<BlockPos>of(),
+                Map.<MultiblockAbility, List<BlockPos>>of(),
+                Map.<Integer, BlockPos>of(),
+                Map.<Integer, BlockPos>of(),
+                Map.<BlockPos, ResourceLocation>of()
+        );
     }
 }

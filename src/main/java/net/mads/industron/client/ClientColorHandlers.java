@@ -6,12 +6,21 @@ import net.mads.industron.block.SimpleBlockVariant;
 import net.mads.industron.block.SimpleBlocks;
 import net.mads.industron.item.SimpleItemDefinition;
 import net.mads.industron.item.SimpleItems;
+import net.mads.industron.block.coils.CoilBlock;
+import net.mads.industron.block.coils.CoilDefinition;
+import net.mads.industron.block.coils.CoilDefinitions;
 import net.mads.industron.material.IndustrialMaterial;
 import net.mads.industron.material.defenitions.IndustrialMaterials;
+import net.mads.industron.material.defenitions.WoodMaterials;
+import net.mads.industron.material.defenitions.PlantMaterials;
+import net.mads.industron.material.plant.PlantMaterialGenerator;
+import net.mads.industron.material.plant.PlantProcessingPlanner;
 import net.mads.industron.material.MaterialFormGenerator;
 import net.mads.industron.material.MaterialPart;
 import net.mads.industron.material.MaterialOreHost;
 import net.mads.industron.material.structure.StructureMaterial;
+import net.mads.industron.material.structure.StoneMaterial;
+import net.mads.industron.material.structure.StructureMaterialVariantResolver;
 import net.mads.industron.material.structure.StructureMaterialGenerator;
 import net.mads.industron.material.structure.StructureMaterials;
 import net.mads.industron.registry.BlockRegistry;
@@ -40,6 +49,8 @@ public final class ClientColorHandlers {
             RegisterColorHandlersEvent.Block event
     ) {
         registerMaterialBlockColors(event);
+        registerFallenStickBlockColors(event);
+        registerCoilBlockColors(event);
 
         for (SimpleBlockDefinition definition : SimpleBlocks.ALL) {
             if (!definition.hasColor()) {
@@ -91,6 +102,73 @@ public final class ClientColorHandlers {
         registerSimpleItemColors(event);
         registerSimpleBlockItemColors(event);
         registerStructureMaterialItemColors(event);
+        for (var definition : net.mads.industron.material.organism.BiologicalItemCatalog.ALL) {
+            var item = ItemRegistry.BIOLOGICAL_ITEMS.get(definition.id());
+            event.register((stack, tintIndex) -> tintIndex == 0
+                    ? argb(definition.material().color()) : 0xFFFFFFFF, item.get());
+        }
+        for (var definition : net.mads.industron.material.organism.OrganismItemCatalog.generated()) {
+            if (!definition.tinted()) continue;
+            var item = ItemRegistry.ORGANISM_ITEMS.get(definition.itemId());
+            event.register((stack, tintIndex) -> tintIndex == 0
+                    ? argb(definition.material().color()) : 0xFFFFFFFF, item.get());
+        }
+        registerPlantMaterialItemColors(event);
+        registerPlantProcessIntermediateColors(event);
+        registerCoilItemColors(event);
+    }
+
+    private static void registerFallenStickBlockColors(RegisterColorHandlersEvent.Block event) {
+        for (var wood : WoodMaterials.ALL) {
+            var holder = BlockRegistry.getFallenStickBlock(wood);
+            if (holder == null) continue;
+            int color = argb(wood.color());
+            event.register(
+                    (state, level, position, tintIndex) -> tintIndex == 0 ? color : 0xFFFFFFFF,
+                    holder.get()
+            );
+        }
+    }
+
+    private static void registerCoilBlockColors(
+            RegisterColorHandlersEvent.Block event
+    ) {
+        for (CoilDefinition definition : CoilDefinitions.ALL) {
+            event.register(
+                    (state, level, position, tintIndex) -> {
+                        if (tintIndex == 0) {
+                            Integer color = state.getValue(CoilBlock.ACTIVE)
+                                    ? definition.on().color()
+                                    : definition.off().color();
+                            return optionalColor(color);
+                        }
+                        if (tintIndex == 1) {
+                            return optionalColor(definition.frame().color());
+                        }
+                        return 0xFFFFFFFF;
+                    },
+                    BlockRegistry.getCoil(definition.id()).get()
+            );
+        }
+    }
+
+    private static void registerCoilItemColors(
+            RegisterColorHandlersEvent.Item event
+    ) {
+        for (CoilDefinition definition : CoilDefinitions.ALL) {
+            event.register(
+                    (stack, tintIndex) -> switch (tintIndex) {
+                        case 0 -> optionalColor(definition.off().color());
+                        case 1 -> optionalColor(definition.frame().color());
+                        default -> 0xFFFFFFFF;
+                    },
+                    ItemRegistry.getCoilItem(definition.id()).get()
+            );
+        }
+    }
+
+    private static int optionalColor(Integer rgb) {
+        return rgb == null ? 0xFFFFFFFF : argb(rgb);
     }
 
     private static void registerMaterialBlockColors(
@@ -219,14 +297,55 @@ public final class ClientColorHandlers {
                 if (item == null) {
                     continue;
                 }
+                boolean precoloredPart = (material instanceof StoneMaterial
+                        && (part == MaterialPart.PEBBLE || StructureMaterialVariantResolver.isStoneShapingPart(part)))
+                        || (material instanceof net.mads.industron.material.structure.WoodMaterial
+                        && (part == MaterialPart.STICK
+                        || part == MaterialPart.BARK
+                        || StructureMaterialVariantResolver.woodUtilityTextureFile(part).isPresent()));
                 event.register(
-                        (stack, tintIndex) -> switch (tintIndex) {
-                            case 0, 1 -> color;
-                            default -> 0xFFFFFFFF;
-                        },
+                        (stack, tintIndex) -> precoloredPart
+                                ? 0xFFFFFFFF
+                                : switch (tintIndex) {
+                                    case 0, 1 -> color;
+                                    default -> 0xFFFFFFFF;
+                                },
                         item.get()
                 );
             }
+        }
+    }
+
+    private static void registerPlantMaterialItemColors(
+            RegisterColorHandlersEvent.Item event
+    ) {
+        for (var material : PlantMaterials.ALL) {
+            for (var part : PlantMaterialGenerator.generatedItemForms(material)) {
+                var item = ItemRegistry.getPlantMaterialItem(material, part);
+                if (item == null) continue;
+                event.register(
+                        (stack, tintIndex) -> tintIndex == 0
+                                ? argb(PlantVisualColorResolver.colorFor(material))
+                                : 0xFFFFFFFF,
+                        item.get()
+                );
+            }
+        }
+    }
+
+    private static void registerPlantProcessIntermediateColors(
+            RegisterColorHandlersEvent.Item event
+    ) {
+        for (var intermediate : PlantProcessingPlanner.allRequiredIntermediates()) {
+            if (!intermediate.isSolid()) continue;
+            var item = ItemRegistry.getPlantProcessIntermediateItem(intermediate.id());
+            if (item == null) continue;
+            event.register(
+                    (stack, tintIndex) -> tintIndex == 0
+                            ? argb(PlantVisualColorResolver.colorFor(intermediate))
+                            : 0xFFFFFFFF,
+                    item.get()
+            );
         }
     }
 

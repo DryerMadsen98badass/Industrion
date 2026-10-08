@@ -16,6 +16,9 @@ public final class ChemicalTopologyResolver {
             Map<String, MaterialSnapshot> registry
     ) {
         if (material.structure().isPresent()) return material.structure().orElseThrow().topology();
+        if (material.classifications().contains(MaterialClassification.PHYSICAL_MIXTURE)) {
+            return ChemicalStructure.Topology.PHYSICAL_MIXTURE;
+        }
         if (material.composition().isEmpty()) return ChemicalStructure.Topology.ATOMIC;
 
         IonBalance ionBalance = ionBalance(material, registry);
@@ -30,7 +33,6 @@ public final class ChemicalTopologyResolver {
         double crystalStability = 0.0;
         double volatility = 0.0;
         int totalWeight = 0;
-        int fluidWeight = 0;
 
         for (CompositionEntry component : material.composition()) {
             MaterialSnapshot child = registry.get(component.substanceId());
@@ -41,7 +43,6 @@ public final class ChemicalTopologyResolver {
             resolved++;
             int weight = Math.max(1, component.amount());
             totalWeight += weight;
-            if (component.phase().isFluidLike()) fluidWeight += weight;
 
             double metallicity = Math.max(child.property("metalliccharacter"), child.property("metallicity"));
             if (metallicity < 45.0) allMetalLike = false;
@@ -54,10 +55,9 @@ public final class ChemicalTopologyResolver {
             volatility += child.property("volatility") * weight;
         }
 
-        if (totalWeight > 0 && fluidWeight * 2 > totalWeight && material.composition().size() > 1
-                && !hasStrongDonorAcceptorPair(material, registry)) {
-            return ChemicalStructure.Topology.PHYSICAL_MIXTURE;
-        }
+        // Component phase is the phase of the recovered free component, not proof that the parent
+        // material is an unbonded mixture. A registered solid mineral made from gaseous/liquid
+        // elements is still a bonded compound unless PHYSICAL_MIXTURE was explicitly declared.
 
         if (resolved == material.composition().size() && allMetalLike) {
             return ChemicalStructure.Topology.METALLIC_LATTICE;

@@ -1,37 +1,34 @@
-# Automatic material processing - stone, wood and raw ore sources
+# Automatic material processing – current composite-dust pipeline
 
-This is the canonical processing design for the current integration. It is deliberately narrower than a universal chemistry recipe generator.
+This file originally described the pre-implementation stone/wood/raw-source slice. Current code has moved beyond that slice: registered composite materials with `DUST` are analyzed generically by `ProcessPlanner`, while ore preprocessing is handled separately.
 
 ## Scope
 
-Generate automatic composition-processing routes only for:
-
-- `StoneMaterial`;
-- `WoodMaterial`;
-- declared raw ore-source materials.
-
-Do not automatically opt every gem/alloy/compound into this pipeline.
+Generate post-dust routes for registered composite materials that own `DUST`, based on composition, topology and calculated properties. Automatic process intermediates are system-owned slurry, solution or reaction mixture materials. Dynamic runtime Foundry mixtures are future scope.
 
 ## Feed boundary
 
-The mined ore-processing chain is not part of this milestone.
+The mined ore-processing chain is implemented separately by `OreProcessingRecipes`.
 
 ```text
-StoneMaterial  -> DUST      -> automatic composition processing
-WoodMaterial   -> WOOD_PULP -> automatic composition processing
-Ore source     -> DUST      -> automatic composition processing
+RAW_ORE -> CRUSHED/WASHED/REFINED/IMPURE/PURIFIED -> ore material DUST
+ore/composite DUST -> automatic chemistry processing -> component forms
 ```
 
-A later ore-processing system will convert placed/mined ore through its crushing/washing/etc. stages into ore-source dust, then hand off here.
+Wood/stone processing remains separately governed by their material/form recipes and must not be confused with ore chemistry.
 
-## Recipe tier
+## Current safety boundary
 
 ```text
-recipe tier = previous electric tier(source resolved tier)
-minimum = ULV
+candidate plans
+-> ProcessSemantics validation
+-> exact flattened elemental balance
+-> guaranteed-output validation
+-> directed-cycle rejection
+-> recipe emission
 ```
 
-Resolve source tier recursively from composition and use one central tier utility. Do not index `MachineTier.ALL` blindly in code paths that may receive steam/special tiers.
+The current directed-cycle rule is deliberately conservative. Foundry's future reversible but exactly balanced transformations require stoichiometric cycle analysis before that restriction may be relaxed.
 
 ## Planner input
 

@@ -68,6 +68,22 @@
 - [ ] Simuler maintenance over lange driftsperioder.
 - [ ] Lag startup validation report og optional debug export for elements, generated substances, rejected recipes og assembly plans.
 
+## Foundry, mixtures og graph safety
+
+- [ ] Test exact alloy ratios: 1:2 og 2:4 matcher; 2:2 forblir uklassifisert.
+- [ ] Test nested `.contains(...)` med både top-level og flattened conservation ledger.
+- [ ] Test ambiguous equal flattened composition med ulik structure; ingen gjetting.
+- [ ] Test generic molten/ingot/dust/concentrate payload gjennom save/load, network sync og stack merging.
+- [ ] Test minst 20 constituents og mål canonicalization, pairwise checks og tick cost.
+- [ ] Test at UI aldri viser closest alloy eller missing-amount hint.
+- [ ] Test mold preheat, filled-hot state, hot output og eksplisitt cooling.
+- [ ] Test at tørr dust ikke kan destilleres og at composite dust ikke kan omgå chemistry via melting.
+- [ ] Graph-regression: `DUST <-> PURIFIED_DUST`, `IMPURE_DUST <-> DUST`, tiny/small/normal og multi-machine `A -> B -> C -> A`.
+- [ ] Chance-regression: enhver tapsfri cycle med expected eller possible bonus blokkeres.
+- [ ] Reversible mixing/separation tillates bare med nøyaktig null netto flattened materialvektor.
+- [ ] Test chunk unload/reload og server restart midt i heat, melt, pour og cooling.
+- [ ] Test at worker-resultat med gammel revision forkastes, og at worker aldri leser world/registry/ItemStack.
+
 ## Ferdig når
 
 De nye domain-systemene er deterministiske, boundary-testet og kan kjøres i stor skala uten combinatorial explosion, runtime-search eller skjulte invalid states.

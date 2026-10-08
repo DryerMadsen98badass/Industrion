@@ -31,10 +31,10 @@ public final class StructureMaterialLootProvider implements DataProvider {
         List<CompletableFuture<?>> futures = new ArrayList<>();
         for (StructureMaterial material : StructureMaterials.ALL) {
             for (StructureBlockDefinition definition : StructureMaterialGenerator.generatedBlockDefinitions(material)) {
-                // STONE and COBBLED_STONE have special loot semantics and are owned by
+                // STONE, COBBLED_STONE and GRAVEL have special loot semantics and are owned by
                 // MaterialStoneLootProvider. Do not generate a normal self-drop table here.
                 MaterialPart part = definition.part().orElse(null);
-                if (part == MaterialPart.STONE || part == MaterialPart.COBBLED_STONE) {
+                if (part == MaterialPart.STONE || part == MaterialPart.COBBLED_STONE || part == MaterialPart.GRAVEL) {
                     continue;
                 }
 

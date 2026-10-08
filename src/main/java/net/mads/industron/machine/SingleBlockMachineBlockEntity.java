@@ -9,9 +9,13 @@ import net.mads.industron.recipe.CEChancedItemInput;
 import net.mads.industron.recipe.CERecipe;
 import net.mads.industron.recipe.CERecipeInput;
 import net.mads.industron.recipe.CERecipeLookup;
+import net.mads.industron.recipe.CERecipeTypes;
+import net.mads.industron.recipe.CEToolRequirement;
+import net.mads.industron.recipe.RecipeTypeDefinition;
 import net.mads.industron.energy.CEEnergyContainer;
 import net.mads.industron.energy.CEEnergyStorage;
 import net.mads.industron.fluid.IndustrialFluids;
+import net.mads.industron.fluid.IndustrialFluidLookup;
 import net.mads.industron.gui.ProgressBar;
 import net.mads.industron.menu.SingleBlockMachineMenu;
 import net.mads.industron.machine.interaction.BlockInteraction;
@@ -35,8 +39,21 @@ import net.mads.industron.machine.control.MachineControlSnapshot;
 import net.mads.industron.machine.control.MachineControlTarget;
 import net.mads.industron.machine.control.MachineControlVariableStore;
 import net.mads.industron.machine.tree.TreeExtractionSavedData;
+import net.mads.industron.machine.foundry.FoundryComponents;
+import net.mads.industron.machine.foundry.FoundryMetallurgy;
+import net.mads.industron.machine.foundry.MixtureCentrifuging;
+import net.mads.industron.machine.foundry.MoltenRatio;
 import net.mads.industron.registry.BlockEntityRegistry;
 import net.mads.industron.registry.FluidRegistry;
+import net.mads.industron.registry.ItemRegistry;
+import net.mads.industron.material.ClayMaterialRules;
+import net.mads.industron.material.MaterialItem;
+import net.mads.industron.material.MaterialPart;
+import net.mads.industron.recipe.recipetypes.FuelRecipeLookup;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyTools;
+import net.mads.industron.recipe.recipetypes.assembly.ToolVariantDefinition;
+import net.mads.industron.recipe.recipetypes.assembly.input.AssemblyUseState;
+import net.mads.industron.network.AssemblyNextStepPayload;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -48,9 +65,13 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Clearable;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -62,8 +83,10 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.BonemealableBlock;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.common.crafting.SizedIngredient;
 import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.FluidUtil;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler.FluidAction;
 import net.neoforged.neoforge.fluids.capability.templates.FluidTank;
@@ -71,6 +94,7 @@ import net.neoforged.neoforge.fluids.crafting.SizedFluidIngredient;
 import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.items.ItemStackHandler;
 import net.neoforged.neoforge.items.wrapper.CombinedInvWrapper;
+import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -79,21 +103,32 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity implements Clearable, MenuProvider, CERecipeLogicMachine, MachineControlTarget, MachineControlScheduleHost {
+    private final net.mads.industron.machine.runtime.AsyncRecipeSearch asyncSearch = new net.mads.industron.machine.runtime.AsyncRecipeSearch();
+
     private static final int BLOCKED_VENT_EXPLOSION_TICKS = 100;
     private static final int MAX_ITEM_INPUT_SLOTS = 16;
     private static final int MAX_ITEM_OUTPUT_SLOTS = 16;
     private static final int MAX_FLUID_INPUT_TANKS = 8;
     private static final int MAX_FLUID_OUTPUT_TANKS = 8;
     private static final int RECIPE_FLUID_TANK_CAPACITY = 16_000;
+    private static final int BASIN_FLUID_TANK_CAPACITY = 1_000;
     private static final String KINETIC_OUTPUT_RPM_DATA = "KineticOutputRpm";
+    private static final int KILN_MAX_TEMPERATURE = 1000;
+    private static final List<RecipeTypeDefinition> KILN_PROCESS_TYPES = List.of(
+            CERecipeTypes.KILN_FIRING,
+            CERecipeTypes.HEATING
+    );
 
     private final ItemStackHandler inputItems = createInventory(MAX_ITEM_INPUT_SLOTS, true);
     private final ItemStackHandler outputItems = createInventory(MAX_ITEM_OUTPUT_SLOTS, false);
     private final FluidTank[] inputFluids = createFluidTanks(MAX_FLUID_INPUT_TANKS, true);
     private final FluidTank[] outputFluids = createFluidTanks(MAX_FLUID_OUTPUT_TANKS, false);
+    // Only used by unidentified MOLTEN_MIXTURE runtime centrifuging. Ordinary recipes never wait on this.
+    private final long[] unidentifiedMixtureLastChangeTick = new long[MAX_FLUID_INPUT_TANKS];
     private final FluidTank steamTank = createSteamTank();
     private static final TagKey<Block> SPRINKLER_BLACKLIST = TagKey.create(
             Registries.BLOCK,
@@ -179,6 +214,13 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
     private float lastGeneratedSpeed = Float.NaN;
     private boolean machineEnabled = true;
     private boolean clientSyncPending;
+    private boolean cosmeticSyncPending;
+    private final int[] primitiveProgress = new int[6];
+    private double kilnFuelUnits;
+    private UUID manualToolWorker;
+    private int manualToolTicks;
+    private int manualToolUses;
+    private ResourceLocation manualRecipeId;
 
     public SingleBlockMachineBlockEntity(
             BlockEntityType<?> type,
@@ -218,6 +260,8 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
     }
 
     public void serverTick() {
+        long performanceStart = net.mads.industron.debug.CEPerformanceProfiler.begin(getLevel());
+        try {
         Level level = getLevel();
         if (level == null) {
             return;
@@ -229,9 +273,13 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
         }
 
         SingleBlockMachineInstance instance = block.instance();
+        if (tickPrimitive(instance)) {
+            return;
+        }
         applyMachineControlSchedules();
         tickTemperature(instance);
         if (machineEnabled) {
+            wakeRuntimeMixtureSearchIfReady(level, instance);
             recipeLogic.serverTick();
         }
         refreshGeneratedRotation();
@@ -239,18 +287,20 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
         SingleBlockDefinition.TemperatureSettings temperatureSettings = instance.definition().temperature();
         boolean conditionHeated = temperatureSettings != null && temperatureSettings.usesHeatConditions();
         if (machineEnabled && conditionHeated) {
-            runTemperatureOperations(instance, 0);
+            // Heat-only generators (e.g. Solar Boiler) have no fuel recipe execution.
+            int steamToProduce = instance.definition().resource() == SingleBlockMachineResource.STEAM
+                    && instance.definition().resourceMode() == SingleBlockMachineResourceMode.PRODUCES
+                    && instance.definition().recipeTypes().isEmpty()
+                    ? instance.steamUsage() : 0;
+            runTemperatureOperations(instance, steamToProduce);
         }
 
         boolean active = machineEnabled
                 && (recipeLogic.isActive() || (conditionHeated && meetsTemperatureRequirement(instance)));
 
-        int nextOverlayFrame = active ? tickOverlayFrame(instance) : 0;
-        if (state.getValue(SingleBlockMachineBlock.ACTIVE) != active
-                || state.getValue(SingleBlockMachineBlock.OVERLAY_FRAME) != nextOverlayFrame) {
-            state = state
-                    .setValue(SingleBlockMachineBlock.ACTIVE, active)
-                    .setValue(SingleBlockMachineBlock.OVERLAY_FRAME, nextOverlayFrame);
+        // Overlay textures animate in the client atlas; only ACTIVE is gameplay state.
+        if (state.getValue(SingleBlockMachineBlock.ACTIVE) != active) {
+            state = state.setValue(SingleBlockMachineBlock.ACTIVE, active);
             level.setBlock(getBlockPos(), state, Block.UPDATE_ALL);
         }
 
@@ -258,6 +308,7 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
 
         if (instance == null
                 || instance.definition().power() != SingleBlockMachinePower.STEAM
+                || instance.definition().resourceMode() != SingleBlockMachineResourceMode.CONSUMES
                 || !active) {
             blockedVentTicks = 0;
             return;
@@ -280,6 +331,575 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
                     Level.ExplosionInteraction.TNT
             );
         }
+            } finally {
+            net.mads.industron.debug.CEPerformanceProfiler.record(net.mads.industron.debug.CEPerformanceProfiler.Metric.SINGLEBLOCK_TICK, performanceStart);
+        }
+    }
+
+    private boolean tickPrimitive(SingleBlockMachineInstance instance) {
+        if (instance == null) return false;
+        String id = instance.definition().id();
+        if (id.endsWith("_drying_rack")) {
+            tickDryingRack();
+            return true;
+        }
+        if (id.endsWith("_brick_mold")) {
+            tickManualToolRecipe(CERecipeTypes.BRICK_MOLDING, "Brick Molding");
+            return true;
+        }
+        if (id.endsWith("_basin")) {
+            tickBasinDroppedItems();
+            tickBasinManualToolRecipe();
+            return true;
+        }
+        if (id.endsWith("_kiln")) {
+            tickKiln();
+            return true;
+        }
+        return false;
+    }
+
+    /** Remaining processing ticks per rack slot, sampled for Jade on the server. */
+    public int[] dryingRackRemainingTicks() {
+        int[] remaining = new int[4];
+        SingleBlockMachineInstance current = instance();
+        if (current == null || !current.definition().id().endsWith("_drying_rack")) return remaining;
+        for (int slot = 0; slot < remaining.length; slot++) {
+            Optional<CERecipe> recipe = rackDryingRecipe(inputItems.getStackInSlot(slot)).map(RecipeHolder::value);
+            if (recipe.isPresent()) remaining[slot] = Math.max(0,
+                    recipe.get().duration().orElse(ClayMaterialRules.SUN_DRYING_DURATION_TICKS) - primitiveProgress[slot]);
+        }
+        return remaining;
+    }
+
+    private void tickDryingRack() {
+        Level level = getLevel();
+        if (level == null) return;
+        boolean raining = level.isRainingAt(worldPosition.above());
+        boolean sunlight = level.isDay() && level.canSeeSky(worldPosition.above()) && !raining;
+        for (int slot = 0; slot < 4; slot++) {
+            ItemStack input = inputItems.getStackInSlot(slot);
+            if (input.isEmpty() || !outputItems.getStackInSlot(slot).isEmpty()) {
+                primitiveProgress[slot] = 0;
+                continue;
+            }
+
+            Optional<CERecipe> recipe = rackDryingRecipe(input).map(RecipeHolder::value);
+            if (recipe.isEmpty()) {
+                primitiveProgress[slot] = 0;
+                continue;
+            }
+
+            int duration = recipe.get().duration().orElse(ClayMaterialRules.SUN_DRYING_DURATION_TICKS);
+            boolean cooling = net.mads.industron.material.recipes.CastingRecipes.canRackCool(input);
+
+            if (cooling) {
+                primitiveProgress[slot]++;
+            } else if (raining && primitiveProgress[slot] > 0) {
+                primitiveProgress[slot] = Math.max(0, primitiveProgress[slot] - 4);
+                if (primitiveProgress[slot] == 0) {
+                    inputItems.setStackInSlot(slot, ItemStack.EMPTY);
+                    setChanged();
+                    continue;
+                }
+            } else if (sunlight) {
+                primitiveProgress[slot]++;
+            }
+
+            if (primitiveProgress[slot] >= duration) {
+                outputItems.setStackInSlot(slot, recipe.get().itemOutputs().getFirst().stack().copy());
+                inputItems.extractItem(slot, 1, false);
+                primitiveProgress[slot] = 0;
+            }
+            setChanged();
+        }
+    }
+
+    private Optional<RecipeHolder<CERecipe>> rackDryingRecipe(ItemStack stack) {
+        Level level = getLevel();
+        if (level == null || stack.isEmpty()) return Optional.empty();
+        CERecipeInput input = CERecipeInput.of(List.of(stack), List.of());
+        return CERecipeLookup.candidatesByTypes(level.getRecipeManager(),
+                        List.of(CERecipeTypes.RACK_DRYING.id()), input).stream()
+                .filter(holder -> validRackDryingRecipe(holder.value()))
+                .filter(holder -> holder.value().matches(input, level))
+                .findFirst();
+    }
+
+    private static boolean validRackDryingRecipe(CERecipe recipe) {
+        return recipe.itemInputs().size() == 1
+                && recipe.itemInputs().getFirst().count() == 1
+                && recipe.chancedItemInputs().isEmpty()
+                && recipe.notConsumableItems().isEmpty()
+                && recipe.fluidInputs().isEmpty()
+                && recipe.chancedFluidInputs().isEmpty()
+                && recipe.notConsumableFluids().isEmpty()
+                && recipe.itemOutputs().size() == 1
+                && recipe.itemOutputs().getFirst().guaranteed()
+                && recipe.itemOutputs().getFirst().stack().getCount() == 1
+                && recipe.fluidOutputs().isEmpty()
+                && recipe.chancedFluidOutputs().isEmpty();
+    }
+
+    /** Keeps the Basin's one active manual operation bound to the recipe type that started it. */
+    private void tickBasinManualToolRecipe() {
+        if (manualRecipeId == null || getLevel() == null) return;
+        Optional<RecipeHolder<CERecipe>> holder = CERecipeLookup.byId(getLevel().getRecipeManager(), manualRecipeId);
+        if (holder.isEmpty()) {
+            manualRecipeId = null;
+            manualToolWorker = null;
+            manualToolTicks = 0;
+            manualToolUses = 0;
+            return;
+        }
+
+        ResourceLocation typeId = holder.get().value().recipeType();
+        if (typeId.equals(CERecipeTypes.BASIN_MORTARING.id())) {
+            tickManualToolRecipe(CERecipeTypes.BASIN_MORTARING, "Basin Mortaring");
+        } else if (typeId.equals(CERecipeTypes.BASIN_MIXING.id())) {
+            tickManualToolRecipe(CERecipeTypes.BASIN_MIXING, "Basin Mixing");
+        } else {
+            manualRecipeId = null;
+            manualToolWorker = null;
+            manualToolTicks = 0;
+            manualToolUses = 0;
+        }
+    }
+
+    /** Shared timed-tool runtime for every direct primitive recipe type. */
+    private void tickManualToolRecipe(RecipeTypeDefinition type, String title) {
+        if (manualToolWorker == null || manualRecipeId == null || !(getLevel() instanceof ServerLevel serverLevel)) return;
+        SingleBlockMachineInstance machine = instance();
+        if (machine == null) {
+            manualToolWorker = null;
+            return;
+        }
+        ServerPlayer player = serverLevel.getServer().getPlayerList().getPlayer(manualToolWorker);
+        Optional<RecipeHolder<CERecipe>> recipeHolder = CERecipeLookup.byId(serverLevel.getRecipeManager(), manualRecipeId)
+                .filter(holder -> holder.value().recipeType().equals(type.id()))
+                .filter(holder -> holder.value().matches(recipeInput(machine), serverLevel));
+        CEToolRequirement requirement = recipeHolder
+                .flatMap(holder -> holder.value().tools().stream().findFirst())
+                .orElse(null);
+        ToolVariantDefinition tool = player == null || requirement == null
+                ? null
+                : AssemblyTools.find(requirement.toolId(), player.getMainHandItem());
+        if (player == null || tool == null
+                || !manualToolMeetsTier(recipeHolder.map(RecipeHolder::value).orElse(null), tool)
+                || !AssemblyUseState.isHeld(player)
+                || player.distanceToSqr(worldPosition.getX() + .5, worldPosition.getY() + .5, worldPosition.getZ() + .5) > 36) {
+            interruptManualTool(player);
+            return;
+        }
+
+        int toolDuration = Math.max(1, tool.useTimeTicks());
+        manualToolTicks = Math.min(toolDuration, manualToolTicks + 1);
+        sendManualToolProgress(player, title, requirement, manualToolTicks, toolDuration);
+        if (manualToolTicks < toolDuration) return;
+
+        if (!player.isCreative() && player.getMainHandItem().isDamageableItem()) {
+            player.getMainHandItem().hurtAndBreak(1, player, EquipmentSlot.MAINHAND);
+        }
+        manualToolUses++;
+        if (manualToolUses >= requirement.amount()) {
+            if (completeManualRecipe(recipeHolder.orElseThrow())) {
+                manualToolUses = 0;
+                manualRecipeId = null;
+                PacketDistributor.sendToPlayer(player, AssemblyNextStepPayload.clear());
+            }
+        } else {
+            PacketDistributor.sendToPlayer(player, AssemblyNextStepPayload.show(
+                    title,
+                    serverLevel.dimension().location().toString(),
+                    worldPosition,
+                    manualToolStep(requirement)
+            ));
+        }
+        manualToolWorker = null;
+        manualToolTicks = 0;
+        setChangedAndSync();
+    }
+
+    private boolean completeManualRecipe(RecipeHolder<CERecipe> holder) {
+        SingleBlockMachineInstance instance = instance();
+        Level level = getLevel();
+        if (instance == null || level == null) return false;
+        CERecipe recipe = holder.value();
+        CERecipeInput input = recipeInput(instance);
+        if (!recipe.matches(input, level)) return false;
+        List<ItemStack> itemResults = rollItemOutputs(recipe, input.processingTier());
+        List<FluidStack> fluidResults = rollFluidOutputs(recipe, input.processingTier());
+        if (!canFitItems(itemResults) || !canFitFluids(fluidResults)) return false;
+        consumeInputs(recipe, input);
+        itemResults.forEach(this::produceItemOutput);
+        fluidResults.forEach(this::produceFluidOutput);
+        preferredRecipeId = holder.id();
+        return true;
+    }
+
+    private void interruptManualTool(ServerPlayer player) {
+        if (player != null) PacketDistributor.sendToPlayer(player, AssemblyNextStepPayload.clear());
+        manualToolWorker = null;
+        manualToolTicks = 0;
+        manualRecipeId = null;
+    }
+
+    /** Resolves the molding recipe from the material form; required counts remain recipe data. */
+    private Optional<RecipeHolder<CERecipe>> moldRecipeFor(ItemStack clay) {
+        Level level = getLevel();
+        if (level == null || clay.isEmpty()) return Optional.empty();
+        return CERecipeLookup.byType(level.getRecipeManager(), CERecipeTypes.BRICK_MOLDING).stream()
+                .filter(holder -> !holder.value().itemInputs().isEmpty())
+                .filter(holder -> holder.value().itemInputs().getFirst().ingredient().test(clay))
+                .findFirst();
+    }
+
+    private void sendManualToolProgress(
+            ServerPlayer player,
+            String title,
+            CEToolRequirement requirement,
+            int progress,
+            int duration
+    ) {
+        ServerLevel level = player.serverLevel();
+        PacketDistributor.sendToPlayer(player, AssemblyNextStepPayload.showToolProgress(
+                title,
+                level.dimension().location().toString(),
+                worldPosition,
+                manualToolStep(requirement),
+                progress,
+                duration
+        ));
+    }
+
+    private String manualToolStep(CEToolRequirement requirement) {
+        int currentUse = Math.min(requirement.amount(), manualToolUses + 1);
+        return requirement.displayName() + " " + currentUse + "/" + requirement.amount();
+    }
+
+    private static final double KILN_FUEL_UNITS_PER_TICK = 0.1D;
+
+    private void tickKiln() {
+        migrateLegacyKilnOutputs();
+        ItemStack fuel = inputItems.getStackInSlot(6);
+
+        // Fuel Units are buffered directly. Small fractional fuels therefore retain their value
+        // across multiple items instead of being rounded independently to whole burn ticks.
+        while (kilnFuelUnits + 1.0E-9D < KILN_FUEL_UNITS_PER_TICK && !fuel.isEmpty()) {
+            double units = kilnFuelUnits(fuel);
+            if (units <= 0.0D) break;
+            fuel.shrink(1);
+            kilnFuelUnits += units;
+        }
+        if (kilnFuelUnits + 1.0E-9D < KILN_FUEL_UNITS_PER_TICK) return;
+        kilnFuelUnits = Math.max(0.0D, kilnFuelUnits - KILN_FUEL_UNITS_PER_TICK);
+
+        for (int slot = 0; slot < 6; slot++) {
+            ItemStack chamber = inputItems.getStackInSlot(slot);
+            Optional<RecipeHolder<CERecipe>> holder = kilnProcessRecipe(chamber);
+            if (holder.isEmpty()) {
+                primitiveProgress[slot] = 0;
+                continue;
+            }
+
+            CERecipe recipe = holder.get().value();
+            int duration = recipe.duration().orElse(1);
+            if (++primitiveProgress[slot] < duration) continue;
+
+            CEChancedItemOutput output = recipe.itemOutputs().getFirst();
+            inputItems.setStackInSlot(slot, output.stack().copy());
+            primitiveProgress[slot] = 0;
+        }
+    }
+
+    private static ItemStack materialForm(ItemStack source, MaterialPart part) {
+        MaterialItem item = (MaterialItem) source.getItem();
+        return new ItemStack(ItemRegistry.MATERIAL_ITEMS.get(item.material().id()).get(part).get());
+    }
+
+    private double kilnFuelUnits(ItemStack stack) {
+        return FuelRecipeLookup.itemFuelUnits(getLevel(), stack);
+    }
+
+    public boolean isKiln() {
+        SingleBlockMachineInstance current = instance();
+        return current != null && current.definition().id().endsWith("_kiln");
+    }
+
+    private boolean isKilnProcessInput(ItemStack stack) {
+        return kilnProcessRecipe(stack).isPresent();
+    }
+
+    private boolean isKilnExtractableOutput(ItemStack stack) {
+        Level level = getLevel();
+        if (level == null || stack.isEmpty()) return false;
+        return KILN_PROCESS_TYPES.stream()
+                .flatMap(type -> CERecipeLookup.byType(level.getRecipeManager(), type).stream())
+                .map(RecipeHolder::value)
+                .filter(SingleBlockMachineBlockEntity::validKilnProcessRecipe)
+                .flatMap(recipe -> recipe.itemOutputs().stream())
+                .anyMatch(output -> ItemStack.isSameItemSameComponents(output.stack(), stack));
+    }
+
+    private Optional<RecipeHolder<CERecipe>> kilnProcessRecipe(ItemStack stack) {
+        Level level = getLevel();
+        if (level == null || stack.isEmpty()) return Optional.empty();
+        CERecipeInput input = new CERecipeInput(
+                List.of(stack),
+                List.of(),
+                Optional.empty(),
+                java.util.Set.of(),
+                Optional.of(MachineTier.LV),
+                Optional.empty(),
+                Optional.empty(),
+                MachineDrive.NONE,
+                0,
+                KILN_MAX_TEMPERATURE
+        );
+        return KILN_PROCESS_TYPES.stream()
+                .flatMap(type -> CERecipeLookup.byType(level.getRecipeManager(), type).stream())
+                .filter(holder -> validKilnProcessRecipe(holder.value()))
+                .filter(holder -> holder.value().matches(input, level))
+                .findFirst();
+    }
+
+    private static boolean validKilnProcessRecipe(CERecipe recipe) {
+        if (recipe.requiredTemp().orElse(0) > KILN_MAX_TEMPERATURE) return false;
+        return recipe.itemInputs().size() == 1
+                && recipe.itemInputs().getFirst().count() == 1
+                && recipe.chancedItemInputs().isEmpty()
+                && recipe.notConsumableItems().isEmpty()
+                && recipe.fluidInputs().isEmpty()
+                && recipe.chancedFluidInputs().isEmpty()
+                && recipe.notConsumableFluids().isEmpty()
+                && recipe.itemOutputs().size() == 1
+                && recipe.itemOutputs().getFirst().guaranteed()
+                && recipe.itemOutputs().getFirst().stack().getCount() == 1
+                && recipe.fluidOutputs().isEmpty()
+                && recipe.chancedFluidOutputs().isEmpty();
+    }
+
+    private boolean isKilnFuel(ItemStack stack) {
+        return kilnFuelUnits(stack) > 0.0D;
+    }
+
+    /** Moves pre-shared-slot kiln outputs into chambers as space becomes available. */
+    private void migrateLegacyKilnOutputs() {
+        for (int legacySlot = 0; legacySlot < 6; legacySlot++) {
+            ItemStack legacyOutput = outputItems.getStackInSlot(legacySlot);
+            if (legacyOutput.isEmpty()) continue;
+
+            int target = inputItems.getStackInSlot(legacySlot).isEmpty()
+                    ? legacySlot
+                    : firstEmptyKilnChamber();
+            if (target < 0) return;
+
+            inputItems.setStackInSlot(target, legacyOutput.copy());
+            outputItems.setStackInSlot(legacySlot, ItemStack.EMPTY);
+        }
+    }
+
+    private int firstEmptyKilnChamber() {
+        for (int slot = 0; slot < 6; slot++) {
+            if (inputItems.getStackInSlot(slot).isEmpty()) return slot;
+        }
+        return -1;
+    }
+
+    public boolean primitiveInsert(Player player, InteractionHand hand, ItemStack held) {
+        SingleBlockMachineInstance instance = instance();
+        if (instance == null || held.isEmpty()) return false;
+        String id = instance.definition().id();
+        if (id.endsWith("_drying_rack") && rackDryingRecipe(held).isPresent()) {
+            for (int slot = 0; slot < 4; slot++) if (inputItems.getStackInSlot(slot).isEmpty()) {
+                inputItems.setStackInSlot(slot, held.copyWithCount(1));
+                if (!player.isCreative()) held.shrink(1);
+                return true;
+            }
+        }
+        // Generated molding recipes resolve material definitions, including vanilla .existing forms.
+        if (id.endsWith("_brick_mold") && moldRecipeFor(held).isPresent()) {
+            ItemStack stored = inputItems.getStackInSlot(0);
+            Optional<RecipeHolder<CERecipe>> moldingRecipe = moldRecipeFor(stored.isEmpty() ? held : stored);
+            int requiredClay = moldingRecipe
+                    .filter(recipe -> !recipe.value().itemInputs().isEmpty())
+                    .map(recipe -> recipe.value().itemInputs().getFirst().count())
+                    .orElse(0);
+            if ((stored.isEmpty() || ItemStack.isSameItemSameComponents(stored, held))
+                    && requiredClay > 0 && stored.getCount() < requiredClay) {
+                if (stored.isEmpty()) {
+                    inputItems.setStackInSlot(0, held.copyWithCount(1));
+                    manualToolUses = 0;
+                } else {
+                    ItemStack increased = stored.copy();
+                    increased.grow(1);
+                    inputItems.setStackInSlot(0, increased);
+                }
+                if (!player.isCreative()) held.shrink(1);
+                return true;
+            }
+        }
+        if (id.endsWith("_brick_mold")) {
+            return beginManualTool(player, held, CERecipeTypes.BRICK_MOLDING, "Brick Molding");
+        }
+        if (id.endsWith("_basin")) {
+            // A valid tool always means work. Tool interaction never extracts basin contents.
+            if (beginManualTool(player, held, CERecipeTypes.BASIN_MORTARING, "Basin Mortaring")) return true;
+            if (beginManualTool(player, held, CERecipeTypes.BASIN_MIXING, "Basin Mixing")) return true;
+            if (FluidUtil.interactWithFluidHandler(player, hand, new BasinInteractionFluidHandler())) {
+                manualToolUses = 0;
+                setChangedAndSync();
+                return true;
+            }
+            return insertBasinItem(player, held);
+        }
+        return false;
+    }
+
+    private boolean beginManualTool(
+            Player player,
+            ItemStack held,
+            RecipeTypeDefinition type,
+            String title
+    ) {
+        Optional<RecipeHolder<CERecipe>> holder = matchingManualRecipe(type);
+        Optional<CEToolRequirement> requirement = holder
+                .flatMap(recipe -> recipe.value().tools().stream().findFirst())
+                .filter(tool -> tool.matches(held));
+        if (holder.isEmpty() || requirement.isEmpty()) return false;
+        ToolVariantDefinition resolvedTool = AssemblyTools.find(requirement.get().toolId(), held);
+        if (resolvedTool == null || !manualToolMeetsTier(holder.get().value(), resolvedTool)) return false;
+        boolean continuing = player.getUUID().equals(manualToolWorker)
+                && holder.get().id().equals(manualRecipeId);
+        if (!continuing) {
+            if (manualRecipeId != null && !manualRecipeId.equals(holder.get().id())) manualToolUses = 0;
+            manualToolTicks = 0;
+        }
+        manualToolWorker = player.getUUID();
+        manualRecipeId = holder.get().id();
+        if (player instanceof ServerPlayer serverPlayer) {
+            sendManualToolProgress(
+                    serverPlayer,
+                    title,
+                    requirement.get(),
+                    manualToolTicks,
+                    Math.max(1, resolvedTool.useTimeTicks())
+            );
+        }
+        return true;
+    }
+
+    private boolean manualToolMeetsTier(CERecipe recipe, ToolVariantDefinition tool) {
+        if (recipe == null || tool == null) return false;
+        return recipe.requiredTier()
+                .map(required -> MachineTierStats.isAtLeast(tool.tier(), required))
+                .orElse(true);
+    }
+
+    private Optional<RecipeHolder<CERecipe>> matchingManualRecipe(RecipeTypeDefinition type) {
+        SingleBlockMachineInstance instance = instance();
+        Level level = getLevel();
+        if (instance == null || level == null) return Optional.empty();
+        CERecipeInput input = recipeInput(instance);
+        return CERecipeLookup.byType(level.getRecipeManager(), type).stream()
+                .filter(holder -> !holder.value().tools().isEmpty())
+                .filter(holder -> holder.value().matches(input, level))
+                .filter(holder -> canFitItems(possibleItemOutputs(holder.value())))
+                .filter(holder -> canFitFluids(possibleFluidOutputs(holder.value())))
+                .findFirst();
+    }
+
+    private boolean insertBasinItem(Player player, ItemStack held) {
+        ItemStack oneItem = held.copyWithCount(1);
+        ItemStack remainder = insertBasinStack(oneItem);
+        if (remainder.getCount() == oneItem.getCount()) return false;
+        if (!player.isCreative()) held.shrink(1);
+        manualToolUses = 0;
+        setChangedAndSync();
+        return true;
+    }
+
+    /** Pulls every dropped item whose center is physically inside the Basin opening. */
+    private void tickBasinDroppedItems() {
+        Level level = getLevel();
+        if (level == null || level.isClientSide()) return;
+        double minX = worldPosition.getX() + 3.0D / 16.0D;
+        double minY = worldPosition.getY() + 2.0D / 16.0D;
+        double minZ = worldPosition.getZ() + 3.0D / 16.0D;
+        AABB opening = new AABB(
+                minX, minY, minZ,
+                worldPosition.getX() + 13.0D / 16.0D,
+                worldPosition.getY() + 12.0D / 16.0D,
+                worldPosition.getZ() + 13.0D / 16.0D
+        );
+        boolean changed = false;
+        for (ItemEntity entity : level.getEntitiesOfClass(
+                ItemEntity.class,
+                opening,
+                candidate -> candidate.isAlive() && !candidate.getItem().isEmpty()
+        )) {
+            ItemStack original = entity.getItem();
+            ItemStack remainder = insertBasinStack(original);
+            if (remainder.getCount() == original.getCount()) continue;
+            if (remainder.isEmpty()) {
+                entity.discard();
+            } else {
+                entity.setItem(remainder);
+            }
+            changed = true;
+        }
+        if (changed) {
+            manualToolUses = 0;
+            setChangedAndSync();
+        }
+    }
+
+    /** Shared unfiltered Basin insertion used by players and dropped ItemEntities. */
+    private ItemStack insertBasinStack(ItemStack offered) {
+        ItemStack remainder = offered.copy();
+        for (int slot = 0; slot < itemInputSlotCount() && !remainder.isEmpty(); slot++) {
+            remainder = inputItems.insertItem(slot, remainder, false);
+        }
+        return remainder;
+    }
+
+    public boolean primitiveExtract(Player player) {
+        SingleBlockMachineInstance instance = instance();
+        if (instance == null || instance.definition().id().endsWith("_kiln")) return false;
+        String id = instance.definition().id();
+        int slots = id.endsWith("_drying_rack") ? 4 : itemOutputSlotCount();
+        for (int slot = 0; slot < slots; slot++) {
+            ItemStack result = outputItems.extractItem(slot, 1, false);
+            if (!result.isEmpty()) {
+                if ((id.endsWith("_brick_mold") || id.endsWith("_basin")) && player instanceof ServerPlayer serverPlayer) {
+                    PacketDistributor.sendToPlayer(serverPlayer, AssemblyNextStepPayload.clear());
+                }
+                if (!player.getInventory().add(result)) player.drop(result, false);
+                return true;
+            }
+        }
+        if (id.endsWith("_drying_rack")) {
+            for (int slot = 0; slot < 4; slot++) {
+                ItemStack returned = inputItems.extractItem(slot, 1, false);
+                if (returned.isEmpty()) continue;
+                primitiveProgress[slot] = 0;
+                if (!player.getInventory().add(returned)) player.drop(returned, false);
+                setChangedAndSync();
+                return true;
+            }
+        }
+        if (id.endsWith("_basin")) {
+            for (int slot = itemInputSlotCount() - 1; slot >= 0; slot--) {
+                ItemStack returned = inputItems.extractItem(slot, 1, false);
+                if (returned.isEmpty()) continue;
+                if (!player.getInventory().add(returned)) player.drop(returned, false);
+                manualToolUses = 0;
+                interruptManualTool(player instanceof ServerPlayer serverPlayer ? serverPlayer : null);
+                setChangedAndSync();
+                return true;
+            }
+        }
+        return false;
     }
 
     private void explodeFromOvervoltage() {
@@ -318,7 +938,8 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
         }
 
         if (side == Direction.UP
-                && instance.definition().power() == SingleBlockMachinePower.STEAM) {
+                && instance.definition().power() == SingleBlockMachinePower.STEAM
+                && instance.definition().resourceMode() == SingleBlockMachineResourceMode.CONSUMES) {
             return null;
         }
 
@@ -467,24 +1088,12 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
         return execution == null ? "" : execution.recipeType().toString();
     }
 
-    private int tickOverlayFrame(SingleBlockMachineInstance instance) {
-        int frames = instance == null ? 0 : instance.definition().activeOverlays().size();
-        if (frames <= 1) {
-            overlayFrame = 0;
-            overlayFrameTicks = 0;
-            return 0;
-        }
-
-        overlayFrameTicks++;
-        if (overlayFrameTicks >= 5) {
-            overlayFrameTicks = 0;
-            overlayFrame = (overlayFrame + 1) % Math.min(frames, 10);
-        }
-
-        return overlayFrame;
-    }
-
     private Optional<RecipeHolder<CERecipe>> findRecipe(Level level, SingleBlockMachineInstance instance) {
+        return findRecipe(level, instance, false); // Control previews must not consume a pending search.
+    }
+    private Optional<RecipeHolder<CERecipe>> findRecipe(Level level, SingleBlockMachineInstance instance, boolean asynchronous) {
+        long performanceStart = net.mads.industron.debug.CEPerformanceProfiler.begin(level);
+        try {
         CERecipeInput input = recipeInput(instance);
         InteractionContext context = interactionContext(level, instance);
 
@@ -494,6 +1103,9 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
                             preferredRecipeId,
                             java.util.Set.copyOf(instance.definition().recipeTypes())
                     )
+                    .filter(holder -> holder.value().tools().isEmpty())
+                    .filter(holder -> validGeneratorFuel(instance, holder.value()))
+                    .filter(this::runtimeMixtureReady)
                     .filter(holder -> instance.definition().usesKineticInput()
                         ? holder.value().matchesIgnoringRpm(input, level)
                         : holder.value().matches(input, level))
@@ -503,12 +1115,18 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
                     .filter(holder -> startInteractionsReady(instance, holder.value(), context));
 
             if (preferred.isPresent()) {
+                if (asynchronous) asyncSearch.discardFinished();
                 return preferred;
             }
         }
 
-        return CERecipeLookup.candidatesByTypes(level.getRecipeManager(), instance.definition().recipeTypes(), input)
+        return (asynchronous && !level.isClientSide()
+                ? asyncSearch.candidates(level.getRecipeManager(), CERecipeLookup.candidatesByTypes(level.getRecipeManager(), instance.definition().recipeTypes(), input), input, machineControlInputRevision)
+                : CERecipeLookup.candidatesByTypes(level.getRecipeManager(), instance.definition().recipeTypes(), input))
                 .stream()
+                .filter(holder -> holder.value().tools().isEmpty())
+                .filter(holder -> validGeneratorFuel(instance, holder.value()))
+                .filter(this::runtimeMixtureReady)
                 .filter(holder -> instance.definition().usesKineticInput()
                         ? holder.value().matchesIgnoringRpm(input, level)
                         : holder.value().matches(input, level))
@@ -518,6 +1136,84 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
                 .filter(holder -> startInteractionsReady(instance, holder.value(), context))
                 .sorted(java.util.Comparator.comparing(holder -> holder.id().toString()))
                 .findFirst();
+            } finally {
+            net.mads.industron.debug.CEPerformanceProfiler.record(net.mads.industron.debug.CEPerformanceProfiler.Metric.RECIPE_LOOKUP, performanceStart);
+        }
+    }
+
+    private static boolean isSteamFuelGenerator(SingleBlockMachineInstance instance) {
+        return instance.definition().matchesRecipeType(CERecipeTypes.FUEL.id())
+                && instance.definition().resource() == SingleBlockMachineResource.STEAM
+                && instance.definition().resourceMode() == SingleBlockMachineResourceMode.PRODUCES;
+    }
+
+    private static boolean validGeneratorFuel(SingleBlockMachineInstance instance, CERecipe recipe) {
+        if (!isSteamFuelGenerator(instance)) return true;
+        double units = recipe.fuelUnits().orElse(0.0D);
+        if (!Double.isFinite(units) || units <= 0.0D
+                || !recipe.chancedItemInputs().isEmpty() || !recipe.chancedFluidInputs().isEmpty()) {
+            return false;
+        }
+        if (instance.definition().slots().itemInputs() > 0) {
+            return recipe.itemInputs().size() == 1
+                    && recipe.itemInputs().getFirst().count() == 1
+                    && recipe.fluidInputs().isEmpty();
+        }
+        // Liquid fuel recipes use one 144 mB material unit; gas fuels use a different unit.
+        return recipe.itemInputs().isEmpty() && recipe.fluidInputs().size() == 1
+                && recipe.fluidInputs().getFirst().amount() ==
+                net.mads.industron.material.MaterialUnits.LIQUID_MILLIBUCKETS_PER_UNIT;
+    }
+
+    private void wakeRuntimeMixtureSearchIfReady(Level level, SingleBlockMachineInstance instance) {
+        if (recipeLogic.isProcessing()
+                || !instance.definition().recipeTypes().contains(CERecipeTypes.CENTRIFUGING.id())) {
+            return;
+        }
+
+        for (int i = 0; i < inputFluidSlotCount(); i++) {
+            FluidStack fluid = inputFluids[i].getFluid();
+            if (!FoundryMetallurgy.unidentified(fluid) || fluid.isEmpty()) continue;
+
+            MoltenRatio ratio = fluid.get(FoundryComponents.COMPOSITION.get());
+            if (ratio == null || ratio.weights().size() < 2) continue;
+
+            int preferred = MixtureCentrifuging.preferredBatchAmount(ratio);
+            if (fluid.getAmount() >= preferred
+                    || level.getGameTime() > unidentifiedMixtureLastChangeTick[i]) {
+                recipeLogic.requestImmediateSearch();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Small-batch waiting is exclusive to dynamically generated unidentified-mixture recipes.
+     * Registered centrifuge recipes and every other recipe type keep their normal start behavior.
+     */
+    private boolean runtimeMixtureReady(RecipeHolder<CERecipe> holder) {
+        Optional<MixtureCentrifuging.RuntimeKey> runtime = MixtureCentrifuging.runtimeKey(holder.id());
+        if (runtime.isEmpty()) return true;
+
+        Level currentLevel = getLevel();
+        if (currentLevel == null) return false;
+
+        MixtureCentrifuging.RuntimeKey key = runtime.get();
+        for (int i = 0; i < inputFluidSlotCount(); i++) {
+            FluidStack fluid = inputFluids[i].getFluid();
+            if (!FoundryMetallurgy.unidentified(fluid) || fluid.getAmount() < key.amount()) continue;
+
+            MoltenRatio ratio = fluid.get(FoundryComponents.COMPOSITION.get());
+            if (ratio == null || !ratio.equals(key.ratio())) continue;
+            if (FoundryMetallurgy.temperature(fluid) != key.temperature()) continue;
+
+            int preferred = MixtureCentrifuging.preferredBatchAmount(ratio);
+            if (fluid.getAmount() >= preferred) return true;
+
+            // Below the preferred ~1-second batch: only start after the mixture stopped changing.
+            if (currentLevel.getGameTime() > unidentifiedMixtureLastChangeTick[i]) return true;
+        }
+        return false;
     }
 
     private boolean treeSourceMatches(
@@ -586,6 +1282,9 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
                 ? Optional.empty()
                 : Optional.of(instance.tier().recipeTier());
         int rpm = drive.usesKineticInput() ? kineticRpm() : 0;
+        int availableHeat = instance.definition().matchesRecipeType(CERecipeTypes.HEATING.id())
+                ? 500 * (MachineTierStats.tierIndex(instance.tier().recipeTier()) + 1)
+                : 0;
 
         return new CERecipeInput(
                 visibleItemInputs(),
@@ -597,7 +1296,7 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
                 drive == MachineDrive.ELECTRIC ? processingTier : Optional.empty(),
                 drive,
                 rpm,
-                0
+                availableHeat
         );
     }
 
@@ -802,6 +1501,16 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
             CERecipe recipe,
             CERecipeInput input
     ) {
+        // A FUEL recipe contains an amount of heat, not a processing duration.
+        // Preserve that amount across tier/drive/rate changes: one Fuel Unit supplies
+        // nominally 1600 mB steam, before startup/idle losses and tick rounding.
+        // A faster burner uses fuel faster.
+        // In particular, the Steam tier's slower processing must not multiply free boiler heat.
+        if (isSteamFuelGenerator(instance)) {
+            double ticks = recipe.fuelUnits().orElse(0.0D) * 1600.0D / Math.max(1, instance.steamUsage());
+            return (int) Math.max(1.0D, Math.min(Integer.MAX_VALUE, Math.ceil(ticks)));
+        }
+
         MachineTier runtimeTier = input.processingTier()
                 .orElse(instance.tier().recipeTier());
         int durationRpm = input.rpm();
@@ -827,9 +1536,7 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
             duration = Math.max(1, (duration + factor - 1) / factor);
         }
 
-        if (instance.tier().isSteam()) {
-            duration *= instance.tier().steamDurationMultiplier();
-        }
+        duration = instance.definition().processingProfile(instance.tier()).duration(duration);
 
         return Math.max(1, duration);
     }
@@ -856,9 +1563,7 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
             return Optional.empty();
         }
 
-        return level.getRecipeManager()
-                .byKey(recipeId)
-                .map(holder -> holder.value() instanceof CERecipe recipe ? recipe : null);
+        return CERecipeLookup.byId(level.getRecipeManager(), recipeId).map(RecipeHolder::value);
     }
 
     private boolean canProcessResource(SingleBlockMachineInstance instance, int amount) {
@@ -917,6 +1622,13 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
 
     private List<ItemStack> rollItemOutputs(CERecipe recipe, Optional<MachineTier> runtimeTier) { return rollItemOutputs(recipe, 1, runtimeTier); }
     private List<FluidStack> rollFluidOutputs(CERecipe recipe, Optional<MachineTier> runtimeTier) { return rollFluidOutputs(recipe, 1, runtimeTier); }
+
+    private static List<ItemStack> possibleItemOutputs(CERecipe recipe) {
+        return recipe.itemOutputs().stream()
+                .map(CEChancedItemOutput::stack)
+                .map(ItemStack::copy)
+                .toList();
+    }
 
     private static List<FluidStack> possibleFluidOutputs(CERecipe recipe) {
         List<FluidStack> outputs = recipe.fluidOutputs().stream().map(FluidStack::copy).collect(Collectors.toCollection(ArrayList::new));
@@ -1262,7 +1974,8 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
         }
 
         if (temperature != previous) {
-            setChangedAndSync();
+            setChanged();
+            cosmeticSyncPending = true;
         }
     }
 
@@ -1297,6 +2010,10 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
             return false;
         }
 
+        if (instance.definition().steamConversionRecipe() != null) {
+            return runSteamConversionRecipe(instance, steamToProduce);
+        }
+
         long operationTick = temperatureOperationTicks;
         List<SingleBlockDefinition.StackRequirement> itemInputs = due(settings.inputItems(), operationTick);
         List<SingleBlockDefinition.StackRequirement> fluidInputs = due(settings.inputFluids(), operationTick);
@@ -1315,6 +2032,43 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
         consumeFixedFluids(fluidInputs);
         produceFixedItems(itemOutputs);
         produceFixedFluids(fluidOutputs);
+        produceSteam(steamToProduce);
+        temperatureOperationTicks++;
+        setChangedAndSync();
+        return true;
+    }
+
+    /** Fuel/solar heating and water conversion are independent; only successful conversion drains water. */
+    private boolean runSteamConversionRecipe(SingleBlockMachineInstance instance, int steamToProduce) {
+        if (steamToProduce <= 0 || level == null) return false;
+        CERecipe recipe = recipeById(instance.definition().steamConversionRecipe()).orElse(null);
+        if (recipe == null || !recipe.recipeType().equals(CERecipeTypes.EVAPORATION.id())
+                || recipe.fluidInputs().size() != 1 || recipe.fluidOutputs().size() != 1
+                || !recipe.itemInputs().isEmpty() || !recipe.itemOutputs().isEmpty()
+                || !recipe.chancedFluidInputs().isEmpty() || !recipe.chancedFluidOutputs().isEmpty()
+                || recipe.requiredTier().filter(t -> !MachineTierStats.isAtLeast(instance.tier().recipeTier(), t)).isPresent()
+                || temperature < recipe.requiredTemp().orElse(0)) return false;
+        FluidRegistry.RegisteredFluid steam = FluidRegistry.CHEMICAL_FLUIDS.get(IndustrialFluids.STEAM.registryName());
+        FluidStack output = recipe.fluidOutputs().getFirst();
+        if (steam == null || output.getFluid() != steam.source().get() || output.getAmount() <= 0
+                || !canFitSteam(steamToProduce)) return false;
+        var input = recipe.fluidInputs().getFirst();
+        long scaled = (long) steamToProduce * input.amount();
+        // Rates must represent whole mB of input; never round water down or create free steam.
+        if (scaled % output.getAmount() != 0 || scaled / output.getAmount() > Integer.MAX_VALUE) return false;
+        int water = (int) (scaled / output.getAmount());
+        if (water <= 0) return false;
+        int available = java.util.Arrays.stream(inputFluids).limit(inputFluidSlotCount()).filter(t -> input.ingredient().test(t.getFluid()))
+                .mapToInt(FluidTank::getFluidAmount).sum();
+        InteractionContext context = interactionContext(level, instance);
+        if (available < water
+                || !InteractionRuntime.conditionsMatch(recipe.conditions(), context, InteractionPhase.WHILE_PROCESSING)
+                || !InteractionRuntime.interactionsMatch(recipe.blockInteractions(), context, InteractionPhase.WHILE_PROCESSING)) return false;
+        if (!InteractionRuntime.applyInteractions(recipe.blockInteractions(), context, InteractionPhase.WHILE_PROCESSING)) return false;
+        for (int i = 0; i < inputFluidSlotCount() && water > 0; i++) {
+            FluidTank tank = inputFluids[i];
+            if (input.ingredient().test(tank.getFluid())) water -= tank.drain(water, FluidAction.EXECUTE).getAmount();
+        }
         produceSteam(steamToProduce);
         temperatureOperationTicks++;
         setChangedAndSync();
@@ -1506,12 +2260,10 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
             BlockState state = getBlockState();
             if (level != null
                     && state.hasProperty(SingleBlockMachineBlock.ACTIVE)
-                    && (state.getValue(SingleBlockMachineBlock.ACTIVE)
-                    || state.getValue(SingleBlockMachineBlock.OVERLAY_FRAME) != 0)) {
+                    && state.getValue(SingleBlockMachineBlock.ACTIVE)) {
                 level.setBlock(
                         getBlockPos(),
-                        state.setValue(SingleBlockMachineBlock.ACTIVE, false)
-                                .setValue(SingleBlockMachineBlock.OVERLAY_FRAME, 0),
+                        state.setValue(SingleBlockMachineBlock.ACTIVE, false),
                         Block.UPDATE_ALL
                 );
             }
@@ -1760,6 +2512,7 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
     }
 
     private final class RecipeHost implements CERecipeLogicHost {
+        @Override public boolean recipeSearchPending() { return asyncSearch.pending(); }
         @Override
         public boolean recipeMachineReady() {
             return instance() != null;
@@ -1774,7 +2527,7 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
                 return Optional.empty();
             }
 
-            Optional<RecipeHolder<CERecipe>> holder = findRecipe(level, instance);
+            Optional<RecipeHolder<CERecipe>> holder = findRecipe(level, instance, true);
             if (holder.isEmpty()) {
                 return Optional.empty();
             }
@@ -2055,7 +2808,7 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
             setChanged();
 
             if (activeChanged || recipeSyncCooldown <= 0) {
-                recipeSyncCooldown = 5;
+                recipeSyncCooldown = 10;
                 syncToClient();
             } else {
                 recipeSyncCooldown--;
@@ -2084,6 +2837,33 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
 
     private ItemStackHandler createInventory(int slots, boolean machineControlInput) {
         return new ItemStackHandler(slots) {
+            @Override
+            public int getSlotLimit(int slot) {
+                SingleBlockMachineInstance current = instance();
+                if (current == null) return super.getSlotLimit(slot);
+                String id = current.definition().id();
+                if (id.endsWith("_drying_rack") && slot < 4) return 1;
+                // The molding input count is declared by its recipe; right-click insertion enforces it.
+                if (id.endsWith("_brick_mold") && slot == 0 && !machineControlInput) return 1;
+                if (id.endsWith("_kiln") && slot < 6) return 1;
+                return super.getSlotLimit(slot);
+            }
+
+            @Override
+            public boolean isItemValid(int slot, ItemStack stack) {
+                SingleBlockMachineInstance current = instance();
+                if (current != null && current.definition().id().endsWith("_drying_rack") && machineControlInput
+                        && net.mads.industron.material.recipes.CastingRecipes.isHot(stack)) {
+                    return net.mads.industron.material.recipes.CastingRecipes.canRackCool(stack);
+                }
+                if (current != null && current.definition().id().endsWith("_kiln") && machineControlInput) {
+                    if (slot >= 0 && slot < 6) return isKilnProcessInput(stack);
+                    if (slot == 6) return isKilnFuel(stack);
+                    return false;
+                }
+                return super.isItemValid(slot, stack);
+            }
+
             @Override
             protected void onContentsChanged(int slot) {
                 if (machineControlInput) {
@@ -2142,6 +2922,108 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
         };
     }
 
+    /** Player-container view of a Basin: fill inputs, drain outputs first, then recover inputs. */
+    private final class BasinInteractionFluidHandler implements IFluidHandler {
+        @Override
+        public int getTanks() {
+            return inputFluidSlotCount() + outputFluidSlotCount();
+        }
+
+        @Override
+        public FluidStack getFluidInTank(int tank) {
+            FluidTank resolved = basinTank(tank);
+            return resolved == null ? FluidStack.EMPTY : resolved.getFluid();
+        }
+
+        @Override
+        public int getTankCapacity(int tank) {
+            FluidTank resolved = basinTank(tank);
+            return resolved == null ? 0 : resolved.getCapacity();
+        }
+
+        @Override
+        public boolean isFluidValid(int tank, FluidStack stack) {
+            return tank >= 0 && tank < inputFluidSlotCount() && basinAcceptsLiquid(stack);
+        }
+
+        @Override
+        public int fill(FluidStack resource, FluidAction action) {
+            if (!basinAcceptsLiquid(resource)) return 0;
+            for (int index = 0; index < inputFluidSlotCount(); index++) {
+                FluidStack stored = inputFluids[index].getFluid();
+                if (!stored.isEmpty() && FluidStack.isSameFluidSameComponents(stored, resource)) {
+                    int filled = inputFluids[index].fill(resource, action);
+                    if (filled > 0 && action == FluidAction.EXECUTE) manualToolUses = 0;
+                    return filled;
+                }
+            }
+            for (int index = 0; index < inputFluidSlotCount(); index++) {
+                if (inputFluids[index].isEmpty()) {
+                    int filled = inputFluids[index].fill(resource, action);
+                    if (filled > 0 && action == FluidAction.EXECUTE) manualToolUses = 0;
+                    return filled;
+                }
+            }
+            return 0;
+        }
+
+        @Override
+        public FluidStack drain(FluidStack resource, FluidAction action) {
+            if (resource.isEmpty()) return FluidStack.EMPTY;
+            FluidStack drained = drainMatching(outputFluids, outputFluidSlotCount(), resource, action);
+            if (drained.isEmpty()) {
+                drained = drainMatching(inputFluids, inputFluidSlotCount(), resource, action);
+                if (!drained.isEmpty() && action == FluidAction.EXECUTE) manualToolUses = 0;
+            }
+            return drained;
+        }
+
+        @Override
+        public FluidStack drain(int maxDrain, FluidAction action) {
+            if (maxDrain <= 0) return FluidStack.EMPTY;
+            FluidStack drained = drainFirst(outputFluids, outputFluidSlotCount(), maxDrain, action);
+            if (drained.isEmpty()) {
+                drained = drainFirst(inputFluids, inputFluidSlotCount(), maxDrain, action);
+                if (!drained.isEmpty() && action == FluidAction.EXECUTE) manualToolUses = 0;
+            }
+            return drained;
+        }
+
+        private FluidTank basinTank(int tank) {
+            if (tank < 0) return null;
+            if (tank < inputFluidSlotCount()) return inputFluids[tank];
+            int output = tank - inputFluidSlotCount();
+            return output < outputFluidSlotCount() ? outputFluids[output] : null;
+        }
+
+        private FluidStack drainMatching(
+                FluidTank[] tanks,
+                int count,
+                FluidStack resource,
+                FluidAction action
+        ) {
+            for (int index = 0; index < count; index++) {
+                FluidStack drained = tanks[index].drain(resource, action);
+                if (!drained.isEmpty()) return drained;
+            }
+            return FluidStack.EMPTY;
+        }
+
+        private FluidStack drainFirst(FluidTank[] tanks, int count, int maxDrain, FluidAction action) {
+            for (int index = 0; index < count; index++) {
+                FluidStack drained = tanks[index].drain(maxDrain, action);
+                if (!drained.isEmpty()) return drained;
+            }
+            return FluidStack.EMPTY;
+        }
+    }
+
+    /** Unknown/vanilla fluids are treated as liquids; registered Industron gases are rejected. */
+    private static boolean basinAcceptsLiquid(FluidStack candidate) {
+        if (candidate.isEmpty()) return false;
+        var definition = IndustrialFluidLookup.find(candidate);
+        return definition == null || !definition.isGas();
+    }
 
     public int circuit() {
         return circuit;
@@ -2164,6 +3046,7 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
             return;
         }
         this.circuit = next;
+        asyncSearch.invalidate();
         preferredRecipeId = null;
         setChangedAndSync();
     }
@@ -2182,7 +3065,9 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
     }
 
     private void flushClientSync() {
-        if (!clientSyncPending || level == null || level.isClientSide()) return;
+        if (level == null || level.isClientSide()) return;
+        if (!clientSyncPending && (!cosmeticSyncPending || level.getGameTime() % 10 != 0)) return;
+        cosmeticSyncPending = false;
         clientSyncPending = false;
         BlockState state = getBlockState();
         level.sendBlockUpdated(worldPosition, state, state, 3);
@@ -2311,6 +3196,12 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
         tag.putInt("TemperatureTickCounter", temperatureTickCounter);
         tag.putLong("TemperatureOperationTicks", temperatureOperationTicks);
         tag.putInt("SprinklerTargetIndex", sprinklerTargetIndex);
+        tag.putIntArray("PrimitiveProgress", primitiveProgress);
+        tag.putDouble("KilnFuelUnits", kilnFuelUnits);
+        tag.putInt("ManualToolTicks", manualToolTicks);
+        tag.putInt("ManualToolUses", manualToolUses);
+        if (manualToolWorker != null) tag.putUUID("ManualToolWorker", manualToolWorker);
+        if (manualRecipeId != null) tag.putString("ManualRecipe", manualRecipeId.toString());
 
         if (preferredRecipeId != null) {
             tag.putString("PreferredRecipe", preferredRecipeId.toString());
@@ -2356,6 +3247,21 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
         temperatureOperationTicks = Math.max(0L, tag.getLong("TemperatureOperationTicks"));
         sprinklerTargetIndex = Math.max(0, tag.getInt("SprinklerTargetIndex"));
         sprinklerTargets.clear();
+        int[] savedPrimitiveProgress = tag.getIntArray("PrimitiveProgress");
+        System.arraycopy(savedPrimitiveProgress, 0, primitiveProgress, 0, Math.min(savedPrimitiveProgress.length, primitiveProgress.length));
+        kilnFuelUnits = tag.contains("KilnFuelUnits")
+                ? Math.max(0.0D, tag.getDouble("KilnFuelUnits"))
+                : Math.max(0.0D, tag.getInt("KilnFuelTicks") / 10.0D);
+        manualToolTicks = Math.max(0, tag.contains("ManualToolTicks")
+                ? tag.getInt("ManualToolTicks") : tag.getInt("MoldWorkTicks"));
+        manualToolUses = Math.max(0, tag.contains("ManualToolUses")
+                ? tag.getInt("ManualToolUses") : tag.getInt("MoldToolUses"));
+        manualToolWorker = tag.hasUUID("ManualToolWorker")
+                ? tag.getUUID("ManualToolWorker")
+                : (tag.hasUUID("MoldWorker") ? tag.getUUID("MoldWorker") : null);
+        manualRecipeId = tag.contains("ManualRecipe")
+                ? ResourceLocation.tryParse(tag.getString("ManualRecipe"))
+                : null;
 
         preferredRecipeId = tag.contains("PreferredRecipe")
                 ? ResourceLocation.parse(tag.getString("PreferredRecipe"))
@@ -2364,6 +3270,38 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
         interactionWear.load(tag);
         recipeLogic.load(tag, registries);
         super.read(tag, registries, clientPacket);
+    }
+
+    /** Drops stored item contents and deliberately discards all stored fluids before block removal. */
+    public void dropStoredItemsAndDiscardFluids() {
+        if (level == null || level.isClientSide()) {
+            return;
+        }
+
+        dropAndClear(inputItems);
+        dropAndClear(outputItems);
+        clearStoredFluids();
+        setChanged();
+    }
+
+    private void dropAndClear(ItemStackHandler inventory) {
+        for (int slot = 0; slot < inventory.getSlots(); slot++) {
+            ItemStack stack = inventory.getStackInSlot(slot);
+            if (!stack.isEmpty()) {
+                Block.popResource(level, worldPosition, stack.copy());
+                inventory.setStackInSlot(slot, ItemStack.EMPTY);
+            }
+        }
+    }
+
+    private void clearStoredFluids() {
+        for (FluidTank tank : inputFluids) {
+            tank.setFluid(FluidStack.EMPTY);
+        }
+        for (FluidTank tank : outputFluids) {
+            tank.setFluid(FluidStack.EMPTY);
+        }
+        steamTank.setFluid(FluidStack.EMPTY);
     }
 
     @Override
@@ -2376,13 +3314,7 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
             outputItems.setStackInSlot(i, ItemStack.EMPTY);
         }
 
-        for (FluidTank tank : inputFluids) {
-            tank.setFluid(FluidStack.EMPTY);
-        }
-
-        for (FluidTank tank : outputFluids) {
-            tank.setFluid(FluidStack.EMPTY);
-        }
+        clearStoredFluids();
     }
 
     @Override
@@ -2420,8 +3352,14 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
         @Override
         public ItemStack extractItem(int slot, int amount, boolean simulate) {
             if (side != null && !instance().definition().allowsItemOutput(side)) return ItemStack.EMPTY;
-            int outputStart = MAX_ITEM_INPUT_SLOTS;
+            if (isKiln()) {
+                if (slot < 0 || slot >= 6) return ItemStack.EMPTY;
+                ItemStack stored = inputItems.getStackInSlot(slot);
+                if (!isKilnExtractableOutput(stored)) return ItemStack.EMPTY;
+                return inputItems.extractItem(slot, amount, simulate);
+            }
 
+            int outputStart = MAX_ITEM_INPUT_SLOTS;
             if (slot < outputStart || slot >= outputStart + itemOutputSlotCount()) {
                 return ItemStack.EMPTY;
             }
@@ -2435,6 +3373,10 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
             if (slot < 0 || slot >= itemInputSlotCount()) {
                 return stack;
             }
+            if (isKiln()) {
+                if (slot < 6 && !isKilnProcessInput(stack)) return stack;
+                if (slot == 6 && !isKilnFuel(stack)) return stack;
+            }
 
             return super.insertItem(slot, stack, simulate);
         }
@@ -2444,10 +3386,35 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
         FluidTank[] tanks = new FluidTank[count];
 
         for (int i = 0; i < count; i++) {
+            final int tankIndex = i;
             tanks[i] = new FluidTank(RECIPE_FLUID_TANK_CAPACITY) {
+                @Override
+                public int getCapacity() {
+                    SingleBlockMachineInstance current = instance();
+                    return machineControlInput
+                            && current != null
+                            && current.definition().id().endsWith("_basin")
+                            ? BASIN_FLUID_TANK_CAPACITY
+                            : RECIPE_FLUID_TANK_CAPACITY;
+                }
+
+                @Override
+                public int getTankCapacity(int tank) {
+                    return tank == 0 ? getCapacity() : 0;
+                }
+
+                @Override
+                public int fill(FluidStack resource, FluidAction action) {
+                    int accepted = Math.min(resource.getAmount(), Math.max(0, getCapacity() - getFluidAmount()));
+                    return accepted <= 0 ? 0 : super.fill(resource.copyWithAmount(accepted), action);
+                }
+
                 @Override
                 protected void onContentsChanged() {
                     if (machineControlInput) {
+                        if (level != null && !level.isClientSide() && FoundryMetallurgy.unidentified(getFluid())) {
+                            unidentifiedMixtureLastChangeTick[tankIndex] = level.getGameTime();
+                        }
                         machineControlInputsChanged();
                     } else {
                         machineDataChanged();
@@ -2547,7 +3514,9 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
         @Override
         public boolean isFluidValid(int tank, FluidStack stack) {
             FluidTank fluidTank = tank(tank);
-            return fluidTank != null && fluidTank.isFluidValid(stack);
+            return fluidTank != null
+                    && (!isBasinMachine() || basinAcceptsLiquid(stack))
+                    && fluidTank.isFluidValid(stack);
         }
 
         @Override
@@ -2556,6 +3525,7 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
             if (resource.isEmpty()) {
                 return 0;
             }
+            if (isBasinMachine() && !basinAcceptsLiquid(resource)) return 0;
 
             if (steamTank.isFluidValid(resource)) {
                 return steamTankAcceptsInput()
@@ -2632,6 +3602,10 @@ public class SingleBlockMachineBlockEntity extends GeneratingKineticBlockEntity 
         private boolean steamTankVisible() {
             return instance() != null
                     && instance().definition().resource() == SingleBlockMachineResource.STEAM;
+        }
+
+        private boolean isBasinMachine() {
+            return instance() != null && instance().definition().id().endsWith("_basin");
         }
 
         private boolean steamTankAcceptsInput() {

@@ -1,0 +1,78 @@
+{
+  "parent": "minecraft:block/block",
+  "render_type": "minecraft:cutout",
+  "textures": {
+    "casing": "create:block/andesite_casing",
+    "metal": "industron:block/machines/kinetic/metal",
+    "wood": "minecraft:block/stripped_oak_log",
+    "mesh": "industron:block/machines/kinetic/mesh",
+    "dark": "minecraft:block/gray_concrete",
+    "particle": "create:block/andesite_casing"
+  },
+  "elements": [
+    {
+      "from": [
+        10,
+        4,
+        12
+      ],
+      "to": [
+        11,
+        6,
+        14
+      ],
+      "faces": {
+        "south": {
+          "texture": "#metal"
+        },
+        "north": {
+          "texture": "#metal"
+        },
+        "west": {
+          "texture": "#metal"
+        },
+        "east": {
+          "texture": "#metal"
+        },
+        "up": {
+          "texture": "#metal"
+        },
+        "down": {
+          "texture": "#metal"
+        }
+      }
+    },
+    {
+      "from": [
+        10,
+        6,
+        12
+      ],
+      "to": [
+        11,
+        8,
+        13
+      ],
+      "faces": {
+        "south": {
+          "texture": "#dark"
+        },
+        "north": {
+          "texture": "#dark"
+        },
+        "west": {
+          "texture": "#dark"
+        },
+        "east": {
+          "texture": "#dark"
+        },
+        "up": {
+          "texture": "#dark"
+        },
+        "down": {
+          "texture": "#dark"
+        }
+      }
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 package net.mads.industron.material.structure;
 
+import net.mads.industron.machine.MachineTier;
 import net.mads.industron.material.IndustrialMaterial;
 import net.mads.industron.material.MaterialComponent;
 import net.mads.industron.material.MaterialPart;
@@ -28,6 +29,7 @@ public final class GemMaterial implements StructureMaterial {
     private final List<MaterialComponent> components;
     private final String formula;
     private final int componentTemperature;
+    private final MachineTier tier;
     private final Map<MaterialPart, ResourceLocation> existingParts;
 
     public GemMaterial(IndustrialMaterial source) {
@@ -39,6 +41,7 @@ public final class GemMaterial implements StructureMaterial {
                 source.components(),
                 source.formula(),
                 source.componentTemperature(),
+                source.tier(),
                 baseExistingParts(source)
         );
     }
@@ -51,6 +54,7 @@ public final class GemMaterial implements StructureMaterial {
             List<MaterialComponent> components,
             String formula,
             int componentTemperature,
+            MachineTier tier,
             Map<MaterialPart, ResourceLocation> existingParts
     ) {
         if (id == null || id.isBlank()) {
@@ -66,6 +70,10 @@ public final class GemMaterial implements StructureMaterial {
         this.components = components == null ? List.of() : List.copyOf(components);
         this.formula = formula == null ? "" : formula;
         this.componentTemperature = componentTemperature;
+        if (tier == null || tier == MachineTier.NONE) {
+            throw new IllegalArgumentException("Gem tier must be a real tier: " + id);
+        }
+        this.tier = tier;
         this.existingParts = existingParts == null ? Map.of() : Map.copyOf(existingParts);
     }
 
@@ -77,15 +85,17 @@ public final class GemMaterial implements StructureMaterial {
             String id,
             String displayName,
             int color,
+            MachineTier tier,
             String baseBlock
     ) {
-        return existingBase(id, displayName, color, ResourceLocation.parse(baseBlock));
+        return existingBase(id, displayName, color, tier, ResourceLocation.parse(baseBlock));
     }
 
     public static GemMaterial existingBase(
             String id,
             String displayName,
             int color,
+            MachineTier tier,
             ResourceLocation baseBlock
     ) {
         if (baseBlock == null) {
@@ -99,6 +109,7 @@ public final class GemMaterial implements StructureMaterial {
                 List.of(),
                 "",
                 20,
+                tier,
                 Map.of(MaterialPart.BLOCK, baseBlock)
         );
     }
@@ -144,6 +155,7 @@ public final class GemMaterial implements StructureMaterial {
                 components,
                 formula,
                 componentTemperature,
+                tier,
                 updated
         );
     }
@@ -166,6 +178,11 @@ public final class GemMaterial implements StructureMaterial {
     @Override
     public int color() {
         return color;
+    }
+
+    @Override
+    public MachineTier tier() {
+        return tier;
     }
 
     @Override

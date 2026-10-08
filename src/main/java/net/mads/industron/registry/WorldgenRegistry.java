@@ -2,6 +2,9 @@ package net.mads.industron.registry;
 
 import net.mads.industron.Industron;
 import net.mads.industron.worldgen.GeologyDepositFeature;
+import net.mads.industron.worldgen.GeologyClayReplacementFeature;
+import net.mads.industron.worldgen.PebbleSurfaceFeature;
+import net.mads.industron.worldgen.FallenStickSurfaceFeature;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.levelgen.feature.Feature;
 import net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConfiguration;
@@ -16,6 +19,15 @@ public final class WorldgenRegistry {
 
     public static final DeferredHolder<Feature<?>, GeologyDepositFeature> GEOLOGY_DEPOSIT =
             FEATURES.register("geology_deposit", () -> new GeologyDepositFeature(NoneFeatureConfiguration.CODEC));
+
+    public static final DeferredHolder<Feature<?>, GeologyClayReplacementFeature> GEOLOGY_CLAY_REPLACEMENT =
+            FEATURES.register("geology_clay_replacement", () -> new GeologyClayReplacementFeature(NoneFeatureConfiguration.CODEC));
+
+    public static final DeferredHolder<Feature<?>, PebbleSurfaceFeature> PEBBLE_SURFACE =
+            FEATURES.register("pebble_surface", () -> new PebbleSurfaceFeature(NoneFeatureConfiguration.CODEC));
+
+    public static final DeferredHolder<Feature<?>, FallenStickSurfaceFeature> FALLEN_STICKS =
+            FEATURES.register("fallen_sticks", () -> new FallenStickSurfaceFeature(NoneFeatureConfiguration.CODEC));
 
     private WorldgenRegistry() {
     }

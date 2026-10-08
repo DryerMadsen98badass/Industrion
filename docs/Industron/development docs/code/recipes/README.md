@@ -31,3 +31,9 @@ Den kanoniske guiden for dagens Assembly API, casing-genererte Assembly recipes,
 - `assembly-recipes.md`
 
 Når eldre forslag i `to do/16-assembly-recipe-language.md` avviker fra denne guiden, er `code/recipes/assembly-recipes.md` og faktisk kode fasit.
+
+## Hand Processing
+
+`HAND_PROCESSING` er en tierless CE recipe type for primitive arbeid uten machine eller tool. Den bruker `RecipeDefinition.Option.uses(int)` i stedet for duration/tool-uses. Runtime krever Ctrl + right-click for å starte og teller deretter right-clicks så lenge input fortsatt matcher.
+
+Første planlagte bruk er plant fiber/string. Se `../organic/plants.md` og `../../to do/plants/00-plant-material-foundation.md`.

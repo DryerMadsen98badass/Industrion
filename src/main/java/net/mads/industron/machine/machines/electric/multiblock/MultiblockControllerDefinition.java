@@ -1,22 +1,30 @@
 package net.mads.industron.machine.machines.electric.multiblock;
 
 import net.mads.industron.Industron;
-import net.mads.industron.block.MiningTier;
-import net.mads.industron.block.MiningTool;
+import net.mads.industron.block.BlockStrength;
+import net.mads.industron.recipe.recipes.assembly.Tool;
+import net.mads.industron.recipe.recipetypes.assembly.ToolDefinition;
+import net.mads.industron.machine.MachineTier;
+import net.mads.industron.machine.MachineTierStats;
+import net.mads.industron.machine.interaction.BlockLoot;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.SoundType;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Objects;
 
 public final class MultiblockControllerDefinition {
-    private static final String DEFAULT_CASING_TEXTURE = "block/machines/ino/casing";
+    private static final String DEFAULT_CASING_TEXTURE = "minecraft:block/stone_bricks";
     private static final List<MultiblockControllerDefinition> ALL = new ArrayList<>();
 
     private final String registryName;
@@ -24,11 +32,22 @@ public final class MultiblockControllerDefinition {
     private final Map<Side, String> sideTextures;
     private final Map<Side, Integer> sideTextureColors;
     private final Map<Side, List<String>> sideOverlays;
-    private final MiningTier miningTier;
-    private final EnumSet<MiningTool> miningTools;
+    private final MachineTier breakingTier;
+    @Nullable
+    private final MachineTier tier;
+    @Nullable
+    private final BlockStrength strength;
+    private final Set<ToolDefinition> miningTools;
+    @Nullable
+    private final SoundType sound;
+    private final BlockLoot loot;
+    private final boolean wrenchable;
+    private final boolean openMenu;
 
     @Nullable
     private final String model;
+    @Nullable
+    private final MultiblockModelSource formedModelSource;
 
     private MultiblockControllerDefinition(Builder builder) {
         this.registryName = builder.registryName;
@@ -39,9 +58,16 @@ public final class MultiblockControllerDefinition {
         EnumMap<Side, List<String>> overlays = new EnumMap<>(Side.class);
         builder.sideOverlays.forEach((side, frames) -> overlays.put(side, List.copyOf(frames)));
         this.sideOverlays = Collections.unmodifiableMap(overlays);
-        this.miningTier = builder.miningTier;
-        this.miningTools = builder.miningTools.clone();
+        this.breakingTier = builder.breakingTier.recipeTier();
+        this.tier = builder.tier == null ? null : builder.tier.recipeTier();
+        this.strength = builder.strength;
+        this.miningTools = Set.copyOf(builder.miningTools);
+        this.sound = builder.sound;
+        this.loot = builder.loot;
+        this.wrenchable = builder.wrenchable;
+        this.openMenu = builder.openMenu;
         this.model = builder.model;
+        this.formedModelSource = builder.formedModelSource;
 
         validate();
     }
@@ -114,25 +140,65 @@ public final class MultiblockControllerDefinition {
         return sideOverlays.keySet().stream().mapToInt(side -> activeOverlays(side).size()).max().orElse(0);
     }
 
-    public MiningTier miningTier() {
-        return miningTier;
+
+    public MachineTier breakingTier() {
+        return breakingTier;
     }
 
-    public Set<MiningTool> miningTools() {
+    /** Fixed processing tier supplied by a passive/without-energy controller, when defined. */
+    @Nullable
+    public MachineTier tier() {
+        return tier;
+    }
+
+    public Set<ToolDefinition> miningTools() {
         return Collections.unmodifiableSet(miningTools);
     }
 
     public float hardness() {
-        return miningTier.hardness();
+        if (strength != null) return strength.hardness();
+        return MachineTierStats.blockHardness(breakingTier);
     }
 
     public float resistance() {
-        return miningTier.resistance();
+        if (strength != null) return strength.resistance();
+        return MachineTierStats.blockResistance(breakingTier);
+    }
+
+    public boolean hasExplicitStrength() {
+        return strength != null;
+    }
+
+    @Nullable
+    public SoundType soundOverride() {
+        return sound;
+    }
+
+    @Nullable
+    public BlockLoot loot() {
+        return loot;
+    }
+
+    public boolean hasLootOverride() {
+        return loot != null;
+    }
+
+    public boolean wrenchable() {
+        return wrenchable;
+    }
+
+    public boolean openMenu() {
+        return openMenu;
     }
 
     @Nullable
     public String model() {
         return model;
+    }
+
+    @Nullable
+    public MultiblockModelSource formedModelSource() {
+        return formedModelSource;
     }
 
     private void validate() {
@@ -151,6 +217,9 @@ public final class MultiblockControllerDefinition {
             if (entry.getValue().isEmpty() || entry.getValue().stream().anyMatch(frame -> frame == null || frame.isBlank())) {
                 throw new IllegalArgumentException("Invalid overlay frames for " + entry.getKey() + " on controller " + registryName);
             }
+        }
+        if (breakingTier == null || breakingTier == MachineTier.NONE) {
+            throw new IllegalArgumentException("Multiblock controller breaking tier must be a real machine tier: " + registryName);
         }
         if (model != null && model.isBlank()) {
             throw new IllegalArgumentException("Multiblock controller model cannot be blank: " + registryName);
@@ -292,17 +361,95 @@ public final class MultiblockControllerDefinition {
             return builder -> builder.model = Objects.requireNonNull(model);
         }
 
-        static Option mineableWith(MiningTool tool, MiningTool... moreTools) {
+        /**
+         * Uses a dynamic model source only while the controller is part of a formed multiblock.
+         * The normal/unformed controller appearance is left untouched.
+         */
+        static Option model(MultiblockModelSource source) {
+            return builder -> builder.formedModelSource = Objects.requireNonNull(source);
+        }
+
+        static Option mineableWith(ToolDefinition tool, ToolDefinition... moreTools) {
             return builder -> {
-                builder.miningTools = EnumSet.of(Objects.requireNonNull(tool));
+                builder.miningTools = new LinkedHashSet<>();
+                builder.miningTools.add(Objects.requireNonNull(tool));
                 if (moreTools != null) {
                     Collections.addAll(builder.miningTools, moreTools);
                 }
             };
         }
 
-        static Option miningTier(MiningTier miningTier) {
-            return builder -> builder.miningTier = Objects.requireNonNull(miningTier);
+        static Option tier(MachineTier tier) {
+            return builder -> {
+                Objects.requireNonNull(tier, "controller tier");
+                if (tier == MachineTier.NONE) {
+                    throw new IllegalArgumentException("Multiblock controller tier must be a real machine tier");
+                }
+                builder.tier = tier.recipeTier();
+            };
+        }
+
+        static Option breakingTier(MachineTier tier) {
+            return builder -> {
+                Objects.requireNonNull(tier, "breaking tier");
+                if (tier == MachineTier.NONE) {
+                    throw new IllegalArgumentException("Multiblock controller breaking tier must be a real machine tier");
+                }
+                builder.breakingTier = tier.recipeTier();
+            };
+        }
+
+        static Option strength(float hardness) {
+            return strength(hardness, hardness);
+        }
+
+        static Option strength(float hardness, float resistance) {
+            BlockStrength strength = BlockStrength.of(hardness, resistance);
+            return builder -> builder.strength = strength;
+        }
+
+        /** Copies hardness and explosion resistance from an existing block. */
+        static Option strength(Block block) {
+            Objects.requireNonNull(block, "strength source block");
+            return strength(block.defaultDestroyTime(), block.getExplosionResistance());
+        }
+
+        /** Overrides the controller's placement/break/hit sound group. */
+        static Option sound(SoundType sound) {
+            return builder -> builder.sound = Objects.requireNonNull(sound, "controller sound");
+        }
+
+        /** Convenience: copies the default sound group from an existing block. */
+        static Option sound(Block block) {
+            Objects.requireNonNull(block, "controller sound block");
+            return sound(block.defaultBlockState().getSoundType());
+        }
+
+        /** Overrides the generated controller loot table. When absent, normal controller salvage loot applies. */
+        static Option loot(BlockLoot loot) {
+            return builder -> builder.loot = Objects.requireNonNull(loot, "controller loot");
+        }
+
+        /** Convenience: the controller drops one copy of this item. */
+        static Option loot(String itemId) {
+            return loot(BlockLoot.item(itemId, 1.0F));
+        }
+
+        /** Convenience: the controller drops the item form of this block. */
+        static Option loot(Block block) {
+            Objects.requireNonNull(block, "controller loot block");
+            ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(block.asItem());
+            return loot(BlockLoot.item(itemId.toString(), 1.0F));
+        }
+
+        /** Enables/disables Create wrench pickup for this controller. */
+        static Option wrenchable(boolean wrenchable) {
+            return builder -> builder.wrenchable = wrenchable;
+        }
+
+        /** Enables/disables the normal multiblock controller menu on right click. */
+        static Option openMenu(boolean openMenu) {
+            return builder -> builder.openMenu = openMenu;
         }
 
         private static TextureOption sideTexture(Side side, String texture) {
@@ -353,9 +500,16 @@ public final class MultiblockControllerDefinition {
         private final EnumMap<Side, String> sideTextures = new EnumMap<>(Side.class);
         private final EnumMap<Side, Integer> sideTextureColors = new EnumMap<>(Side.class);
         private final EnumMap<Side, List<String>> sideOverlays = new EnumMap<>(Side.class);
-        private MiningTier miningTier = MiningTier.STONE;
-        private EnumSet<MiningTool> miningTools = EnumSet.of(MiningTool.PICKAXE);
+        private MachineTier breakingTier = MachineTier.LV;
+        private MachineTier tier;
+        private BlockStrength strength;
+        private Set<ToolDefinition> miningTools = new LinkedHashSet<>(Set.of(Tool.PICKAXE));
+        private SoundType sound;
+        private BlockLoot loot;
+        private boolean wrenchable = true;
+        private boolean openMenu = true;
         private String model;
+        private MultiblockModelSource formedModelSource;
 
         private Builder() {
         }

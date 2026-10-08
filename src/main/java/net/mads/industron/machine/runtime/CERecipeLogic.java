@@ -101,7 +101,7 @@ public final class CERecipeLogic {
         }
 
         status = CERecipeStatus.IDLE;
-        searchCooldown = IDLE_SEARCH_INTERVAL;
+        searchCooldown = host.recipeSearchPending() ? 0 : IDLE_SEARCH_INTERVAL;
         host.onRecipeLogicChanged(true);
     }
 
@@ -114,7 +114,7 @@ public final class CERecipeLogic {
 
         var prepared = host.findAndConsumeRecipeInputs();
         if (prepared.isEmpty()) {
-            searchCooldown = IDLE_SEARCH_INTERVAL;
+            searchCooldown = host.recipeSearchPending() ? 0 : IDLE_SEARCH_INTERVAL;
             setStatus(CERecipeStatus.IDLE);
             return false;
         }
@@ -161,6 +161,13 @@ public final class CERecipeLogic {
 
     public boolean isProcessing() {
         return execution != null;
+    }
+
+    /** Allows a host with a genuinely dynamic runtime input to re-check before the normal idle interval. */
+    public void requestImmediateSearch() {
+        if (execution == null) {
+            searchCooldown = 0;
+        }
     }
 
     /** Current zero-based progress of the active recipe. */

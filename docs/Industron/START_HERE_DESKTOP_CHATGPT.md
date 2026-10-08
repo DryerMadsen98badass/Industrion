@@ -22,7 +22,7 @@ Du arbeider på Minecraft-modprosjektet **Industron**.
 
 ## Ikke lat som kode finnes
 
-Kodeeksemplene i docs er mål-API/pseudokode. Første oppgave er å fastsette foundation-valgene i `development docs/to do/00-foundation.md`, deretter implementere fasene i rekkefølge.
+Sammenlign alltid docs med vedlagt current project. Foundation, material/geology, ore-processing, chemistry planning/emission og Assembly har implementerte deler; Foundry/Heater runtime er fortsatt planlagt. Aktiv handoff er `development docs/CURRENT_TASK.md`.
 
 
 ## Assembly – les dette før endringer
@@ -39,5 +39,5 @@ Kodeeksemplene i docs er mål-API/pseudokode. Første oppgave er å fastsette fo
 
 - Hold endringer smale.
 - Lever komplette endrede filer.
-- Ved ZIP-levering: inkluder kun endrede/nye filer og nødvendig dokumentasjon, ikke hele prosjektet uten grunn.
+- Ved vanlig kodelevering: inkluder bare endrede/nye filer. Når prosjekteieren uttrykkelig ber om en komplett docs-pakke, lever hele korrigerte docs-treet.
 - Oppdater docs og tester sammen med kode.

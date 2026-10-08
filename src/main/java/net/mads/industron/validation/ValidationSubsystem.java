@@ -5,6 +5,7 @@ public enum ValidationSubsystem {
     FOUNDATION,
     ATOMIC,
     MATERIAL,
+    CASING,
     STRUCTURE,
     COMPOSITION,
     CHEMISTRY,

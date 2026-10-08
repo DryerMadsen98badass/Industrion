@@ -1,5 +1,7 @@
 package net.mads.industron.machine.machines.electric.multiblock;
 
+import net.mads.industron.block.loot.AssemblySalvageBlock;
+
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.goggles.GogglesItem;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
@@ -9,11 +11,15 @@ import net.mads.industron.machine.WrenchPickupHelper;
 import net.mads.industron.registry.BlockEntityRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.TextColor;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -41,7 +47,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
-public class MultiblockControllerBlock extends HorizontalDirectionalBlock implements EntityBlock, IWrenchable {
+public class MultiblockControllerBlock extends HorizontalDirectionalBlock implements EntityBlock, IWrenchable, AssemblySalvageBlock {
     public static final MapCodec<MultiblockControllerBlock> CODEC = simpleCodec(properties ->
             new MultiblockControllerBlock(MultiblockControllerDefinition.of(
                     "test_multiblock",
@@ -52,7 +58,6 @@ public class MultiblockControllerBlock extends HorizontalDirectionalBlock implem
             ), properties));
     public static final BooleanProperty FORMED = BooleanProperty.create("formed");
     public static final BooleanProperty ACTIVE = BooleanProperty.create("active");
-    public static final IntegerProperty OVERLAY_FRAME = IntegerProperty.create("overlay_frame", 0, 9);
 
     private final MultiblockControllerDefinition definition;
     private final ResourceLocation controllerId;
@@ -68,10 +73,15 @@ public class MultiblockControllerBlock extends HorizontalDirectionalBlock implem
     }
 
     public MultiblockControllerBlock(MultiblockControllerDefinition definition) {
-        this(definition, BlockBehaviour.Properties.of()
+        this(definition, properties(definition));
+    }
+
+    private static BlockBehaviour.Properties properties(MultiblockControllerDefinition definition) {
+        BlockBehaviour.Properties properties = BlockBehaviour.Properties.of()
                 .requiresCorrectToolForDrops()
-                .strength(definition.hardness(), definition.resistance())
-                .sound(SoundType.METAL));
+                .strength(definition.hardness(), definition.resistance());
+        properties.sound(definition.soundOverride() == null ? SoundType.METAL : definition.soundOverride());
+        return properties;
     }
 
     public MultiblockControllerBlock(String controllerName, BlockBehaviour.Properties properties) {
@@ -91,8 +101,7 @@ public class MultiblockControllerBlock extends HorizontalDirectionalBlock implem
         registerDefaultState(stateDefinition.any()
                 .setValue(FACING, Direction.NORTH)
                 .setValue(FORMED, false)
-                .setValue(ACTIVE, false)
-                .setValue(OVERLAY_FRAME, 0));
+                .setValue(ACTIVE, false));
     }
 
     public ResourceLocation controllerId() {
@@ -155,11 +164,21 @@ public class MultiblockControllerBlock extends HorizontalDirectionalBlock implem
             }
 
             switch (multiblock.drive()) {
-                case ELECTRIC -> tooltip.add(coloredValueLine(
-                        "Base Energy Usage: ",
-                        multiblock.energyUsage() + " CE/t",
-                        ChatFormatting.AQUA
-                ));
+                case ELECTRIC -> {
+                    if (multiblock.hasContinuousEnergyUsage()) {
+                        tooltip.add(coloredValueLine(
+                                "Energy Usage: ",
+                                "Dynamic",
+                                ChatFormatting.AQUA
+                        ));
+                    } else {
+                        tooltip.add(coloredValueLine(
+                                "Base Energy Usage: ",
+                                multiblock.energyUsage() + " CE/t",
+                                ChatFormatting.AQUA
+                        ));
+                    }
+                }
                 case STEAM -> tooltip.add(coloredValueLine(
                         "Steam Usage: ",
                         multiblock.steamUsage() + " mB/t",
@@ -226,13 +245,12 @@ public class MultiblockControllerBlock extends HorizontalDirectionalBlock implem
         return defaultBlockState()
                 .setValue(FACING, context.getHorizontalDirection().getOpposite())
                 .setValue(FORMED, false)
-                .setValue(ACTIVE, false)
-                .setValue(OVERLAY_FRAME, 0);
+                .setValue(ACTIVE, false);
     }
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(FACING, FORMED, ACTIVE, OVERLAY_FRAME);
+        builder.add(FACING, FORMED, ACTIVE);
     }
 
     @Override
@@ -267,12 +285,64 @@ public class MultiblockControllerBlock extends HorizontalDirectionalBlock implem
 
     @Override
     public InteractionResult onSneakWrenched(BlockState state, UseOnContext context) {
-        return WrenchPickupHelper.pickup(this, state, context);
+        return definition.wrenchable()
+                ? WrenchPickupHelper.pickup(this, state, context)
+                : InteractionResult.PASS;
+    }
+
+    @Override
+    protected ItemInteractionResult useItemOn(
+            ItemStack stack,
+            BlockState state,
+            Level level,
+            BlockPos pos,
+            Player player,
+            InteractionHand hand,
+            BlockHitResult hitResult
+    ) {
+        MultiblockDefinition multiblock = MultiblockRegistry.byController(controllerId).orElse(null);
+        if (multiblock == null || multiblock.activationItems().isEmpty()) {
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+        }
+
+        boolean validActivationItem = multiblock.activationItems().stream()
+                .map(BuiltInRegistries.ITEM::get)
+                .anyMatch(stack::is);
+        if (!validActivationItem) {
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+        }
+
+        if (!(level.getBlockEntity(pos) instanceof MultiblockControllerBlockEntity controller)) {
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+        }
+        if (level.isClientSide()) {
+            return ItemInteractionResult.SUCCESS;
+        }
+        if (!controller.grantManualActivation()) {
+            // The configured activation item belongs to this multiblock interaction.
+            // Consume the click even when the current batch cannot be activated so
+            // vanilla Flint & Steel behaviour cannot place fire on/around the controller.
+            return ItemInteractionResult.SUCCESS;
+        }
+
+        if (!player.getAbilities().instabuild) {
+            if (stack.isDamageableItem()) {
+                stack.hurtAndBreak(1, player, hand == InteractionHand.MAIN_HAND
+                        ? EquipmentSlot.MAINHAND
+                        : EquipmentSlot.OFFHAND);
+            } else {
+                stack.shrink(1);
+            }
+        }
+        return ItemInteractionResult.SUCCESS;
     }
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hitResult) {
         if (WrenchPickupHelper.isHoldingWrench(player)) {
+            return InteractionResult.PASS;
+        }
+        if (!definition.openMenu()) {
             return InteractionResult.PASS;
         }
         if (player.isShiftKeyDown() && !state.getValue(FORMED) && GogglesItem.isWearingGoggles(player)) {

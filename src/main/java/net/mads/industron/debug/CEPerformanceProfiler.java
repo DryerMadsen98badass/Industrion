@@ -70,12 +70,12 @@ public final class CEPerformanceProfiler {
 
     public static List<Component> stats() {
         List<Component> lines = new ArrayList<>();
-        lines.add(Component.literal("CE profiler: " + (enabled ? "ON" : "OFF")));
+        lines.add(Component.literal("Industron profiler: " + (enabled ? "ON" : "OFF")));
         lines.add(Component.literal("Budget: " + BUDGET_UNITS + " units = 50.000 ms/tick"));
 
         long ticks = Math.max(1, observedTicks);
-        long rootNs = totalNs[Metric.MULTIBLOCK_TICK.ordinal()] + totalNs[Metric.WIRE_NETWORK.ordinal()];
-        lines.add(Component.literal("Total avg/tick: " + formatNs(rootNs / ticks) + " (" + units(rootNs / ticks) + " units) over " + observedTicks + " ticks"));
+        long rootNs = totalNs[Metric.MULTIBLOCK_TICK.ordinal()] + totalNs[Metric.SINGLEBLOCK_TICK.ordinal()] + totalNs[Metric.FOUNDRY_TICK.ordinal()];
+        lines.add(Component.literal("Instrumented machine avg/tick (nested metrics excluded): " + formatNs(rootNs / ticks) + " (" + units(rootNs / ticks) + " units) over " + observedTicks + " ticks"));
 
         Metric machineMetric = Metric.MULTIBLOCK_TICK;
         long machineCalls = calls[machineMetric.ordinal()];
@@ -88,7 +88,7 @@ public final class CEPerformanceProfiler {
             long avg = metricCalls <= 0 ? 0 : totalNs[index] / metricCalls;
             long perTick = totalNs[index] / ticks;
             lines.add(Component.literal(metric.label + ": " + metricCalls
-                    + " calls, avg " + formatNs(avg)
+                    + " calls, total " + formatNs(totalNs[index]) + ", avg " + formatNs(avg)
                     + ", max " + formatNs(maxNs[index])
                     + ", avg/tick " + units(perTick) + " units"));
         }
@@ -107,6 +107,9 @@ public final class CEPerformanceProfiler {
     }
 
     public enum Metric {
+        SINGLEBLOCK_TICK("singleblock_tick"),
+        FOUNDRY_TICK("foundry_tick"),
+        STRUCTURE_VALIDATION("structure_validation"),
         MULTIBLOCK_TICK("multiblock_tick"),
         MULTIBLOCK_RECIPE_TICK("multiblock_recipe_tick"),
         RECIPE_LOOKUP("recipe_lookup"),

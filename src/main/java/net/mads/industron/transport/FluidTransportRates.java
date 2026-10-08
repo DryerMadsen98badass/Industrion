@@ -9,6 +9,7 @@ import com.simibubi.create.content.fluids.pump.PumpBlockEntity;
 import net.mads.industron.fluid.IndustrialFluid;
 import net.mads.industron.fluid.IndustrialFluidLookup;
 import net.mads.industron.material.MaterialLookup;
+import net.mads.industron.material.FluidTransportLimits;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -40,10 +41,10 @@ public final class FluidTransportRates {
         }
 
         double scaled = vanillaPressure * configuredRate / VANILLA_CREATE_PUMP_RATE;
-        if (!Double.isFinite(scaled)) {
-            return Float.MAX_VALUE;
-        }
-        return (float) Math.min(Float.MAX_VALUE, scaled);
+        // Create converts pressure to mB/tick by dividing by two.
+        // Clamp here as well as the material rate, including over-speed shafts.
+        double maxPressure = FluidTransportLimits.MAX_PUMP_MB_PER_TICK * 2.0D;
+        return (float) Math.copySign(Math.min(Math.abs(scaled), maxPressure), scaled);
     }
 
     public static int pipeRate(BlockState state) {

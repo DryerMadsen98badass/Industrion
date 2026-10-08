@@ -1,5 +1,9 @@
 package net.mads.industron.machine;
 
+import net.minecraft.resources.ResourceLocation;
+
+import net.mads.industron.block.loot.AssemblySalvageBlock;
+
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.kinetics.base.KineticBlock;
 import net.mads.industron.energy.CEEnergyNetwork;
@@ -17,6 +21,8 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -44,6 +50,7 @@ import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.neoforge.common.extensions.IPlayerExtension;
 import org.jetbrains.annotations.Nullable;
@@ -51,13 +58,19 @@ import org.jetbrains.annotations.Nullable;
 import java.math.BigDecimal;
 import java.util.List;
 
-public class SingleBlockMachineBlock extends KineticBlock implements EntityBlock {
+public class SingleBlockMachineBlock extends KineticBlock implements EntityBlock, AssemblySalvageBlock {
     public static final MapCodec<SingleBlockMachineBlock> CODEC =
             simpleCodec(properties -> new SingleBlockMachineBlock(properties, null));
 
     public static final DirectionProperty FACING = HorizontalDirectionalBlock.FACING;
     public static final BooleanProperty ACTIVE = BooleanProperty.create("active");
-    public static final IntegerProperty OVERLAY_FRAME = IntegerProperty.create("overlay_frame", 0, 9);
+    private static final VoxelShape BASIN_SHAPE = Shapes.or(
+            Block.box(1, 0, 1, 15, 2, 15),
+            Block.box(1, 2, 1, 3, 10, 15),
+            Block.box(13, 2, 1, 15, 10, 15),
+            Block.box(3, 2, 1, 13, 10, 3),
+            Block.box(3, 2, 13, 13, 10, 15)
+    );
 
     private final SingleBlockMachineInstance instance;
 
@@ -86,7 +99,6 @@ public class SingleBlockMachineBlock extends KineticBlock implements EntityBlock
                 stateDefinition.any()
                         .setValue(FACING, Direction.NORTH)
                         .setValue(ACTIVE, false)
-                        .setValue(OVERLAY_FRAME, 0)
         );
     }
 
@@ -184,9 +196,17 @@ public class SingleBlockMachineBlock extends KineticBlock implements EntityBlock
         }
 
         if (instance.tier() != MachineTier.NONE) {
-            tooltip.add(machineTierTooltip(instance.tier()));
+            tooltip.add(MachineProcessingTooltip.tier(instance.tier()));
         }
 
+        MachineProcessingTooltip.processing(tooltip, instance.definition().processingProfile(instance.tier()));
+        for (ResourceLocation typeId : instance.definition().recipeTypes()) {
+            var process = net.mads.industron.recipe.CERecipeTypes.byId(typeId);
+            if (process != null) tooltip.add(Component.literal("Process: " + process.displayName()).withStyle(ChatFormatting.AQUA));
+        }
+        if (instance.definition().steamConversionRecipe() != null) {
+            tooltip.add(Component.literal("Process: Evaporation (Water to Steam)").withStyle(ChatFormatting.AQUA));
+        }
         for (String text : instance.definition().tooltips()) {
             tooltip.add(Component.literal(text)
                     .withStyle(ChatFormatting.GRAY));
@@ -268,13 +288,6 @@ public class SingleBlockMachineBlock extends KineticBlock implements EntityBlock
                 .append(Component.literal(value).withStyle(valueColor));
     }
 
-    private static Component machineTierTooltip(MachineTier tier) {
-        return Component.literal("Machine Tier: ")
-                .withStyle(ChatFormatting.GRAY)
-                .append(Component.literal(tier.displayName())
-                        .withStyle(style -> style.withColor(TextColor.fromRgb(tier.color()))));
-    }
-
     private static String formatNumber(double value) {
         return BigDecimal.valueOf(value)
                 .stripTrailingZeros()
@@ -338,7 +351,7 @@ public class SingleBlockMachineBlock extends KineticBlock implements EntityBlock
     ) {
         super.onPlace(state, level, pos, oldState, movedByPiston);
         if (instance != null && instance.definition().power() == SingleBlockMachinePower.ELECTRIC) {
-            CEEnergyNetwork.invalidate(level);
+            CEEnergyNetwork.invalidate(level, pos);
         }
     }
 
@@ -350,10 +363,13 @@ public class SingleBlockMachineBlock extends KineticBlock implements EntityBlock
             BlockState newState,
             boolean movedByPiston
     ) {
-        if (!state.is(newState.getBlock())
-                && instance != null
-                && instance.definition().power() == SingleBlockMachinePower.ELECTRIC) {
-            CEEnergyNetwork.invalidate(level);
+        if (!state.is(newState.getBlock())) {
+            if (!level.isClientSide() && level.getBlockEntity(pos) instanceof SingleBlockMachineBlockEntity machine) {
+                machine.dropStoredItemsAndDiscardFluids();
+            }
+            if (instance != null && instance.definition().power() == SingleBlockMachinePower.ELECTRIC) {
+                CEEnergyNetwork.invalidate(level, pos);
+            }
         }
         super.onRemove(state, level, pos, newState, movedByPiston);
     }
@@ -386,6 +402,26 @@ public class SingleBlockMachineBlock extends KineticBlock implements EntityBlock
     }
 
     @Override
+    protected ItemInteractionResult useItemOn(
+            ItemStack stack,
+            BlockState state,
+            Level level,
+            BlockPos pos,
+            Player player,
+            InteractionHand hand,
+            BlockHitResult hitResult
+    ) {
+        if (!(level.getBlockEntity(pos) instanceof SingleBlockMachineBlockEntity machine)
+                || !isDirectPrimitiveInteraction()) {
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+        }
+        if (level.isClientSide()) return ItemInteractionResult.SUCCESS;
+        return machine.primitiveInsert(player, hand, stack)
+                ? ItemInteractionResult.SUCCESS
+                : ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+    }
+
+    @Override
     protected InteractionResult useWithoutItem(
             BlockState state,
             Level level,
@@ -397,12 +433,24 @@ public class SingleBlockMachineBlock extends KineticBlock implements EntityBlock
             return InteractionResult.PASS;
         }
 
+        if (isDirectPrimitiveInteraction()
+                && level.getBlockEntity(pos) instanceof SingleBlockMachineBlockEntity machine) {
+            if (level.isClientSide()) return InteractionResult.SUCCESS;
+            return machine.primitiveExtract(player) ? InteractionResult.SUCCESS : InteractionResult.PASS;
+        }
+
         if (!level.isClientSide()
                 && level.getBlockEntity(pos) instanceof SingleBlockMachineBlockEntity machine) {
             ((IPlayerExtension) player).openMenu(machine, pos);
         }
 
         return InteractionResult.SUCCESS;
+    }
+
+    private boolean isDirectPrimitiveInteraction() {
+        if (instance == null) return false;
+        String id = instance.definition().id();
+        return id.endsWith("_drying_rack") || id.endsWith("_brick_mold") || id.endsWith("_basin");
     }
 
     @Override
@@ -438,7 +486,8 @@ public class SingleBlockMachineBlock extends KineticBlock implements EntityBlock
     ) {
         if (!state.getValue(ACTIVE)
                 || instance == null
-                || instance.definition().power() != SingleBlockMachinePower.STEAM) {
+                || instance.definition().power() != SingleBlockMachinePower.STEAM
+                || instance.definition().resourceMode() != SingleBlockMachineResourceMode.CONSUMES) {
             return;
         }
 
@@ -472,8 +521,7 @@ public class SingleBlockMachineBlock extends KineticBlock implements EntityBlock
         super.createBlockStateDefinition(builder);
         builder.add(
                 FACING,
-                ACTIVE,
-                OVERLAY_FRAME
+                ACTIVE
         );
     }
 
@@ -484,6 +532,12 @@ public class SingleBlockMachineBlock extends KineticBlock implements EntityBlock
             BlockPos pos,
             CollisionContext context
     ) {
+        if (instance != null) {
+            String id = instance.definition().id();
+            if (id.endsWith("_drying_rack")) return Block.box(0, 0, 0, 16, 14, 16);
+            if (id.endsWith("_brick_mold")) return Block.box(2, 0, 4, 14, 7, 12);
+            if (id.endsWith("_basin")) return BASIN_SHAPE;
+        }
         return Block.box(
                 0,
                 0,
@@ -492,5 +546,16 @@ public class SingleBlockMachineBlock extends KineticBlock implements EntityBlock
                 16,
                 16
         );
+    }
+
+    @Override
+    public VoxelShape getOcclusionShape(BlockState state, BlockGetter level, BlockPos pos) {
+        if (instance != null) {
+            String id = instance.definition().id();
+            if (id.endsWith("_drying_rack") || id.endsWith("_brick_mold") || id.endsWith("_basin")) {
+                return Shapes.empty();
+            }
+        }
+        return super.getOcclusionShape(state, level, pos);
     }
 }

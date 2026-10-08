@@ -9,6 +9,7 @@ public final class CENetwork {
 
     public static void register(RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar("1");
+        registrar.playToClient(ClimateStatePayload.TYPE,ClimateStatePayload.STREAM_CODEC,ClimateStatePayload::handle);
         registrar.playToServer(
                 BindMultiblockSchedulePayload.TYPE,
                 BindMultiblockSchedulePayload.STREAM_CODEC,

@@ -4,17 +4,21 @@ import com.simibubi.create.AllTags.AllBlockTags;
 import net.mads.industron.Industron;
 import net.mads.industron.block.ActiveBlockDefinition;
 import net.mads.industron.block.SimpleBlocks;
-import net.mads.industron.block.MiningTier;
-import net.mads.industron.block.MiningTool;
+import net.mads.industron.recipe.recipes.assembly.Tool;
+import net.mads.industron.recipe.recipetypes.assembly.ToolDefinition;
 import net.mads.industron.block.SimpleBlockDefinition;
 import net.mads.industron.block.SimpleBlockVariant;
 import net.mads.industron.machine.MachineDefinition;
+import net.mads.industron.machine.MachineCasingBlock;
+import net.mads.industron.machine.MachineTier;
+import net.mads.industron.machine.MachineTierStats;
 import net.mads.industron.machine.MachinePortBlock;
 import net.mads.industron.machine.SingleBlockMachineInstance;
 import net.mads.industron.material.IndustrialMaterial;
 import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.MaterialPart;
 import net.mads.industron.material.MaterialOreHost;
+import net.mads.industron.material.recipes.MaterialCasingGenerator;
 import net.mads.industron.material.structure.StructureBlockDefinition;
 import net.mads.industron.material.structure.StructureMaterial;
 import net.mads.industron.material.structure.StructureMaterialGenerator;
@@ -31,6 +35,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.block.Block;
+import net.neoforged.neoforge.common.Tags;
 import net.neoforged.neoforge.common.data.BlockTagsProvider;
 import net.neoforged.neoforge.common.data.ExistingFileHelper;
 import net.neoforged.neoforge.registries.DeferredHolder;
@@ -45,6 +50,9 @@ public class MaterialBlockTagProvider
 
     private static final TagKey<Block> C_ORES =
             cTag("ores");
+    private static final TagKey<Block> C_CASINGS = cTag("casings");
+    private static final TagKey<Block> C_MACHINE_CASINGS = cTag("machine_casings");
+    private static final TagKey<Block> MATERIAL_MACHINE_CASINGS = industronTag("material_machine_casings");
 
     private static final TagKey<Block>
             C_ORE_RATES_SINGULAR =
@@ -54,7 +62,10 @@ public class MaterialBlockTagProvider
             MaterialPart.RAW_BLOCK, cTag("raw_material_blocks"),
             MaterialPart.BLOCK, cTag("storage_blocks"),
             MaterialPart.FRAME, cTag("frames"),
-            MaterialPart.CASING, cTag("casings")
+            MaterialPart.CASING, cTag("casings"),
+            MaterialPart.CLAY_BLOCK, cTag("clay_blocks"),
+            MaterialPart.BRICKS, cTag("brick_blocks"),
+            MaterialPart.FIREBOX, cTag("fireboxes")
     );
 
     private static final Map<MaterialPart, TagKey<Block>> ORE_GROUND_TAGS = Map.ofEntries(
@@ -90,14 +101,24 @@ public class MaterialBlockTagProvider
     protected void addTags(
             HolderLookup.Provider provider
     ) {
+        for (var holder : net.mads.industron.machine.machines.kinetic.KineticMachines.blocks()) {
+            tag(BlockTags.MINEABLE_WITH_PICKAXE).add(holder.get());
+            addMiningTierTags(holder.get(), MachineTier.LV);
+        }
         addSimpleBlockMiningTags();
         addSimpleBlockConnectionTags();
+        addMachineCasingMiningTags();
         addMachinePortMiningTags();
+        addFoundryPartMiningTags();
         addMultiblockControllerMiningTags();
         addSingleBlockMachineMiningTags();
+        addCoilMiningTags();
+        addEnergyWireMiningTags();
+        addMaterialStoneBlockMiningTags();
         addFluidTransportMiningTags();
         addColorableFluidPipeTags();
         addStructureMaterialTags();
+        addMaterialMachineCasingTags();
 
         for (IndustrialMaterial material
                 : IndustrialMaterials.ALL) {
@@ -108,8 +129,14 @@ public class MaterialBlockTagProvider
                     continue;
                 }
 
+                Set<ToolDefinition> tools = part == MaterialPart.CLAY_BLOCK
+                        ? Set.of(Tool.SHOVEL)
+                        : Set.of(Tool.PICKAXE);
+
                 if (material.hasExistingPart(part)) {
-                    tag(entry.getValue()).addOptional(material.existingPart(part));
+                    ResourceLocation existing = material.existingPart(part);
+                    tag(entry.getValue()).addOptional(existing);
+                    addOptionalMiningTags(existing, tools, material.tier());
                     continue;
                 }
 
@@ -118,8 +145,12 @@ public class MaterialBlockTagProvider
                         .get(part);
                 if (block != null) {
                     tag(entry.getValue()).add(block.get());
+                    addMiningTags(block.get(), tools, material.tier());
                 }
             }
+
+            addClayShapeTags(material);
+            addMaterialShaftMiningTags(material);
 
             for (Map.Entry<
                     MaterialPart,
@@ -145,10 +176,8 @@ public class MaterialBlockTagProvider
                 if (block != null) {
                     addMiningTags(
                             block.get(),
-                            Set.of(
-                                    MiningTool.PICKAXE
-                            ),
-                            MiningTier.STONE
+                            Set.of(Tool.PICKAXE),
+                            material.tier()
                     );
 
                     addOreTags(
@@ -162,8 +191,9 @@ public class MaterialBlockTagProvider
                     ResourceLocation existingBlockId =
                             material.existingPart(part);
 
-                    addOptionalStoneMiningTags(
-                            existingBlockId
+                    addOptionalOreMiningTags(
+                            existingBlockId,
+                            material.tier()
                     );
 
                     tag(C_ORES)
@@ -190,12 +220,69 @@ public class MaterialBlockTagProvider
                     for (boolean small : new boolean[]{false, true}) {
                         var generated = BlockRegistry.getMaterialOreHostBlock(material, host, small);
                         if (generated != null) {
-                            addMiningTags(generated.get(), Set.of(MiningTool.PICKAXE), MiningTier.STONE);
+                            addMiningTags(generated.get(), Set.of(Tool.PICKAXE), material.tier());
                             addOreTags(generated.get(), material, groundTag);
                         }
                     }
                 }
             }
+        }
+    }
+
+
+    private void addMaterialShaftMiningTags(IndustrialMaterial material) {
+        if (!material.has(MaterialPart.SHAFT)) {
+            return;
+        }
+        if (material.hasExistingPart(MaterialPart.SHAFT)) {
+            addOptionalMiningTags(material.existingPart(MaterialPart.SHAFT), Set.of(Tool.PICKAXE), material.tier());
+            return;
+        }
+        DeferredHolder<Block, ? extends Block> shaft = BlockRegistry.MATERIAL_BLOCKS
+                .getOrDefault(material.id(), Map.of())
+                .get(MaterialPart.SHAFT);
+        if (shaft != null) {
+            addMiningTags(shaft.get(), Set.of(Tool.PICKAXE), material.tier());
+        }
+    }
+
+    private void addClayShapeTags(IndustrialMaterial material) {
+        if (!material.isClayMaterial()) return;
+        addClayShapeTag(material, MaterialPart.BRICK_SLAB, BlockTags.SLABS);
+        addClayShapeTag(material, MaterialPart.BRICK_STAIRS, BlockTags.STAIRS);
+        addClayShapeTag(material, MaterialPart.BRICK_WALL, BlockTags.WALLS);
+    }
+
+    private void addClayShapeTag(IndustrialMaterial material, MaterialPart part, TagKey<Block> shapeTag) {
+        if (!material.has(part)) return;
+        if (material.hasExistingPart(part)) {
+            ResourceLocation existing = material.existingPart(part);
+            tag(shapeTag).addOptional(existing);
+            addOptionalMiningTags(existing, Set.of(Tool.PICKAXE), material.tier());
+            return;
+        }
+        DeferredHolder<Block, ? extends Block> holder = BlockRegistry.MATERIAL_BLOCKS
+                .getOrDefault(material.id(), Map.of())
+                .get(part);
+        if (holder != null) {
+            tag(shapeTag).add(holder.get());
+            addMiningTags(holder.get(), Set.of(Tool.PICKAXE), material.tier());
+        }
+    }
+
+    private void addMaterialMachineCasingTags() {
+        for (MaterialCasingGenerator.GeneratedCasing generated : MaterialCasingGenerator.ALL) {
+            var holder = BlockRegistry.getMaterialMachineCasing(generated.registryName());
+            if (holder == null) {
+                throw new IllegalStateException("Missing registered material casing block: " + generated.registryName());
+            }
+            Block block = holder.get();
+            tag(C_CASINGS).add(block);
+            tag(C_MACHINE_CASINGS).add(block);
+            tag(MATERIAL_MACHINE_CASINGS).add(block);
+            tag(industronTag("material_machine_casings/" + generated.definition().id())).add(block);
+            tag(industronTag("material_machine_casings/material/" + generated.material().id())).add(block);
+            addMiningTags(block, Set.of(Tool.PICKAXE), generated.tier());
         }
     }
 
@@ -242,7 +329,7 @@ public class MaterialBlockTagProvider
                             )
                             .get(),
                     definition.miningTools(),
-                    definition.miningTier()
+                    definition.breakingTier()
             );
 
             for (SimpleBlockVariant variant
@@ -256,29 +343,37 @@ public class MaterialBlockTagProvider
                                 )
                                 .get(),
                         definition.miningTools(),
-                        definition.miningTier()
+                        definition.breakingTier()
                 );
             }
+        }
+    }
+
+    private void addMachineCasingMiningTags() {
+        for (DeferredHolder<Block, ? extends MachineCasingBlock> holder : BlockRegistry.getAllMachineCasings()) {
+            MachineCasingBlock block = holder.get();
+            addMiningTags(block, Set.of(Tool.PICKAXE), block.tier().recipeTier());
         }
     }
 
     private void addMachinePortMiningTags() {
         for (DeferredHolder<Block, MachinePortBlock> holder
                 : BlockRegistry.getAllMachinePorts()) {
-            addMiningTags(
-                    holder.get(),
-                    Set.of(MiningTool.PICKAXE),
-                    MiningTier.IRON
-            );
+            MachinePortBlock block = holder.get();
+            addMiningTags(block, Set.of(Tool.PICKAXE), block.effectiveTier().recipeTier());
         }
 
         for (DeferredHolder<Block, MachinePortBlock> holder
                 : BlockRegistry.getAllStaticMachinePorts()) {
-            addMiningTags(
-                    holder.get(),
-                    Set.of(MiningTool.PICKAXE),
-                    MiningTier.IRON
-            );
+            MachinePortBlock block = holder.get();
+            addMiningTags(block, Set.of(Tool.PICKAXE), block.effectiveTier().recipeTier());
+        }
+    }
+
+    private void addFoundryPartMiningTags() {
+        for (DeferredHolder<Block, net.mads.industron.machine.foundry.FoundryPartBlock> holder
+                : BlockRegistry.getAllFoundryParts()) {
+            addMiningTags(holder.get(), Set.of(Tool.PICKAXE), MachineTier.ULV);
         }
     }
 
@@ -289,7 +384,7 @@ public class MaterialBlockTagProvider
             addMiningTags(
                     block,
                     block.definition().miningTools(),
-                    block.definition().miningTier()
+                    block.definition().breakingTier()
             );
         }
     }
@@ -305,7 +400,9 @@ public class MaterialBlockTagProvider
                             )
                             .get(),
                     instance.definition().miningTools(),
-                    instance.definition().miningTier()
+                    instance.tier() == MachineTier.NONE
+                            ? instance.definition().breakingTier()
+                            : instance.tier().recipeTier()
             );
         }
     }
@@ -333,13 +430,32 @@ public class MaterialBlockTagProvider
 
     private void addStructureMaterialTags() {
         for (StructureMaterial material : StructureMaterials.ALL) {
+            // Existing vanilla/Create blocks that represent this material inherit the same
+            // Industron tier as generated variants.  The source material owns the tier.
+            for (Map.Entry<MaterialPart, ResourceLocation> existing : material.existingParts().entrySet()) {
+                MaterialPart part = existing.getKey();
+                if (!part.isBlock()) continue;
+
+                Set<ToolDefinition> tools;
+                if (material instanceof WoodMaterial) {
+                    tools = Set.of(Tool.AXE);
+                } else if (part == MaterialPart.GRAVEL) {
+                    tools = Set.of(Tool.SHOVEL);
+                } else {
+                    tools = Set.of(Tool.PICKAXE);
+                }
+                addOptionalMiningTags(existing.getValue(), tools, material.tier());
+            }
+
             for (StructureBlockDefinition definition : StructureMaterialGenerator.generatedBlockDefinitions(material)) {
                 Block block = BlockRegistry.getStructureMaterialBlock(definition.registryName()).get();
 
                 if (material instanceof WoodMaterial) {
-                    tag(BlockTags.MINEABLE_WITH_AXE).add(block);
+                    addMiningTags(block, Set.of(Tool.AXE), material.tier());
+                } else if (definition.shape() == StructureBlockDefinition.Shape.FALLING) {
+                    addMiningTags(block, Set.of(Tool.SHOVEL), material.tier());
                 } else {
-                    addMiningTags(block, Set.of(MiningTool.PICKAXE), MiningTier.STONE);
+                    addMiningTags(block, Set.of(Tool.PICKAXE), material.tier());
                 }
 
                 switch (definition.shape()) {
@@ -370,18 +486,60 @@ public class MaterialBlockTagProvider
         }
     }
 
+    private void addCoilMiningTags() {
+        for (DeferredHolder<Block, net.mads.industron.block.coils.CoilBlock> coil : BlockRegistry.getAllCoils()) {
+            var block = coil.get();
+            addMiningTags(block, Set.of(Tool.PICKAXE), block.definition().tier());
+        }
+    }
+
+    private void addEnergyWireMiningTags() {
+        java.util.stream.Stream.concat(
+                BlockRegistry.getAllEnergyWires().stream(),
+                BlockRegistry.getAllInsulatedEnergyWires().stream()
+        ).forEach(holder -> {
+            var block = holder.get();
+            addMiningTags(block, Set.of(Tool.PICKAXE), block.tier());
+        });
+    }
+
+    private void addMaterialStoneBlockMiningTags() {
+        for (IndustrialMaterial material : IndustrialMaterials.ALL) {
+            Map<String, DeferredHolder<Block, Block>> blocks = BlockRegistry.MATERIAL_STONE_BLOCKS.get(material.id());
+            if (blocks == null) continue;
+            blocks.values().forEach(holder ->
+                    addMiningTags(holder.get(), Set.of(Tool.PICKAXE), material.tier())
+            );
+        }
+    }
+
     private void addFluidTransportMiningTags() {
-        FluidTransportRegistrations.allBlocks().forEach(registration -> addPickaxeStoneTags(
+        FluidTransportRegistrations.allBlocks().forEach(registration -> addPickaxeTierTags(
+                registration.tier().material().tier(),
                 registration.pipe().get(),
                 registration.glassPipe().get(),
                 registration.pump().get(),
                 registration.tank().get()
         ));
-        ColoredFluidPipeRegistrations.allBlocks().forEach(registration -> addPickaxeStoneTags(
-                registration.pipe().get(),
-                registration.glassPipe().get(),
-                registration.encasedPipe().get()
-        ));
+        ColoredFluidPipeRegistrations.allBlocks().forEach(registration -> {
+            var transportTier = registration.family().tier();
+            MachineTier breakingTier = transportTier == null
+                    ? MachineTier.LV
+                    : transportTier.material().tier();
+
+            addPickaxeTierTags(
+                    breakingTier,
+                    registration.pipe().get(),
+                    registration.glassPipe().get(),
+                    registration.encasedPipe().get()
+            );
+        });
+    }
+
+    private void addPickaxeTierTags(MachineTier tier, Block... blocks) {
+        for (Block block : blocks) {
+            addMiningTags(block, Set.of(Tool.PICKAXE), tier);
+        }
     }
 
     private void addPickaxeStoneTags(
@@ -391,9 +549,9 @@ public class MaterialBlockTagProvider
             addMiningTags(
                     block,
                     Set.of(
-                            MiningTool.PICKAXE
+                            Tool.PICKAXE
                     ),
-                    MiningTier.STONE
+                    MachineTier.LV
             );
         }
     }
@@ -405,113 +563,106 @@ public class MaterialBlockTagProvider
             addMiningTags(
                     block,
                     Set.of(
-                            MiningTool.PICKAXE
+                            Tool.PICKAXE
                     ),
-                    MiningTier.STONE
+                    MachineTier.LV
             );
         }
     }
 
+    private void addMiningToolTags(
+            Block block,
+            Set<ToolDefinition> tools
+    ) {
+        for (ToolDefinition tool : tools) {
+            TagKey<Block> tagKey = vanillaMiningTag(tool);
+            if (tagKey != null) tag(tagKey).add(block);
+        }
+    }
+
+
     private void addMiningTags(
             Block block,
-            Set<MiningTool> tools,
-            MiningTier tier
+            Set<ToolDefinition> tools,
+            MachineTier tier
     ) {
-        for (MiningTool tool : tools) {
-            tag(tool.tag()).add(block);
-        }
+        addMiningToolTags(block, tools);
+        addMiningTierTags(block, tier);
+    }
 
-        addMiningTierTags(
-                block,
-                tier
-        );
+    private void addOptionalMiningTags(
+            ResourceLocation blockId,
+            Set<ToolDefinition> tools,
+            MachineTier tier
+    ) {
+        for (ToolDefinition tool : tools) {
+            TagKey<Block> tagKey = vanillaMiningTag(tool);
+            if (tagKey != null) tag(tagKey).addOptional(blockId);
+        }
+        addOptionalMiningTierTags(blockId, tier);
+    }
+
+
+    private static TagKey<Block> vanillaMiningTag(ToolDefinition tool) {
+        if (tool == Tool.PICKAXE) return BlockTags.MINEABLE_WITH_PICKAXE;
+        if (tool == Tool.AXE) return BlockTags.MINEABLE_WITH_AXE;
+        if (tool == Tool.SHOVEL) return BlockTags.MINEABLE_WITH_SHOVEL;
+        if (tool == Tool.HOE) return BlockTags.MINEABLE_WITH_HOE;
+        return null;
     }
 
     private void addMiningTierTags(
             Block block,
-            MiningTier tier
+            MachineTier tier
     ) {
-        switch (tier) {
-            case WOOD -> {
-                tag(BlockTags.INCORRECT_FOR_GOLD_TOOL)
-                        .add(block);
-            }
-
-            case STONE -> {
-                tag(BlockTags.NEEDS_STONE_TOOL)
-                        .add(block);
-
-                tag(BlockTags.INCORRECT_FOR_WOODEN_TOOL)
-                        .add(block);
-
-                tag(BlockTags.INCORRECT_FOR_GOLD_TOOL)
-                        .add(block);
-            }
-
-            case IRON -> {
-                tag(BlockTags.NEEDS_IRON_TOOL)
-                        .add(block);
-
-                tag(BlockTags.INCORRECT_FOR_WOODEN_TOOL)
-                        .add(block);
-
-                tag(BlockTags.INCORRECT_FOR_GOLD_TOOL)
-                        .add(block);
-
-                tag(BlockTags.INCORRECT_FOR_STONE_TOOL)
-                        .add(block);
-            }
-
-            case DIAMOND -> {
-                tag(BlockTags.NEEDS_DIAMOND_TOOL)
-                        .add(block);
-
-                tag(BlockTags.INCORRECT_FOR_WOODEN_TOOL)
-                        .add(block);
-
-                tag(BlockTags.INCORRECT_FOR_GOLD_TOOL)
-                        .add(block);
-
-                tag(BlockTags.INCORRECT_FOR_STONE_TOOL)
-                        .add(block);
-
-                tag(BlockTags.INCORRECT_FOR_IRON_TOOL)
-                        .add(block);
-            }
-
-            case NETHERITE -> {
-                tag(BlockTags.INCORRECT_FOR_WOODEN_TOOL)
-                        .add(block);
-
-                tag(BlockTags.INCORRECT_FOR_GOLD_TOOL)
-                        .add(block);
-
-                tag(BlockTags.INCORRECT_FOR_STONE_TOOL)
-                        .add(block);
-
-                tag(BlockTags.INCORRECT_FOR_IRON_TOOL)
-                        .add(block);
-
-                tag(BlockTags.INCORRECT_FOR_DIAMOND_TOOL)
-                        .add(block);
-            }
-        }
+        applyMiningTierTags(tagKey -> tag(tagKey).add(block), tier);
     }
 
-    private void addOptionalStoneMiningTags(
-            ResourceLocation blockId
+    private void addOptionalMiningTierTags(ResourceLocation blockId, MachineTier tier) {
+        applyMiningTierTags(tagKey -> tag(tagKey).addOptional(blockId), tier);
+    }
+
+    private void applyMiningTierTags(
+            java.util.function.Consumer<TagKey<Block>> add,
+            MachineTier tier
     ) {
-        tag(BlockTags.MINEABLE_WITH_PICKAXE)
-                .addOptional(blockId);
+        MachineTier normalized = tier == null || tier == MachineTier.NONE
+                ? MachineTier.ULV
+                : tier.recipeTier();
+        int index = MachineTierStats.tierIndex(normalized);
 
-        tag(BlockTags.NEEDS_STONE_TOOL)
-                .addOptional(blockId);
+        // Gold is not part of Industron's progression and is never a valid tier tool.
+        add.accept(BlockTags.INCORRECT_FOR_GOLD_TOOL);
 
-        tag(BlockTags.INCORRECT_FOR_WOODEN_TOOL)
-                .addOptional(blockId);
+        int lv = MachineTierStats.tierIndex(MachineTier.LV);
+        int mv = MachineTierStats.tierIndex(MachineTier.MV);
+        int hv = MachineTierStats.tierIndex(MachineTier.HV);
+        int ev = MachineTierStats.tierIndex(MachineTier.EV);
+        int iv = MachineTierStats.tierIndex(MachineTier.IV);
 
-        tag(BlockTags.INCORRECT_FOR_GOLD_TOOL)
-                .addOptional(blockId);
+        if (index == lv) {
+            add.accept(BlockTags.NEEDS_STONE_TOOL);
+        } else if (index == mv) {
+            add.accept(BlockTags.NEEDS_IRON_TOOL);
+        } else if (index >= hv && index < ev) {
+            add.accept(BlockTags.NEEDS_DIAMOND_TOOL);
+        } else if (index == ev) {
+            add.accept(Tags.Blocks.NEEDS_NETHERITE_TOOL);
+        }
+
+        if (index >= lv) add.accept(BlockTags.INCORRECT_FOR_WOODEN_TOOL);
+        if (index >= mv) add.accept(BlockTags.INCORRECT_FOR_STONE_TOOL);
+        if (index >= hv) add.accept(BlockTags.INCORRECT_FOR_IRON_TOOL);
+        if (index >= ev) add.accept(BlockTags.INCORRECT_FOR_DIAMOND_TOOL);
+        if (index >= iv) add.accept(BlockTags.INCORRECT_FOR_NETHERITE_TOOL);
+    }
+
+    /** Existing ore aliases receive the same mining tier as their IndustrialMaterial source. */
+    private void addOptionalOreMiningTags(
+            ResourceLocation blockId,
+            MachineTier tier
+    ) {
+        addOptionalMiningTags(blockId, Set.of(Tool.PICKAXE), tier);
     }
 
     private void addOreTags(
@@ -545,6 +696,13 @@ public class MaterialBlockTagProvider
                         "c",
                         path
                 )
+        );
+    }
+
+    private static TagKey<Block> industronTag(String path) {
+        return TagKey.create(
+                Registries.BLOCK,
+                ResourceLocation.fromNamespaceAndPath(Industron.MOD_ID, path)
         );
     }
 }

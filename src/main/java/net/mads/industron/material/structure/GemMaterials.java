@@ -1,6 +1,7 @@
 package net.mads.industron.material.structure;
 
 import net.mads.industron.material.MaterialPart;
+import net.mads.industron.material.MaterialCategory;
 
 import net.mads.industron.material.IndustrialMaterial;
 import net.mads.industron.material.defenitions.IndustrialMaterials;
@@ -20,7 +21,7 @@ public final class GemMaterials {
         Map<String, GemMaterial> materials = new LinkedHashMap<>();
 
         for (IndustrialMaterial material : IndustrialMaterials.ALL) {
-            if (!material.properties().gemCandidate() || !generatesStructures(material.id())) {
+            if (!MaterialCategory.GEM.matches(material) || !generatesStructures(material.id())) {
                 continue;
             }
             materials.put(material.id(), create(material));

@@ -19,6 +19,9 @@ public final class FluidTransportRegistrations {
     private static final Map<String, RegisteredBlocks> BLOCKS = new LinkedHashMap<>();
     private static final Map<String, RegisteredItems> ITEMS = new LinkedHashMap<>();
     private static final Map<String, RegisteredBlockEntities> BLOCK_ENTITIES = new LinkedHashMap<>();
+    private static List<RegisteredBlocks> blockSnapshot = List.of();
+    private static List<RegisteredItems> itemSnapshot = List.of();
+    private static List<RegisteredBlockEntities> entitySnapshot = List.of();
 
     private FluidTransportRegistrations() {
     }
@@ -48,6 +51,7 @@ public final class FluidTransportRegistrations {
             BLOCKS.put(tier.id(), new RegisteredBlocks(tier, pipe, glassPipe, pump, tank));
         }
 
+        blockSnapshot = List.copyOf(BLOCKS.values());
         ColoredFluidPipeRegistrations.registerBlocks(registry);
     }
 
@@ -74,6 +78,7 @@ public final class FluidTransportRegistrations {
             ITEMS.put(tier.id(), new RegisteredItems(tier, pipe, pump, tank));
         }
 
+        itemSnapshot = List.copyOf(ITEMS.values());
         ColoredFluidPipeRegistrations.registerItems(registry);
     }
 
@@ -127,6 +132,7 @@ public final class FluidTransportRegistrations {
             BLOCK_ENTITIES.put(tier.id(), new RegisteredBlockEntities(tier, pipe, glassPipe, pump, tank));
         }
 
+        entitySnapshot = List.copyOf(BLOCK_ENTITIES.values());
         ColoredFluidPipeRegistrations.registerCreateBlockEntities(registry);
     }
 
@@ -151,21 +157,21 @@ public final class FluidTransportRegistrations {
 
     public static Collection<RegisteredBlocks> allBlocks() {
         requireBlocks();
-        return List.copyOf(BLOCKS.values());
+        return blockSnapshot;
     }
 
     public static Collection<RegisteredItems> allItems() {
         if (ITEMS.isEmpty()) {
             throw new IllegalStateException("Fluid transport items have not been registered yet");
         }
-        return List.copyOf(ITEMS.values());
+        return itemSnapshot;
     }
 
     public static Collection<RegisteredBlockEntities> allBlockEntities() {
         if (BLOCK_ENTITIES.isEmpty()) {
             throw new IllegalStateException("Fluid transport block entities have not been registered yet");
         }
-        return List.copyOf(BLOCK_ENTITIES.values());
+        return entitySnapshot;
     }
 
     private static BlockBehaviour.Properties pipeProperties() {

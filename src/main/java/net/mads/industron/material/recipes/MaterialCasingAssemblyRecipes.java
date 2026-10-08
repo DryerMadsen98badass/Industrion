@@ -4,6 +4,7 @@ import net.mads.industron.material.IndustrialMaterial;
 import net.mads.industron.material.MaterialPart;
 import net.mads.industron.recipe.recipetypes.assembly.AssemblyRecipeDefinition;
 import net.mads.industron.recipe.recipetypes.assembly.AssemblyRequirement;
+import net.mads.industron.recipe.recipes.assembly.WorkbenchLevels;
 import net.mads.industron.registry.BlockRegistry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.Block;
@@ -32,20 +33,21 @@ public final class MaterialCasingAssemblyRecipes {
 
         AssemblyRecipeDefinition.Builder builder = AssemblyRecipeDefinition
                 .recipe("material/recipes/" + generated.registryName())
+                .level(WorkbenchLevels.forTier(material.tier()))
                 .baseBlockInput(resolveMaterialBlock(material, definition.baseBlockInput()));
 
         for (CasingDefinition.Input input : definition.inputs()) {
             switch (input.kind()) {
                 case MATERIAL -> {
-                    if (input.metalOverride() == null) builder.input(input.material(), material, input.count());
-                    else builder.input(input.material(), input.metalOverride(), input.count());
+                    if (input.materialOverride() == null) builder.input(input.material(), material, input.count());
+                    else builder.input(input.material(), input.materialOverride(), input.count());
                 }
                 case COMPONENT -> {
-                    if (input.metalOverride() == null) builder.input(input.component(), material, input.count());
-                    else builder.input(input.component(), input.metalOverride(), input.count());
+                    if (input.materialOverride() == null) builder.input(input.component(), material, input.count());
+                    else builder.input(input.component(), input.materialOverride(), input.count());
                 }
                 case ITEM -> builder.input(input.itemId().toString(), input.count());
-                case TOOL -> builder.input(input.tool());
+                case TOOL -> builder.tool(input.tool(), input.count());
                 case WAIT -> builder.waitTicks(input.waitTicks());
             }
 

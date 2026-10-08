@@ -4,6 +4,9 @@ import net.mads.industron.recipe.recipetypes.assembly.AssemblyComponent;
 import net.mads.industron.recipe.recipetypes.assembly.AssemblyTools;
 import net.mads.industron.recipe.recipetypes.assembly.ComponentDefinition;
 import net.mads.industron.recipe.recipes.assembly.ComponentDefinitions;
+import net.mads.industron.recipe.recipes.assembly.ToolAssemblyRecipes;
+import net.mads.industron.recipe.recipes.assembly.ToolDefinitions;
+import net.mads.industron.tool.ToolMaterialRules;
 import net.mads.industron.validation.ValidationCode;
 import net.mads.industron.validation.ValidationCollector;
 import net.mads.industron.validation.ValidationContext;
@@ -15,7 +18,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-/** Validates the structure-only ComponentDefinitions graph. */
+/** Validates Assembly component definitions plus the dynamic tool-definition/recipe layer. */
 public final class AssemblyDefinitionValidator implements ValidationRule {
     @Override
     public void validate(ValidationContext context, ValidationCollector diagnostics) {
@@ -49,6 +52,69 @@ public final class AssemblyDefinitionValidator implements ValidationRule {
             validateSteps(definition, known, diagnostics);
             detectCycles(definition.component(), new LinkedHashSet<>(), diagnostics);
         }
+
+        validateToolDefinitions(diagnostics);
+    }
+
+
+    private static void validateToolDefinitions(ValidationCollector diagnostics) {
+        Set<String> ids = new HashSet<>();
+
+        for (var definition : ToolDefinitions.ALL) {
+            String subject = "tool:" + definition.id();
+            if (ResourceLocation.tryParse("industron:" + definition.id()) == null) {
+                diagnostics.error(
+                        ValidationSubsystem.ASSEMBLY,
+                        ValidationCode.INVALID_ID,
+                        subject,
+                        "Tool id is not a valid resource path"
+                );
+            }
+            if (!ids.add(definition.id())) {
+                diagnostics.error(
+                        ValidationSubsystem.ASSEMBLY,
+                        ValidationCode.DUPLICATE_ID,
+                        subject,
+                        "Duplicate tool definition id"
+                );
+            }
+
+            for (var slot : definition.parts()) {
+                if (ToolMaterialRules.candidates(slot.part()).isEmpty()) {
+                    diagnostics.error(
+                            ValidationSubsystem.ASSEMBLY,
+                            ValidationCode.INVALID_REFERENCE,
+                            subject,
+                            "No valid tool material exposes Material." + slot.part().name()
+                                    + " required by role '" + slot.role() + "'"
+                    );
+                }
+            }
+
+            if (definition.isAssembledTool() && definition.isFinishedToolEnabled()) {
+                boolean hasRecipe = ToolAssemblyRecipes.ALL.stream()
+                        .anyMatch(recipe -> recipe.toolOutput() == definition);
+                if (!hasRecipe) {
+                    diagnostics.error(
+                            ValidationSubsystem.ASSEMBLY,
+                            ValidationCode.INVALID_DEFINITION,
+                            subject,
+                            "Assembled tool has no ToolAssemblyRecipes route"
+                    );
+                }
+            }
+        }
+
+        for (var recipe : ToolAssemblyRecipes.ALL) {
+            if (!recipe.hasDynamicToolOutput()) {
+                diagnostics.error(
+                        ValidationSubsystem.ASSEMBLY,
+                        ValidationCode.INVALID_DEFINITION,
+                        "assembly:" + recipe.id(),
+                        "Tool assembly recipe must have a dynamic tool output"
+                );
+            }
+        }
     }
 
     private static void validateSteps(
@@ -60,6 +126,7 @@ public final class AssemblyDefinitionValidator implements ValidationRule {
 
         boolean hasRepresentative = definition.steps().stream().anyMatch(step ->
                 step.kind() == ComponentDefinition.StepKind.MATERIAL
+                        || step.kind() == ComponentDefinition.StepKind.PLANT_PART
                         || step.kind() == ComponentDefinition.StepKind.ITEM
         );
         if (!hasRepresentative) {
@@ -67,18 +134,18 @@ public final class AssemblyDefinitionValidator implements ValidationRule {
                     ValidationSubsystem.COMPONENT,
                     ValidationCode.INVALID_DEFINITION,
                     subject,
-                    "Component needs a direct Material or exact item input to represent it in JEI"
+                    "Component needs a direct Material, PlantPart, or exact item input to represent it in JEI"
             );
         }
 
         for (ComponentDefinition.Step step : definition.steps()) {
             if (!step.relativeRequirements().isEmpty()
-                    && (step.metalOverride() == null || !step.metalOverride().isAny())) {
+                    && (step.materialOverride() == null || !step.materialOverride().isAny())) {
                 diagnostics.error(
                         ValidationSubsystem.ASSEMBLY,
                         ValidationCode.INVALID_DEFINITION,
                         subject,
-                        "Relative component stat requirements are only valid on inputAny(...) / Metal.ANY steps"
+                        "Relative component stat requirements are only valid on inputAny(...) / MaterialType.ANY steps"
                 );
             }
 
@@ -92,10 +159,10 @@ public final class AssemblyDefinitionValidator implements ValidationRule {
                                 "Missing ComponentDefinition for Component." + step.component().id().toUpperCase(java.util.Locale.ROOT)
                         );
                     }
-                    validateMetalOverride(step, subject, diagnostics);
+                    validateMaterialOverride(step, subject, diagnostics);
                 }
                 case TOOL -> {
-                    if (AssemblyTools.all().stream().noneMatch(tool -> tool.type().equals(step.tool()))) {
+                    if (!AssemblyTools.hasType(step.tool())) {
                         diagnostics.error(
                                 ValidationSubsystem.ASSEMBLY,
                                 ValidationCode.INVALID_REFERENCE,
@@ -104,22 +171,22 @@ public final class AssemblyDefinitionValidator implements ValidationRule {
                         );
                     }
                 }
-                case MATERIAL -> validateMetalOverride(step, subject, diagnostics);
-                case ITEM, WAIT -> {
-                    // Registry ids are validated after registry construction; waits validate in the builder.
+                case MATERIAL -> validateMaterialOverride(step, subject, diagnostics);
+                case PLANT_PART, ITEM, WAIT -> {
+                    // Plant-part/item availability is validated after registry construction; waits validate in the builder.
                 }
             }
         }
     }
 
-    private static void validateMetalOverride(
+    private static void validateMaterialOverride(
             ComponentDefinition.Step step,
             String subject,
             ValidationCollector diagnostics
     ) {
-        if (step.metalOverride() == null || step.metalOverride().isAny()) return;
+        if (step.materialOverride() == null || !step.materialOverride().isFixed()) return;
         try {
-            step.metalOverride().resolve();
+            step.materialOverride().resolve();
         } catch (IllegalStateException exception) {
             diagnostics.error(
                     ValidationSubsystem.ASSEMBLY,

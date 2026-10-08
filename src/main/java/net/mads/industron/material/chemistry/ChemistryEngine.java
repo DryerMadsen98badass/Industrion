@@ -8,6 +8,7 @@ import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -35,16 +36,20 @@ public final class ChemistryEngine {
     );
 
     public MaterialAnalysis analyze(MaterialSnapshot material, Map<String, MaterialSnapshot> registry) {
+        // From this point onward every classifier/effect/ProcessPlan sees the same explicit-or-generated graph.
+        material = EffectiveChemicalStructure.apply(material, registry);
         List<ChemistryDiagnostic> diagnostics = new ArrayList<>();
         Map<String, Double> values = new LinkedHashMap<>(material.properties());
         Set<MaterialClassification> kinds = EnumSet.noneOf(MaterialClassification.class);
         kinds.addAll(material.classifications());
 
-        deriveMissingBaseProperties(values);
-
         if (material.composition().isEmpty()) {
+            deriveMissingBaseProperties(values);
             kinds.add(MaterialClassification.ELEMENT);
         } else {
+            // Blend real component properties first. Derived chemistry-only values (for example
+            // polarity/catalytic activity) must be calculated from that blend afterwards; deriving
+            // them before composition would freeze missing values at zero and prevent correct routes.
             blendComponents(material, registry, values, diagnostics);
             deriveMissingBaseProperties(values);
             classify(material, registry, values, kinds, diagnostics);
@@ -134,7 +139,9 @@ public final class ChemistryEngine {
             for (CompositionEntry component : material.composition()) {
                 MaterialSnapshot child = registry.get(component.substanceId());
                 if (child == null) continue;
-                weighted += child.property(property) * component.amount();
+                Double childValue = child.properties().get(property);
+                if (childValue == null || !Double.isFinite(childValue)) continue;
+                weighted += childValue * component.amount();
                 found += component.amount();
             }
             if (found > 0 && !values.containsKey(property)) {
@@ -226,15 +233,19 @@ public final class ChemistryEngine {
             )));
         }
 
+        Optional<ChemicalStructure> effectiveStructure = material.structure();
         validateStructureComposition(material, registry, diagnostics);
+        if (material.structure().isPresent()) {
+            diagnostics.addAll(ChemicalStructureValidator.validate(material, registry).diagnostics());
+        }
 
-        if (material.structure().isPresent()
-                && material.structure().get().topology() == ChemicalStructure.Topology.DISCRETE_MOLECULE) {
-            applyMolecularThermalEffects(material, registry, values, material.structure().get());
+        if (effectiveStructure.isPresent()
+                && effectiveStructure.get().topology() == ChemicalStructure.Topology.DISCRETE_MOLECULE) {
+            applyMolecularThermalEffects(material, registry, values, effectiveStructure.get());
         }
 
         if (kinds.contains(MaterialClassification.POLYMER)) {
-            ChemicalStructure structure = material.structure().orElse(
+            ChemicalStructure structure = effectiveStructure.orElse(
                     ChemicalStructure.builder(ChemicalStructure.Topology.POLYMER_CHAIN)
                             .repeatUnit(material.id(), 1)
                             .chainFlexibility(0.5)
@@ -267,14 +278,14 @@ public final class ChemistryEngine {
             values.put("hardness", nonNegative(values.getOrDefault("hardness", 0.0) + 8));
         }
 
-        material.structure().ifPresent(structure -> {
+        effectiveStructure.ifPresent(structure -> {
             if (structure.netCharge() != 0 && !kinds.contains(MaterialClassification.IONIC_COMPOUND)) {
                 diagnostics.add(new ChemistryDiagnostic(
                         ChemistryStatus.CHANGE_REQUIRED,
                         material.id(),
                         "UNBALANCED_CHARGE",
-                        "Explicit structure has net charge " + structure.netCharge() + ".",
-                        List.of("Balance formal charges or explicitly model the material as an ionic compound."),
+                        "Effective structure has net charge " + structure.netCharge() + ".",
+                        List.of("Balance formal charges or model the material as an ionic compound."),
                         ""
                 ));
             }
@@ -330,14 +341,21 @@ public final class ChemistryEngine {
 
         double boiling = values.getOrDefault("boilingpoint", Double.NaN);
         double melting = values.getOrDefault("meltingpoint", Double.NaN);
+
+        // Thermal transition points are authoritative whenever they are known. Viscosity describes
+        // how a fluid flows; it must never turn a material whose melting point is above ambient
+        // temperature into a liquid. This is especially important for network/organic compounds.
         if (Double.isFinite(boiling) && boiling <= 20) return ChemistryPhase.GAS;
-        if (Double.isFinite(melting) && Double.isFinite(boiling) && melting <= 20 && boiling > 20) {
+        if (Double.isFinite(melting) && melting > 20) return ChemistryPhase.SOLID;
+        if (Double.isFinite(melting) && melting <= 20
+                && Double.isFinite(boiling) && boiling > 20) {
             return ChemistryPhase.LIQUID;
         }
 
         double volatility = values.getOrDefault("volatility", 0.0);
         if (volatility >= 72) return ChemistryPhase.GAS;
-        if (volatility >= 22 || values.getOrDefault("viscosity", 0.0) > 18) return ChemistryPhase.LIQUID;
+        if (Double.isFinite(melting) && melting <= 20) return ChemistryPhase.LIQUID;
+        if (volatility >= 22) return ChemistryPhase.LIQUID;
         return ChemistryPhase.SOLID;
     }
 
@@ -370,6 +388,9 @@ public final class ChemistryEngine {
         // otherwise let thermal-property inference decide.
         if (liquid > 0 && liquid >= solid && liquid >= gas) return ChemistryPhase.LIQUID;
         if (gas > 0 && gas > solid) return ChemistryPhase.GAS;
+
+        int representedPhases = (gas > 0 ? 1 : 0) + (liquid > 0 ? 1 : 0) + (solid > 0 ? 1 : 0);
+        if (representedPhases > 1) return ChemistryPhase.MIXED;
         return ChemistryPhase.UNKNOWN;
     }
 
@@ -544,7 +565,7 @@ public final class ChemistryEngine {
                     material.id(),
                     "STRUCTURE_COMPOSITION_MISMATCH",
                     "ChemicalStructure formula " + actual + " does not match .contains(...) composition " + expected + ".",
-                    List.of("Make the explicit atom graph and .contains(...) use the same atom counts."),
+                    List.of("Make the effective atom graph and .contains(...) use the same atom counts."),
                     ""
             ));
         }
@@ -595,9 +616,9 @@ public final class ChemistryEngine {
 
         int calculated = MaterialPropertyCalculator.tierIndexForBandedValue(score);
 
-        // A compound may be worse than its ingredients, but progression should not accidentally become
-        // lower than one tier below the strongest ingredient without an explicit future override.
-        int floor = Math.max(0, componentTierFloor - 1);
+        // Compound processing may become more demanding than its ingredients, but it must never
+        // become a lower progression tier than the strongest declared component by accident.
+        int floor = Math.max(0, componentTierFloor);
         return Math.min(MachineTier.ALL.size() - 1, Math.max(calculated, floor));
     }
 

@@ -145,6 +145,35 @@ public final class StructureMaterialGenerator {
                     MaterialPart.WINDOW, null);
         }
 
+        // Shared utility forms are part of every WoodMaterial.  A concrete .existing(...) mapping
+        // removes only that form from generation; otherwise the common template is used.
+        add(result, material, MaterialPart.BOOKSHELF.registryName(material), material.displayName() + " Bookshelf",
+                StructureBlockDefinition.Shape.BOOKSHELF, "bookshelf/bookshelf.png", null, null, null, null,
+                MaterialPart.BOOKSHELF, MaterialPart.PLANKS);
+        addWithTextures(result, material, MaterialPart.BARREL.registryName(material), material.displayName() + " Barrel",
+                StructureBlockDefinition.Shape.BARREL, "barrel/barrel_side.png",
+                "barrel/barrel_top.png", "barrel/barrel_bottom.png", null, null,
+                MaterialPart.BARREL, null, Map.of("open_top", "barrel/barrel_top_open.png"));
+        addWithTextures(result, material, MaterialPart.CHISELED_BOOKSHELF.registryName(material), material.displayName() + " Chiseled Bookshelf",
+                StructureBlockDefinition.Shape.CHISELED_BOOKSHELF, "chiseled_bookshelf/chiseled_bookshelf_empty.png",
+                "chiseled_bookshelf/chiseled_bookshelf_top.png", null, null, null,
+                MaterialPart.CHISELED_BOOKSHELF, null, Map.of(
+                        "occupied", "chiseled_bookshelf/chiseled_bookshelf_occupied.png",
+                        "side", "chiseled_bookshelf/chiseled_bookshelf_side.png"
+                ));
+        addWithTextures(result, material, MaterialPart.CHEST.registryName(material), material.displayName() + " Chest",
+                StructureBlockDefinition.Shape.CHEST, "chest/normal.png", null, null, null, null,
+                MaterialPart.CHEST, null, Map.of(
+                        "left", "chest/normal_left.png",
+                        "right", "chest/normal_right.png"
+                ));
+        add(result, material, MaterialPart.LADDER.registryName(material), material.displayName() + " Ladder",
+                StructureBlockDefinition.Shape.LADDER, "ladder/ladder.png", null, null, null, null,
+                MaterialPart.LADDER, null);
+        add(result, material, MaterialPart.SHAFT.registryName(material), material.displayName() + " Shaft",
+                StructureBlockDefinition.Shape.SHAFT, "shaft/axis.png", "shaft/axis_top.png",
+                "shaft/axis_top.png", null, null, MaterialPart.SHAFT, null);
+
         return result;
     }
 
@@ -192,6 +221,14 @@ public final class StructureMaterialGenerator {
                 MaterialPart.COBBLED_WALL,
                 cobbledStoneTextures(),
                 StructureBlockDefinition.Shape.CUBE
+        );
+
+        addSingleStoneBlock(
+                result,
+                material,
+                MaterialPart.GRAVEL,
+                gravelStoneTextures(),
+                StructureBlockDefinition.Shape.FALLING
         );
 
         addStoneFamily(
@@ -300,6 +337,10 @@ public final class StructureMaterialGenerator {
 
     private static StoneTextures cobbledStoneTextures() {
         return StoneTextures.all("cobblestone.png");
+    }
+
+    private static StoneTextures gravelStoneTextures() {
+        return StoneTextures.all("gravel.png");
     }
 
     private static StoneTextures polishedStoneTextures(StoneModel model) {
@@ -568,6 +609,30 @@ public final class StructureMaterialGenerator {
                 smoothId, MaterialPart.SMOOTH_STAIRS, MaterialPart.SMOOTH_BLOCK);
 
         return result;
+    }
+
+    private static void addWithTextures(
+            List<StructureBlockDefinition> result,
+            StructureMaterial material,
+            String registryName,
+            String displayName,
+            StructureBlockDefinition.Shape shape,
+            String textureFile,
+            String topTextureFile,
+            String bottomTextureFile,
+            String itemTextureFile,
+            String baseRegistryName,
+            MaterialPart part,
+            MaterialPart basePart,
+            Map<String, String> textureFiles
+    ) {
+        result.add(new StructureBlockDefinition(
+                material, registryName, displayName, shape, textureFile,
+                Optional.ofNullable(topTextureFile), Optional.ofNullable(bottomTextureFile),
+                Optional.ofNullable(itemTextureFile), Optional.ofNullable(baseRegistryName),
+                Optional.ofNullable(part), Optional.ofNullable(basePart),
+                StructureBlockDefinition.ModelKind.DEFAULT, Optional.empty(), textureFiles
+        ));
     }
 
     private static void add(

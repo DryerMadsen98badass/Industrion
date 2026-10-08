@@ -1,119 +1,82 @@
 package net.mads.industron.data;
 
-import net.mads.industron.machine.machines.electric.multiblock.MultiblockControllerDefinition;
+import net.mads.industron.machine.MachinePortBlock;
+import net.mads.industron.machine.interaction.BlockLoot;
+import net.mads.industron.machine.machines.electric.multiblock.MultiblockControllerBlock;
 import net.mads.industron.registry.BlockRegistry;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.data.CachedOutput;
+import net.minecraft.data.DataProvider;
 import net.minecraft.data.PackOutput;
-import net.minecraft.data.loot.BlockLootSubProvider;
-import net.minecraft.data.loot.LootTableProvider;
-import net.minecraft.world.flag.FeatureFlags;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Stream;
 
-public final class MultiblockControlerLootTableProvider
-        extends LootTableProvider {
+/**
+ * Multiblock controllers and machine ports never drop their assembled block item.
+ * Their exact salvage is deferred until their real component recipes are available.
+ */
+public final class MultiblockControlerLootTableProvider implements DataProvider {
+    private final PackOutput.PathProvider lootTables;
 
     public MultiblockControlerLootTableProvider(
             PackOutput output,
             CompletableFuture<HolderLookup.Provider> lookupProvider
     ) {
-        super(
+        this.lootTables = output.createPathProvider(PackOutput.Target.DATA_PACK, "loot_table/blocks");
+    }
+
+    @Override
+    public CompletableFuture<?> run(CachedOutput output) {
+        List<CompletableFuture<?>> futures = new ArrayList<>();
+
+        for (var holder : BlockRegistry.getAllMultiblockControllers()) {
+            MultiblockControllerBlock block = holder.get();
+            saveController(futures, output, block);
+        }
+        for (var holder : BlockRegistry.getAllMachinePorts()) {
+            MachinePortBlock block = holder.get();
+            save(futures, output, block);
+        }
+        for (var holder : BlockRegistry.getAllStaticMachinePorts()) {
+            MachinePortBlock block = holder.get();
+            save(futures, output, block);
+        }
+
+        return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
+    }
+
+
+    private void saveController(
+            List<CompletableFuture<?>> futures,
+            CachedOutput output,
+            MultiblockControllerBlock block
+    ) {
+        ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(block);
+        futures.add(DataProvider.saveStable(
                 output,
-                Set.of(),
-                List.of(
-                        new SubProviderEntry(
-                                MultiblockControllerBlockLoot::new,
-                                LootContextParamSets.BLOCK
-                        ),
-                        new SubProviderEntry(
-                                MachinePortBlockLoot::new,
-                                LootContextParamSets.BLOCK
-                        )
-                ),
-                lookupProvider
-        );
+                block.definition().hasLootOverride()
+                        ? SalvageLootTable.from(block.definition().loot(), blockId)
+                        : SalvageLootTable.empty(),
+                lootTables.json(blockId)
+        ));
     }
 
-    private static final class MultiblockControllerBlockLoot
-            extends BlockLootSubProvider {
-
-        private MultiblockControllerBlockLoot(
-                HolderLookup.Provider lookupProvider
-        ) {
-            super(
-                    Set.of(),
-                    FeatureFlags.REGISTRY.allFlags(),
-                    lookupProvider
-            );
-        }
-
-        @Override
-        protected void generate() {
-            for (MultiblockControllerDefinition controller :
-                    MultiblockControllerDefinition.all()) {
-
-                Block block = BuiltInRegistries.BLOCK.get(
-                        controller.id()
-                );
-
-                if (block == Blocks.AIR) {
-                    throw new IllegalStateException(
-                            "No registered controller block was found for "
-                                    + controller.id()
-                    );
-                }
-
-                dropSelf(block);
-            }
-        }
-
-        @Override
-        protected Iterable<Block> getKnownBlocks() {
-            return MultiblockControllerDefinition.all()
-                    .stream()
-                    .map(controller ->
-                            BuiltInRegistries.BLOCK.get(
-                                    controller.id()
-                            )
-                    )
-                    .filter(block -> block != Blocks.AIR)
-                    .toList();
-        }
-    }
-    private static final class MachinePortBlockLoot
-            extends BlockLootSubProvider {
-
-        private MachinePortBlockLoot(
-                HolderLookup.Provider lookupProvider
-        ) {
-            super(
-                    Set.of(),
-                    FeatureFlags.REGISTRY.allFlags(),
-                    lookupProvider
-            );
-        }
-
-        @Override
-        protected void generate() {
-            getKnownBlocks().forEach(this::dropSelf);
-        }
-
-        @Override
-        protected Iterable<Block> getKnownBlocks() {
-            return Stream.concat(
-                            BlockRegistry.getAllMachinePorts().stream(),
-                            BlockRegistry.getAllStaticMachinePorts().stream()
-                    )
-                    .map(holder -> (Block) holder.get())
-                    .toList();
-        }
+    private void save(
+            List<CompletableFuture<?>> futures,
+            CachedOutput output,
+            Block block
+    ) {
+        ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(block);
+        futures.add(DataProvider.saveStable(output, SalvageLootTable.empty(), lootTables.json(blockId)));
     }
 
+    @Override
+    public String getName() {
+        return "Industron Multiblock Controller And Port Salvage Loot Tables";
+    }
 }

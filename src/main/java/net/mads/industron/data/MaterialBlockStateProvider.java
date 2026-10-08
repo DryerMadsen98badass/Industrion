@@ -23,6 +23,7 @@ import net.minecraft.world.level.block.PressurePlateBlock;
 import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.WallBlock;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.neoforged.neoforge.client.model.generators.BlockModelBuilder;
 import net.neoforged.neoforge.client.model.generators.ConfiguredModel;
 import net.neoforged.neoforge.client.model.generators.BlockStateProvider;
@@ -618,11 +619,24 @@ public class MaterialBlockStateProvider extends BlockStateProvider {
             String id,
             ResourceLocation texture
     ) {
-        return models()
+        // Keep the final model self-contained. Generated models that inherit another
+        // generated template can load as Minecraft's missing-model cube when that
+        // template is not present in the active client resource output.
+        BlockModelBuilder model = models()
                 .getBuilder(id)
-                .parent(tintedCubeTemplate())
+                .parent(new ModelFile.UncheckedModelFile(
+                        ResourceLocation.withDefaultNamespace("block/block")
+                ))
                 .texture("all", texture)
                 .texture("particle", texture);
+
+        model.element()
+                .from(0, 0, 0)
+                .to(16, 16, 16)
+                .allFaces((direction, face) -> face.texture("#all")
+                        .cullface(direction)
+                        .tintindex(0));
+        return model;
     }
 
     private BlockModelBuilder createTintedCustomCubeModel(
@@ -646,11 +660,25 @@ public class MaterialBlockStateProvider extends BlockStateProvider {
             ResourceLocation texture,
             ModelBox... boxes
     ) {
-        return models()
+        // Slabs, stairs and walls must not depend on a second generated template
+        // model. Write their geometry, texture and tint index directly into the
+        // concrete model so the model remains valid on its own at runtime.
+        BlockModelBuilder model = models()
                 .getBuilder(id)
-                .parent(tintedShapeTemplate(boxes))
+                .parent(new ModelFile.UncheckedModelFile(
+                        ResourceLocation.withDefaultNamespace("block/block")
+                ))
                 .texture("all", texture)
                 .texture("particle", texture);
+
+        for (ModelBox box : boxes) {
+            model.element()
+                    .from(box.fromX(), box.fromY(), box.fromZ())
+                    .to(box.toX(), box.toY(), box.toZ())
+                    .allFaces((direction, face) -> face.texture("#all")
+                            .tintindex(0));
+        }
+        return model;
     }
 
     private ModelFile tintedCubeTemplate() {
@@ -980,7 +1008,7 @@ public class MaterialBlockStateProvider extends BlockStateProvider {
         ResourceLocation overlay = MaterialTextures.blockOverlayTexture(material, texturePart).orElse(oreTexture);
 
         BlockModelBuilder baseStone = models().nested()
-                .parent(new ModelFile.UncheckedModelFile(host.blockModel()))
+                .parent(new ModelFile.UncheckedModelFile(host.blockModel(material)))
                 .renderType("minecraft:solid");
 
         BlockModelBuilder oreLayer = models().nested()
@@ -1013,7 +1041,7 @@ public class MaterialBlockStateProvider extends BlockStateProvider {
                 continue;
             }
 
-            if (!part.isBlock()) {
+            if (!part.isBlock() || part == MaterialPart.FIREBOX) {
                 continue;
             }
 
@@ -1024,32 +1052,96 @@ public class MaterialBlockStateProvider extends BlockStateProvider {
                     )
                     .get();
 
-            if (material.hasCustomPartTexture(part)) {
-                simpleBlockWithItem(
-                        block,
-                        models().cubeAll(
-                                part.registryName(material),
-                                material.customPartTexture(part)
-                        )
-                );
-
+            if (part == MaterialPart.SHAFT) {
+                ResourceLocation side = modLoc("block/material_sets/shaft/axis");
+                ResourceLocation end = modLoc("block/material_sets/shaft/axis_top");
+                registerShaftBlock(part.registryName(material), block, side, end, true);
                 continue;
             }
 
-            Optional<ResourceLocation> baseTexture = MaterialTextures.blockTexture(material, part);
+            Optional<ResourceLocation> baseTexture = material.hasCustomPartTexture(part)
+                    ? Optional.of(material.customPartTexture(part))
+                    : MaterialTextures.blockTexture(material, part);
             if (baseTexture.isEmpty()) {
                 // The block remains registered even when no visual variant exists yet.
                 continue;
             }
-            ModelFile materialBlockModel = materialBlockModel(material, part, baseTexture.get());
 
-            simpleBlockWithItem(
-                    block,
-                    materialBlockModel
-            );
+            ResourceLocation texture = baseTexture.get();
+            if (part == MaterialPart.BRICK_SLAB) {
+                registerSlab(part.registryName(material), (SlabBlock) block, texture);
+                continue;
+            }
+            if (part == MaterialPart.BRICK_STAIRS) {
+                registerStairs(part.registryName(material), (StairBlock) block, texture);
+                continue;
+            }
+            if (part == MaterialPart.BRICK_WALL) {
+                registerWall(part.registryName(material), (WallBlock) block, texture);
+                continue;
+            }
+
+            if (material.hasCustomPartTexture(part)) {
+                simpleBlockWithItem(block, models().cubeAll(part.registryName(material), texture));
+                continue;
+            }
+
+            ModelFile materialBlockModel = materialBlockModel(material, part, texture);
+            simpleBlockWithItem(block, materialBlockModel);
         }
     }
 
+
+    private void registerShaftBlock(
+            String name,
+            Block block,
+            ResourceLocation side,
+            ResourceLocation end,
+            boolean tinted
+    ) {
+        // Match Create's kinetic-model split: the blockstate model itself contributes no
+        // visible shaft geometry. The visible shaft is a dedicated partial model rendered
+        // by Flywheel / MaterialShaftRenderer. Keeping the particle texture here preserves
+        // normal break particles while avoiding a second static shaft in the world.
+        BlockModelBuilder staticModel = models()
+                .getBuilder(name)
+                .parent(new ModelFile.UncheckedModelFile(
+                        ResourceLocation.withDefaultNamespace("block/block")
+                ))
+                .texture("particle", side);
+
+        BlockModelBuilder rotatingModel = models()
+                .getBuilder(name + "_rotating")
+                .parent(new ModelFile.UncheckedModelFile(
+                        ResourceLocation.withDefaultNamespace("block/block")
+                ))
+                .texture("side", side)
+                .texture("end", end)
+                .texture("particle", side);
+
+        rotatingModel.element()
+                .from(6, 0, 6)
+                .to(10, 16, 10)
+                .allFaces((direction, face) -> {
+                    boolean cap = direction == Direction.UP || direction == Direction.DOWN;
+                    face.texture(cap ? "#end" : "#side");
+                    if (cap) {
+                        face.uvs(6, 6, 10, 10);
+                    } else {
+                        face.uvs(6, 0, 10, 16);
+                    }
+                    if (tinted) {
+                        face.tintindex(0);
+                    }
+                });
+
+        getVariantBuilder(block).forAllStates(state -> ConfiguredModel.builder()
+                .modelFile(staticModel)
+                .build());
+
+        // Inventory/item rendering must remain visible.
+        simpleBlockItem(block, rotatingModel);
+    }
 
     private BlockModelBuilder materialBlockModel(
             IndustrialMaterial material,
@@ -1058,6 +1150,36 @@ public class MaterialBlockStateProvider extends BlockStateProvider {
     ) {
         String name = part.registryName(material);
         Optional<ResourceLocation> secondaryTexture = MaterialTextures.blockSecondaryTexture(material, part);
+
+        // Generate frame/raw-block geometry directly in each material model. These two parts used
+        // to inherit a generated template model; when that parent was absent from the active data
+        // output Minecraft replaced the complete model with the purple/black missing-texture cube.
+        // Direct elements also make both the block model and its generated item model self-contained.
+        if (part == MaterialPart.BLOCK || part == MaterialPart.FRAME || part == MaterialPart.RAW_BLOCK
+                || part == MaterialPart.CLAY_BLOCK || part == MaterialPart.BRICKS) {
+            BlockModelBuilder model = models()
+                    .getBuilder(name)
+                    .parent(new ModelFile.UncheckedModelFile(
+                            ResourceLocation.withDefaultNamespace("block/block")
+                    ))
+                    .texture("base", baseTexture)
+                    .texture("particle", baseTexture);
+
+            // BLOCK textures commonly have a transparent secondary/highlight layer. Keep the
+            // concrete generated model self-contained and render that second cube as cutout,
+            // rather than inheriting the generated two-layer template that may not be present
+            // in the active runtime resource output.
+            if (part == MaterialPart.BLOCK || part == MaterialPart.FRAME || part == MaterialPart.RAW_BLOCK) {
+                model.renderType("minecraft:cutout");
+            }
+
+            fullCube(model, "#base", 0);
+            secondaryTexture.ifPresent(texture -> {
+                model.texture("secondary", texture);
+                fullCube(model, "#secondary", 1);
+            });
+            return model;
+        }
 
         BlockModelBuilder model = models()
                 .getBuilder(name)

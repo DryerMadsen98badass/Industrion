@@ -111,10 +111,35 @@ public final class StructureSetResolver {
             return Optional.of(new ResolvedTemplate(direct.get(), Optional.empty()));
         }
 
+        if (model instanceof WoodModel) {
+            Optional<Path> common = commonWoodSourcePath(safeFile);
+            if (common.isPresent()) {
+                return Optional.of(new ResolvedTemplate(common.get(), Optional.empty()));
+            }
+        }
+
         if (model instanceof StoneModel stoneModel) {
             return stoneFallbackSourceTemplate(stoneModel, safeFile);
         }
 
+        return Optional.empty();
+    }
+
+
+    /**
+     * Shared wood forms (bookshelf, barrel, ladder, bowl, chest/boat artwork, ... ) live under
+     * structure_sets/wood/common.  A concrete wood family may still provide a file with the same
+     * relative name; directSourcePath above always wins.  This keeps the lookup data-driven and
+     * avoids special-casing Oak/Spruce/etc. in texture generation.
+     */
+    private static Optional<Path> commonWoodSourcePath(String safeFile) {
+        for (Path assetRoot : RESOURCE_ROOTS) {
+            Path directory = assetRoot.resolve(ROOT).resolve("wood/common").normalize();
+            Path path = directory.resolve(safeFile).normalize();
+            if (path.startsWith(directory) && Files.isRegularFile(path)) {
+                return Optional.of(path);
+            }
+        }
         return Optional.empty();
     }
 
@@ -132,7 +157,7 @@ public final class StructureSetResolver {
 
     /**
      * Standard stone roles are guaranteed even when the selected Minecraft/Create family
-     * does not ship a matching sprite. Missing cobbled/polished templates therefore reuse
+     * does not ship a matching sprite. Missing cobbled/gravel/polished templates therefore reuse
      * a neutral grayscale shape and are tinted with the target StoneMaterial color later.
      */
     private static Optional<ResolvedTemplate> stoneFallbackSourceTemplate(StoneModel model, String safeFile) {
@@ -144,6 +169,10 @@ public final class StructureSetResolver {
 
         if (fileName.equals("cobblestone.png")) {
             return sharedStoneTemplate("cobblestone.png");
+        }
+
+        if (fileName.equals("gravel.png")) {
+            return sharedStoneTemplate("gravel.png");
         }
 
         if (fileName.startsWith("polished_")) {

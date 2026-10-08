@@ -10,19 +10,25 @@ import net.mads.industron.machine.SingleBlockMachinePower;
 import net.minecraft.data.CachedOutput;
 import net.minecraft.data.DataProvider;
 import net.minecraft.data.PackOutput;
+import net.neoforged.neoforge.common.data.ExistingFileHelper;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 public final class SingleBlockMachineModelProvider implements DataProvider {
     private static final String MUFFLER_TEXTURE = Industron.MOD_ID + ":block/machines/ino/muffler";
 
     private final PackOutput output;
+    private final StoneTextureResolver stoneTextureResolver;
+    private final Map<SingleBlockDefinition, StoneTextureResolver.ExistingTextures> stoneTextureCache = new IdentityHashMap<>();
 
-    public SingleBlockMachineModelProvider(PackOutput output) {
+    public SingleBlockMachineModelProvider(PackOutput output, ExistingFileHelper existingFileHelper) {
         this.output = output;
+        this.stoneTextureResolver = new StoneTextureResolver(existingFileHelper);
     }
 
     @Override
@@ -35,19 +41,11 @@ public final class SingleBlockMachineModelProvider implements DataProvider {
 
         for (SingleBlockMachineInstance instance : MachineDefinition.INSTANCES) {
             String name = instance.registryName();
-            futures.add(DataProvider.saveStable(cache, blockstate(name), blockstates.resolve(name + ".json")));
+            futures.add(DataProvider.saveStable(cache, blockstate(instance), blockstates.resolve(name + ".json")));
             futures.add(DataProvider.saveStable(cache, blockModel(instance, false, 0), blockModels.resolve(name + ".json")));
             futures.add(DataProvider.saveStable(cache, blockModel(instance, true, 0), blockModels.resolve(name + "_active.json")));
 
-            for (int frame = 0; frame <= 9; frame++) {
-                futures.add(DataProvider.saveStable(
-                        cache,
-                        blockModel(instance, true, frame),
-                        blockModels.resolve(name + "_active_" + frame + ".json")
-                ));
-            }
-
-            futures.add(DataProvider.saveStable(cache, itemModel(name), itemModels.resolve(name + ".json")));
+            futures.add(DataProvider.saveStable(cache, itemModel(instance), itemModels.resolve(name + ".json")));
         }
 
         return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
@@ -58,22 +56,32 @@ public final class SingleBlockMachineModelProvider implements DataProvider {
         return "Industron Singleblock Machine Models";
     }
 
-    private static JsonObject blockstate(String name) {
+    private static JsonObject blockstate(SingleBlockMachineInstance instance) {
+        String name = instance.registryName();
         JsonObject variants = new JsonObject();
-        addFacingVariants(variants, name, "north", 0);
-        addFacingVariants(variants, name, "east", 90);
-        addFacingVariants(variants, name, "south", 180);
-        addFacingVariants(variants, name, "west", 270);
+        addFacingVariants(variants, instance, "north", 0);
+        addFacingVariants(variants, instance, "east", 90);
+        addFacingVariants(variants, instance, "south", 180);
+        addFacingVariants(variants, instance, "west", 270);
 
         JsonObject root = new JsonObject();
         root.add("variants", variants);
         return root;
     }
 
-    private static void addFacingVariants(JsonObject variants, String name, String facing, int rotation) {
-        for (int frame = 0; frame <= 9; frame++) {
-            addVariant(variants, "facing=" + facing + ",active=false,overlay_frame=" + frame, name, false, frame, rotation);
-            addVariant(variants, "facing=" + facing + ",active=true,overlay_frame=" + frame, name, true, frame, rotation);
+    private static void addFacingVariants(JsonObject variants, SingleBlockMachineInstance instance, String facing, int rotation) {
+        String name = instance.registryName();
+        for (int frame = 0; frame < 1; frame++) {
+            if (instance.definition().waterloggable()) {
+                for (boolean waterlogged : new boolean[]{false, true}) {
+                    String suffix = ",waterlogged=" + waterlogged;
+                    addVariant(variants, "facing=" + facing + ",active=false" + suffix, name, false, frame, rotation);
+                    addVariant(variants, "facing=" + facing + ",active=true" + suffix, name, true, frame, rotation);
+                }
+            } else {
+                addVariant(variants, "facing=" + facing + ",active=false", name, false, frame, rotation);
+                addVariant(variants, "facing=" + facing + ",active=true", name, true, frame, rotation);
+            }
         }
     }
 
@@ -103,7 +111,7 @@ public final class SingleBlockMachineModelProvider implements DataProvider {
         return frame == 0 ? "_active" : "_active_" + frame;
     }
 
-    private static JsonObject blockModel(SingleBlockMachineInstance instance, boolean active, int frame) {
+    private JsonObject blockModel(SingleBlockMachineInstance instance, boolean active, int frame) {
         String customModel = instance.definition().model();
         if (customModel != null && hasAdditionalGeometry(instance)) {
             return compositeBlockModel(instance, customModel, active, frame);
@@ -125,7 +133,8 @@ public final class SingleBlockMachineModelProvider implements DataProvider {
             addBaseGeometry(elements, instance);
             addSideOverlays(elements, instance);
 
-            if (instance.definition().power() == SingleBlockMachinePower.STEAM) {
+            if (instance.definition().power() == SingleBlockMachinePower.STEAM
+                    && instance.definition().resourceMode() == net.mads.industron.machine.SingleBlockMachineResourceMode.CONSUMES) {
                 elements.add(topMufflerOverlay());
             }
 
@@ -134,7 +143,7 @@ public final class SingleBlockMachineModelProvider implements DataProvider {
         return root;
     }
 
-    private static JsonObject compositeBlockModel(
+    private JsonObject compositeBlockModel(
             SingleBlockMachineInstance instance,
             String customModel,
             boolean active,
@@ -164,7 +173,8 @@ public final class SingleBlockMachineModelProvider implements DataProvider {
 
         JsonArray overlayElements = new JsonArray();
         addSideOverlays(overlayElements, instance);
-        if (instance.definition().power() == SingleBlockMachinePower.STEAM) {
+        if (instance.definition().power() == SingleBlockMachinePower.STEAM
+                    && instance.definition().resourceMode() == net.mads.industron.machine.SingleBlockMachineResourceMode.CONSUMES) {
             overlayElements.add(topMufflerOverlay());
         }
         overlay.add("elements", overlayElements);
@@ -180,7 +190,8 @@ public final class SingleBlockMachineModelProvider implements DataProvider {
     }
 
     private static boolean hasAdditionalGeometry(SingleBlockMachineInstance instance) {
-        if (instance.definition().power() == SingleBlockMachinePower.STEAM) {
+        if (instance.definition().power() == SingleBlockMachinePower.STEAM
+                    && instance.definition().resourceMode() == net.mads.industron.machine.SingleBlockMachineResourceMode.CONSUMES) {
             return true;
         }
         for (SingleBlockDefinition.MachineSide side : SingleBlockDefinition.MachineSide.values()) {
@@ -191,7 +202,7 @@ public final class SingleBlockMachineModelProvider implements DataProvider {
         return false;
     }
 
-    private static void addBaseTextures(JsonObject textures, SingleBlockMachineInstance instance) {
+    private void addBaseTextures(JsonObject textures, SingleBlockMachineInstance instance) {
         textures.addProperty("front_base", baseTexture(instance, SingleBlockDefinition.MachineSide.FRONT));
         textures.addProperty("back_base", baseTexture(instance, SingleBlockDefinition.MachineSide.BACK));
         textures.addProperty("left_base", baseTexture(instance, SingleBlockDefinition.MachineSide.LEFT));
@@ -200,12 +211,35 @@ public final class SingleBlockMachineModelProvider implements DataProvider {
         textures.addProperty("bottom_base", baseTexture(instance, SingleBlockDefinition.MachineSide.BOTTOM));
     }
 
-    private static String baseTexture(
+    private String baseTexture(
             SingleBlockMachineInstance instance,
             SingleBlockDefinition.MachineSide side
     ) {
-        String customTexture = instance.definition().sideTexture(side);
+        var stoneSource = instance.definition().stoneTextureSource();
+        if (stoneSource.isPresent()) {
+            StoneTextureResolver.ExistingTextures textures = stoneTextureCache.computeIfAbsent(
+                    instance.definition(),
+                    ignored -> {
+                        SingleBlockDefinition.StoneTextureSource source = stoneSource.get();
+                        return stoneTextureResolver.partTextures(
+                                        source.material(),
+                                        source.preferredPart(),
+                                        source.fallbackPart()
+                                )
+                                .orElseThrow(() -> new IllegalStateException(
+                                        "Could not resolve " + source.preferredPart() + " or "
+                                                + source.fallbackPart() + " texture for " + source.material().id()
+                                ));
+                    }
+            );
+            return switch (side) {
+                case TOP -> textures.top().toString();
+                case BOTTOM -> textures.bottom().toString();
+                case FRONT, BACK, LEFT, RIGHT -> textures.side().toString();
+            };
+        }
 
+        String customTexture = instance.definition().sideTexture(side);
         if (customTexture != null) {
             return namespaced(customTexture);
         }
@@ -248,7 +282,7 @@ public final class SingleBlockMachineModelProvider implements DataProvider {
             return idleOverlay;
         }
 
-        return activeOverlays.get(Math.floorMod(frame, activeOverlays.size()));
+        return activeOverlays.size() > 1 ? AnimatedMachineTextureProvider.texture(activeOverlays) : activeOverlays.get(0);
     }
 
     private static void addBaseGeometry(
@@ -565,9 +599,37 @@ public final class SingleBlockMachineModelProvider implements DataProvider {
         return texture.contains(":") ? texture : Industron.MOD_ID + ":" + texture;
     }
 
-    private static JsonObject itemModel(String name) {
+    private static JsonObject itemModel(SingleBlockMachineInstance instance) {
         JsonObject root = new JsonObject();
+        String name = instance.registryName();
         root.addProperty("parent", Industron.MOD_ID + ":block/" + name);
+        String definitionId = instance.definition().id();
+        if (definitionId.endsWith("_drying_rack") || definitionId.endsWith("_brick_mold")) {
+            JsonObject display = new JsonObject();
+            display.add("thirdperson_righthand", transform(75, 45, 0, 0, 2.5, 0, .375));
+            display.add("thirdperson_lefthand", transform(75, 225, 0, 0, 2.5, 0, .375));
+            display.add("firstperson_righthand", transform(0, 45, 0, 0, 0, 0, .4));
+            display.add("firstperson_lefthand", transform(0, 225, 0, 0, 0, 0, .4));
+            display.add("gui", transform(30, 225, 0, 0, 1, 0, .625));
+            display.add("ground", transform(0, 0, 0, 0, 3, 0, .25));
+            display.add("fixed", transform(0, 0, 0, 0, 0, 0, .5));
+            root.add("display", display);
+        }
         return root;
+    }
+
+    private static JsonObject transform(double rx, double ry, double rz,
+                                        double tx, double ty, double tz, double scale) {
+        JsonObject transform = new JsonObject();
+        JsonArray rotation = new JsonArray();
+        rotation.add(rx); rotation.add(ry); rotation.add(rz);
+        JsonArray translation = new JsonArray();
+        translation.add(tx); translation.add(ty); translation.add(tz);
+        JsonArray scales = new JsonArray();
+        scales.add(scale); scales.add(scale); scales.add(scale);
+        transform.add("rotation", rotation);
+        transform.add("translation", translation);
+        transform.add("scale", scales);
+        return transform;
     }
 }

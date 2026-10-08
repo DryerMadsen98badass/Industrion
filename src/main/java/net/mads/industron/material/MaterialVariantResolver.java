@@ -37,7 +37,7 @@ public final class MaterialVariantResolver {
         VariantLocation chosen = choose(variants, material, part);
         return Optional.of(ResourceLocation.fromNamespaceAndPath(
                 Industron.MOD_ID,
-                domain + "/material_sets/" + chosen.relativePath() + "/model"
+                domain + "/" + resourceCollection(part) + "/" + chosen.relativePath() + "/model"
         ));
     }
 
@@ -47,9 +47,10 @@ public final class MaterialVariantResolver {
         List<VariantLocation> variants = discoverTextureVariants(domain, part, layer);
         if (variants.isEmpty()) return Optional.empty();
         VariantLocation chosen = choose(variants, material, part);
+        String resolvedLayer = resolvedTextureLayer(domain, part, layer);
         return Optional.of(ResourceLocation.fromNamespaceAndPath(
                 Industron.MOD_ID,
-                domain + "/material_sets/" + chosen.relativePath() + "/" + layer
+                domain + "/" + resourceCollection(part) + "/" + chosen.relativePath() + "/" + resolvedLayer
         ));
     }
 
@@ -78,11 +79,11 @@ public final class MaterialVariantResolver {
         if (variants.isEmpty()) return Optional.empty();
         VariantLocation chosen = choose(variants, material, part);
         ResourceLocation base = blockLayer(chosen, "base");
-        Optional<ResourceLocation> secondary = textureFileExists("block", chosen, "secondary.png")
+        Optional<ResourceLocation> secondary = textureFileExists("block", part, chosen, "secondary.png")
                 ? Optional.of(blockLayer(chosen, "secondary")) : Optional.empty();
-        Optional<ResourceLocation> layer2 = textureFileExists("block", chosen, "layer2.png")
+        Optional<ResourceLocation> layer2 = textureFileExists("block", part, chosen, "layer2.png")
                 ? Optional.of(blockLayer(chosen, "layer2")) : Optional.empty();
-        Optional<ResourceLocation> overlay = textureFileExists("block", chosen, "overlay.png")
+        Optional<ResourceLocation> overlay = textureFileExists("block", part, chosen, "overlay.png")
                 ? Optional.of(blockLayer(chosen, "overlay")) : Optional.empty();
         return Optional.of(new BlockTextureSet(base, secondary, layer2, overlay));
     }
@@ -99,19 +100,38 @@ public final class MaterialVariantResolver {
         List<VariantLocation> variants = discoverTextureVariants("item", part, "base");
         if (variants.isEmpty()) return Optional.empty();
         VariantLocation chosen = choose(variants, material, part);
-        ResourceLocation base = itemLayer(chosen, "base");
-        Optional<ResourceLocation> secondary = textureFileExists("item", chosen, "secondary.png")
-                ? Optional.of(itemLayer(chosen, "secondary")) : Optional.empty();
-        Optional<ResourceLocation> overlay = textureFileExists("item", chosen, "overlay.png")
-                ? Optional.of(itemLayer(chosen, "overlay")) : Optional.empty();
+        ResourceLocation base = itemLayer(part, chosen, resolvedTextureLayer("item", part, "base"));
+        Optional<ResourceLocation> secondary = textureFileExists("item", part, chosen, "secondary.png")
+                ? Optional.of(itemLayer(part, chosen, "secondary")) : Optional.empty();
+        Optional<ResourceLocation> overlay = textureFileExists("item", part, chosen, "overlay.png")
+                ? Optional.of(itemLayer(part, chosen, "overlay")) : Optional.empty();
         return Optional.of(new ItemTextureSet(base, secondary, overlay));
     }
 
-    private static ResourceLocation itemLayer(VariantLocation variant, String layer) {
+    private static ResourceLocation itemLayer(MaterialPart part, VariantLocation variant, String layer) {
         return ResourceLocation.fromNamespaceAndPath(
                 Industron.MOD_ID,
-                "item/material_sets/" + variant.relativePath() + "/" + layer
+                "item/" + resourceCollection(part) + "/" + variant.relativePath() + "/" + layer
         );
+    }
+
+    public static MaterialPart coldTexturePart(MaterialPart part) {
+        if (part == MaterialPart.HOT_DRILL) return MaterialPart.DRILL;
+        if (part == MaterialPart.HOT_SAW_HANDLE) return MaterialPart.SAW_HANDLE;
+        if (part == MaterialPart.HOT_WIRE_CUTTER_BODY) return MaterialPart.WIRE_CUTTER_BODY;
+        var form = net.mads.industron.machine.foundry.casting.CastingDefinitions.cold(part);
+        return form != null && form.hot() == part ? form.cold() : part;
+    }
+
+    public static Optional<ResourceLocation> hotOverlayTexture(IndustrialMaterial material, MaterialPart part) {
+        MaterialPart cold = coldTexturePart(part);
+        if (cold == part) return Optional.empty();
+        // Select from base variants so the overlay always matches the item's silhouette.
+        List<VariantLocation> variants = discoverTextureVariants("item", cold, "base");
+        if (variants.isEmpty()) return Optional.empty();
+        VariantLocation chosen = choose(variants, material, cold);
+        return textureFileExists("item", cold, chosen, "hot_overlay.png")
+                ? Optional.of(itemLayer(cold, chosen, "hot_overlay")) : Optional.empty();
     }
 
     public static Optional<ResourceLocation> hotIngotOverlayTexture(IndustrialMaterial material) {
@@ -172,12 +192,9 @@ public final class MaterialVariantResolver {
 
     private static List<VariantLocation> discoverModelVariants(String domain, MaterialPart part) {
         List<String> paths = new ArrayList<>();
-        if (part.textureFamily() != null && part.textureSize() != null) {
-            paths.add(part.textureFamily() + "/" + part.textureSize());
-        }
+        addFamilyPaths(paths, part.textureFamily(), part.textureSize());
         if (part.legacyTextureFamily() != null) paths.add(part.legacyTextureFamily());
-        if (part.textureFamily() != null) paths.add(part.textureFamily());
-        return discover("models/" + domain + "/material_sets", paths, "model.json");
+        return discover("models/" + domain + "/" + resourceCollection(part), paths, "model.json");
     }
 
     private static List<VariantLocation> discoverTextureVariants(String domain, MaterialPart part, String layer) {
@@ -191,20 +208,72 @@ public final class MaterialVariantResolver {
             paths.add("ore/small");
             paths.add("ore_small");
         } else {
-            if (part.textureFamily() != null && part.textureSize() != null) {
-                // Gem assets are grouped under material_sets/gems instead of the
-                // generic top-level family names used by the older resolver.
-                if (part.textureFamily().equals("gem")) {
-                    paths.add("gems/gem/" + part.textureSize());
-                } else if (part.textureFamily().equals("gem_rough")) {
-                    paths.add("gems/rough/" + part.textureSize());
-                }
-                paths.add(part.textureFamily() + "/" + part.textureSize());
-            }
+            addFamilyPaths(paths, part.textureFamily(), part.textureSize());
+            // Prefer the current family before old aliases. Otherwise stale generated resources
+            // such as frame_gt can shadow the real frame/variant_n texture directories.
             if (part.legacyTextureFamily() != null) paths.add(part.legacyTextureFamily());
-            if (part.textureFamily() != null) paths.add(part.textureFamily());
         }
-        return discover("textures/" + domain + "/material_sets", paths, layer + ".png");
+        String resolvedLayer = resolvedTextureLayer(domain, part, layer);
+        return discover("textures/" + domain + "/" + resourceCollection(part), paths, resolvedLayer + ".png");
+    }
+
+    /** Explicit modern paths replace suffix searches, which mixed block with clay/block. */
+    private static void addFamilyPaths(List<String> paths, String family, String size) {
+        if (family == null) return;
+        String modern = switch (family) {
+            case "ingot" -> "double".equals(size) ? "ingots/ingot_double" : "ingots/ingot";
+            case "nugget" -> "nuggets/nugget";
+            case "plate" -> "plates/plate";
+            case "plate_double" -> "plates/double_plate";
+            case "plate_dense" -> "plates/dense_plate";
+            case "plate_reinforced" -> "plates/plate_reinforced";
+            case "plate_heat_exchanger" -> "plates/plate_heat_exchanger";
+            case "gem" -> "gems/gem";
+            case "gem_rough" -> "gems/rough";
+            default -> family;
+        };
+        if (size != null) paths.add(modern + "/" + size);
+        paths.add(modern);
+        // Keep exact legacy paths available; never search unrelated parent directories.
+        if (!modern.equals(family)) {
+            if (size != null) paths.add(family + "/" + size);
+            paths.add(family);
+        }
+    }
+
+    private static String resourceCollection(MaterialPart part) {
+        MaterialPart cold = coldTexturePart(part);
+        return switch (cold) {
+            case SHEARS_HEAD, SHEARS_HANDLE, CROSSBOW_LIMBS, CROSSBOW_TRIGGER, FISHING_HOOK, SHIELD_BODY, SHIELD_HANDLE, HELMET_SHELL, CHESTPLATE_SHELL, LEGGINGS_SHELL, BOOTS_SHELL, SNAP_RING_PLIERS_HEAD, SNAP_RING_PLIERS_HANDLE, BEARING_PRESS_HEAD, BEARING_PRESS_HANDLE, CLAMP_HEAD, CLAMP_HANDLE, CRIMPING_TOOL_HEAD, CRIMPING_TOOL_HANDLE, GEAR_CUTTER_HEAD, GEAR_CUTTER_HANDLE, BOW_BODY, CROSSBOW_STOCK, FISHING_ROD_BODY -> "tool";
+            case TOOL_HEAD_AXE, TOOL_HEAD_CHAINSAW, TOOL_HEAD_CHISEL, TOOL_HEAD_CROWBAR,
+                    TOOL_HEAD_DRILL, TOOL_HEAD_FILE, TOOL_HEAD_HAMMER, TOOL_HEAD_HOE,
+                    TOOL_HEAD_PICKAXE, TOOL_HEAD_SCREWDRIVER, TOOL_HEAD_SHOVEL,
+                    TOOL_HEAD_WIRE_CUTTER, WRENCH, KNIFE_BLADE, SWORD_BLADE, SAW_BLADE, TOOL_HANDLE,
+                    SAW_HANDLE, WIRE_CUTTER_BODY, DRILL_BODY, CHAINSAW_BODY -> "tool";
+            default -> "material_sets";
+        };
+    }
+
+    /**
+     * Some tool component sprites intentionally use semantic filenames (head.png, handle.png,
+     * saw.png, wrench.png) instead of base.png. Keep that file naming while still treating the
+     * sprite as the generated material item's primary layer.
+     */
+    private static String resolvedTextureLayer(String domain, MaterialPart part, String requestedLayer) {
+        if (!"item".equals(domain) || !"base".equals(requestedLayer)) return requestedLayer;
+        MaterialPart cold = coldTexturePart(part);
+        return switch (cold) {
+            case TOOL_HEAD_AXE, TOOL_HEAD_CHISEL, TOOL_HEAD_CROWBAR, TOOL_HEAD_FILE, TOOL_HEAD_HAMMER,
+                    TOOL_HEAD_HOE, TOOL_HEAD_PICKAXE, TOOL_HEAD_SHOVEL, KNIFE_BLADE, SWORD_BLADE -> "head";
+            case TOOL_HEAD_DRILL -> "drill";
+            case SAW_BLADE -> "saw";
+            case TOOL_HANDLE, SAW_HANDLE -> "handle";
+            case WRENCH -> "wrench";
+            case WIRE_CUTTER_BODY -> "wire_cutter_base";
+            case DRILL_BODY -> "body";
+            case CHAINSAW_BODY -> "chainsaw_body";
+            default -> "base";
+        };
     }
 
     private static boolean isNormalOre(MaterialPart part) {
@@ -217,11 +286,15 @@ public final class MaterialVariantResolver {
     }
 
     private static List<VariantLocation> discoverUncached(DiscoveryKey key) {
-        for (Path assetRoot : resourceRoots()) {
-            Path materialSetRoot = assetRoot.resolve(key.relativeRoot());
-            if (!Files.isDirectory(materialSetRoot)) continue;
+        // Resolve one candidate family at a time (new path before legacy aliases), but merge that
+        // family across every resource root. Returning from the first root allowed stale processed
+        // resources with one variant to hide newer source resources containing more variants.
+        for (String candidate : key.candidatePaths()) {
+            List<VariantLocation> found = new ArrayList<>();
+            for (Path assetRoot : resourceRoots()) {
+                Path materialSetRoot = assetRoot.resolve(key.relativeRoot());
+                if (!Files.isDirectory(materialSetRoot)) continue;
 
-            for (String candidate : key.candidatePaths()) {
                 try (var walk = Files.walk(materialSetRoot, 6)) {
                     List<Path> matchingBases = walk
                             .filter(Files::isDirectory)
@@ -231,33 +304,64 @@ public final class MaterialVariantResolver {
 
                     for (Path base : matchingBases) {
                         try (var stream = Files.list(base)) {
-                            List<VariantLocation> found = new ArrayList<>();
                             stream.filter(Files::isDirectory).forEach(path -> {
                                 Matcher matcher = VARIANT.matcher(path.getFileName().toString());
                                 if (matcher.matches() && Files.exists(path.resolve(key.requiredFile()))) {
                                     String relativeBase = normalizedRelative(materialSetRoot, base);
-                                    found.add(new VariantLocation(
+                                    addUnique(found, new VariantLocation(
                                             Integer.parseInt(matcher.group(1)),
                                             relativeBase + "/" + path.getFileName()
                                     ));
                                 }
                             });
-                            found.sort(Comparator.comparingInt(VariantLocation::number));
-                            if (!found.isEmpty()) return List.copyOf(found);
                         }
                     }
                 } catch (Exception ignored) {
-                    // Try the next source/candidate.
+                    // Try the next source for the same candidate family.
                 }
             }
-        }
 
-        List<VariantLocation> packaged = discoverPackaged(
-                key.relativeRoot(),
-                key.candidatePaths(),
-                key.requiredFile()
-        );
-        return packaged.isEmpty() ? List.of() : List.copyOf(packaged);
+            // In production NeoForge may expose resources through a non-standard/union classpath
+            // rather than a normal filesystem or code-source JarFile. Exact classloader probing is
+            // reliable there and naturally discovers any contiguous variant_1..variant_n set.
+            for (VariantLocation location : discoverClasspath(
+                    key.relativeRoot(), candidate, key.requiredFile())) {
+                addUnique(found, location);
+            }
+
+            // Jar scanning additionally preserves support for deliberately non-contiguous variant
+            // numbers, which the fast classpath probe cannot infer after the first gap.
+            for (VariantLocation location : discoverPackaged(
+                    key.relativeRoot(), List.of(candidate), key.requiredFile())) {
+                addUnique(found, location);
+            }
+
+            found.sort(Comparator.comparingInt(VariantLocation::number)
+                    .thenComparing(VariantLocation::relativePath));
+            if (!found.isEmpty()) return List.copyOf(found);
+        }
+        return List.of();
+    }
+
+    private static List<VariantLocation> discoverClasspath(
+            String relativeRoot,
+            String candidate,
+            String requiredFile
+    ) {
+        List<VariantLocation> found = new ArrayList<>();
+        ClassLoader loader = MaterialVariantResolver.class.getClassLoader();
+        for (int number = 1; ; number++) {
+            String relativePath = candidate + "/variant_" + number;
+            String resource = "assets/" + Industron.MOD_ID + "/" + relativeRoot
+                    + "/" + relativePath + "/" + requiredFile;
+            if (loader.getResource(resource) == null) break;
+            found.add(new VariantLocation(number, relativePath));
+        }
+        return found;
+    }
+
+    private static void addUnique(List<VariantLocation> variants, VariantLocation candidate) {
+        if (!variants.contains(candidate)) variants.add(candidate);
     }
 
     private static String normalizedRelative(Path root, Path path) {
@@ -265,7 +369,7 @@ public final class MaterialVariantResolver {
     }
 
     private static boolean matchesCandidate(String path, String candidate) {
-        return path.equals(candidate) || path.endsWith("/" + candidate);
+        return path.equals(candidate);
     }
 
     private static boolean resourceFileExists(String relative) {
@@ -277,6 +381,10 @@ public final class MaterialVariantResolver {
             if (Files.exists(root.resolve(relative))) {
                 return true;
             }
+        }
+        if (MaterialVariantResolver.class.getClassLoader()
+                .getResource("assets/" + Industron.MOD_ID + "/" + relative) != null) {
+            return true;
         }
         try {
             URI location = MaterialVariantResolver.class.getProtectionDomain().getCodeSource().getLocation().toURI();
@@ -291,8 +399,8 @@ public final class MaterialVariantResolver {
         return false;
     }
 
-    private static boolean textureFileExists(String domain, VariantLocation variant, String fileName) {
-        String relative = "textures/" + domain + "/material_sets/" + variant.relativePath() + "/" + fileName;
+    private static boolean textureFileExists(String domain, MaterialPart part, VariantLocation variant, String fileName) {
+        String relative = "textures/" + domain + "/" + resourceCollection(part) + "/" + variant.relativePath() + "/" + fileName;
         return resourceFileExists(relative);
     }
 

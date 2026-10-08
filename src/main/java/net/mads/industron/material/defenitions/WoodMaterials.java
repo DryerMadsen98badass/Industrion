@@ -1,19 +1,34 @@
 package net.mads.industron.material.defenitions;
 
+import net.mads.industron.machine.MachineTier;
 import net.mads.industron.material.MaterialPart;
 import net.mads.industron.material.structure.WoodMaterial;
 import net.mads.industron.material.structure.WoodModel;
 
 import java.util.List;
 
+import static net.mads.industron.material.defenitions.CompoundMaterials.DULCARA;
+import static net.mads.industron.material.defenitions.CompoundMaterials.LIGNARA;
+import static net.mads.industron.material.defenitions.CompoundMaterials.RESYRA;
+import static net.mads.industron.material.defenitions.CompoundMaterials.SYLVARA;
+import static net.mads.industron.material.defenitions.IndustrialMaterials.component;
+
 public final class WoodMaterials {
-    // Colors are tint anchors for the grayscale structure templates, not flat texture averages.
+    // WoodMaterial colors are anchored to the matching plank texture, so generated wood parts
+    // inherit the visual identity of the worked wood rather than the bark/log.
     public static final WoodMaterial ACACIA = wood(
             "acacia",
             "Acacia",
-            0xC56A3B,
-            WoodModel.ACACIA
+            0xA85A32,
+            WoodModel.ACACIA,
+            MachineTier.ULV
     )
+            .contains(
+                    component(LIGNARA, 14),
+                    component(SYLVARA, 3),
+                    component(RESYRA, 2),
+                    component(DULCARA, 1)
+            )
             .existing(MaterialPart.LOG, "minecraft:acacia_log")
             .existing(MaterialPart.STRIPPED_LOG, "minecraft:stripped_acacia_log")
             .existing(MaterialPart.WOOD, "minecraft:acacia_wood")
@@ -34,14 +49,23 @@ public final class WoodMaterials {
             .existing(MaterialPart.HANGING_SIGN, "minecraft:acacia_hanging_sign")
             .existing(MaterialPart.WALL_HANGING_SIGN, "minecraft:acacia_wall_hanging_sign")
             .existing(MaterialPart.WINDOW, "create:acacia_window")
-            .existing(MaterialPart.WINDOW_PANE, "create:acacia_window_pane");
+            .existing(MaterialPart.WINDOW_PANE, "create:acacia_window_pane")
+            .existing(MaterialPart.BOAT, "minecraft:acacia_boat")
+            .existing(MaterialPart.CHEST_BOAT, "minecraft:acacia_chest_boat");
 
     public static final WoodMaterial BAMBOO = wood(
             "bamboo",
             "Bamboo",
-            0x94843D,
-            WoodModel.BAMBOO
+            0xC1AD50,
+            WoodModel.BAMBOO,
+            MachineTier.ULV
     )
+            .contains(
+                    component(LIGNARA, 14),
+                    component(SYLVARA, 3),
+                    component(RESYRA, 2),
+                    component(DULCARA, 1)
+            )
             .existing(MaterialPart.LOG, "minecraft:bamboo_block")
             .existing(MaterialPart.STRIPPED_LOG, "minecraft:stripped_bamboo_block")
             .existing(MaterialPart.PLANKS, "minecraft:bamboo_planks")
@@ -62,14 +86,23 @@ public final class WoodMaterials {
             .existing(MaterialPart.MOSAIC_SLAB, "minecraft:bamboo_mosaic_slab")
             .existing(MaterialPart.MOSAIC_STAIRS, "minecraft:bamboo_mosaic_stairs")
             .existing(MaterialPart.WINDOW, "create:bamboo_window")
-            .existing(MaterialPart.WINDOW_PANE, "create:bamboo_window_pane");
+            .existing(MaterialPart.WINDOW_PANE, "create:bamboo_window_pane")
+            .existing(MaterialPart.BOAT, "minecraft:bamboo_raft")
+            .existing(MaterialPart.CHEST_BOAT, "minecraft:bamboo_chest_raft");
 
     public static final WoodMaterial BIRCH = wood(
             "birch",
             "Birch",
-            0x8D8059,
-            WoodModel.BIRCH
+            0xC0AF79,
+            WoodModel.BIRCH,
+            MachineTier.ULV
     )
+            .contains(
+                    component(LIGNARA, 14),
+                    component(SYLVARA, 3),
+                    component(RESYRA, 2),
+                    component(DULCARA, 1)
+            )
             .existing(MaterialPart.LOG, "minecraft:birch_log")
             .existing(MaterialPart.STRIPPED_LOG, "minecraft:stripped_birch_log")
             .existing(MaterialPart.WOOD, "minecraft:birch_wood")
@@ -90,14 +123,23 @@ public final class WoodMaterials {
             .existing(MaterialPart.HANGING_SIGN, "minecraft:birch_hanging_sign")
             .existing(MaterialPart.WALL_HANGING_SIGN, "minecraft:birch_wall_hanging_sign")
             .existing(MaterialPart.WINDOW, "create:birch_window")
-            .existing(MaterialPart.WINDOW_PANE, "create:birch_window_pane");
+            .existing(MaterialPart.WINDOW_PANE, "create:birch_window_pane")
+            .existing(MaterialPart.BOAT, "minecraft:birch_boat")
+            .existing(MaterialPart.CHEST_BOAT, "minecraft:birch_chest_boat");
 
     public static final WoodMaterial CHERRY = wood(
             "cherry",
             "Cherry",
-            0x977772,
-            WoodModel.CHERRY
+            0xE3B3AD,
+            WoodModel.CHERRY,
+            MachineTier.ULV
     )
+            .contains(
+                    component(LIGNARA, 14),
+                    component(SYLVARA, 3),
+                    component(RESYRA, 2),
+                    component(DULCARA, 1)
+            )
             .existing(MaterialPart.LOG, "minecraft:cherry_log")
             .existing(MaterialPart.STRIPPED_LOG, "minecraft:stripped_cherry_log")
             .existing(MaterialPart.WOOD, "minecraft:cherry_wood")
@@ -118,14 +160,23 @@ public final class WoodMaterials {
             .existing(MaterialPart.HANGING_SIGN, "minecraft:cherry_hanging_sign")
             .existing(MaterialPart.WALL_HANGING_SIGN, "minecraft:cherry_wall_hanging_sign")
             .existing(MaterialPart.WINDOW, "create:cherry_window")
-            .existing(MaterialPart.WINDOW_PANE, "create:cherry_window_pane");
+            .existing(MaterialPart.WINDOW_PANE, "create:cherry_window_pane")
+            .existing(MaterialPart.BOAT, "minecraft:cherry_boat")
+            .existing(MaterialPart.CHEST_BOAT, "minecraft:cherry_chest_boat");
 
     public static final WoodMaterial CRIMSON = wood(
             "crimson",
             "Crimson",
-            0xC15C86,
-            WoodModel.CRIMSON
+            0x653147,
+            WoodModel.CRIMSON,
+            MachineTier.ULV
     )
+            .contains(
+                    component(LIGNARA, 14),
+                    component(SYLVARA, 3),
+                    component(RESYRA, 2),
+                    component(DULCARA, 1)
+            )
             .existing(MaterialPart.LOG, "minecraft:crimson_stem")
             .existing(MaterialPart.STRIPPED_LOG, "minecraft:stripped_crimson_stem")
             .existing(MaterialPart.WOOD, "minecraft:crimson_hyphae")
@@ -149,9 +200,16 @@ public final class WoodMaterials {
     public static final WoodMaterial DARK_OAK = wood(
             "dark_oak",
             "Dark Oak",
-            0xB17336,
-            WoodModel.DARK_OAK
+            0x432B14,
+            WoodModel.DARK_OAK,
+            MachineTier.ULV
     )
+            .contains(
+                    component(LIGNARA, 14),
+                    component(SYLVARA, 3),
+                    component(RESYRA, 2),
+                    component(DULCARA, 1)
+            )
             .existing(MaterialPart.LOG, "minecraft:dark_oak_log")
             .existing(MaterialPart.STRIPPED_LOG, "minecraft:stripped_dark_oak_log")
             .existing(MaterialPart.WOOD, "minecraft:dark_oak_wood")
@@ -172,14 +230,23 @@ public final class WoodMaterials {
             .existing(MaterialPart.HANGING_SIGN, "minecraft:dark_oak_hanging_sign")
             .existing(MaterialPart.WALL_HANGING_SIGN, "minecraft:dark_oak_wall_hanging_sign")
             .existing(MaterialPart.WINDOW, "create:dark_oak_window")
-            .existing(MaterialPart.WINDOW_PANE, "create:dark_oak_window_pane");
+            .existing(MaterialPart.WINDOW_PANE, "create:dark_oak_window_pane")
+            .existing(MaterialPart.BOAT, "minecraft:dark_oak_boat")
+            .existing(MaterialPart.CHEST_BOAT, "minecraft:dark_oak_chest_boat");
 
     public static final WoodMaterial JUNGLE = wood(
             "jungle",
             "Jungle",
-            0xA47652,
-            WoodModel.JUNGLE
+            0xA07351,
+            WoodModel.JUNGLE,
+            MachineTier.ULV
     )
+            .contains(
+                    component(LIGNARA, 14),
+                    component(SYLVARA, 3),
+                    component(RESYRA, 2),
+                    component(DULCARA, 1)
+            )
             .existing(MaterialPart.LOG, "minecraft:jungle_log")
             .existing(MaterialPart.STRIPPED_LOG, "minecraft:stripped_jungle_log")
             .existing(MaterialPart.WOOD, "minecraft:jungle_wood")
@@ -200,14 +267,23 @@ public final class WoodMaterials {
             .existing(MaterialPart.HANGING_SIGN, "minecraft:jungle_hanging_sign")
             .existing(MaterialPart.WALL_HANGING_SIGN, "minecraft:jungle_wall_hanging_sign")
             .existing(MaterialPart.WINDOW, "create:jungle_window")
-            .existing(MaterialPart.WINDOW_PANE, "create:jungle_window_pane");
+            .existing(MaterialPart.WINDOW_PANE, "create:jungle_window_pane")
+            .existing(MaterialPart.BOAT, "minecraft:jungle_boat")
+            .existing(MaterialPart.CHEST_BOAT, "minecraft:jungle_chest_boat");
 
     public static final WoodMaterial MANGROVE = wood(
             "mangrove",
             "Mangrove",
-            0xD05F55,
-            WoodModel.MANGROVE
+            0x763631,
+            WoodModel.MANGROVE,
+            MachineTier.ULV
     )
+            .contains(
+                    component(LIGNARA, 14),
+                    component(SYLVARA, 3),
+                    component(RESYRA, 2),
+                    component(DULCARA, 1)
+            )
             .existing(MaterialPart.LOG, "minecraft:mangrove_log")
             .existing(MaterialPart.STRIPPED_LOG, "minecraft:stripped_mangrove_log")
             .existing(MaterialPart.WOOD, "minecraft:mangrove_wood")
@@ -228,14 +304,23 @@ public final class WoodMaterials {
             .existing(MaterialPart.HANGING_SIGN, "minecraft:mangrove_hanging_sign")
             .existing(MaterialPart.WALL_HANGING_SIGN, "minecraft:mangrove_wall_hanging_sign")
             .existing(MaterialPart.WINDOW, "create:mangrove_window")
-            .existing(MaterialPart.WINDOW_PANE, "create:mangrove_window_pane");
+            .existing(MaterialPart.WINDOW_PANE, "create:mangrove_window_pane")
+            .existing(MaterialPart.BOAT, "minecraft:mangrove_boat")
+            .existing(MaterialPart.CHEST_BOAT, "minecraft:mangrove_chest_boat");
 
     public static final WoodMaterial OAK = wood(
             "oak",
             "Oak",
-            0x9A7C4A,
-            WoodModel.OAK
+            0xA2834F,
+            WoodModel.OAK,
+            MachineTier.ULV
     )
+            .contains(
+                    component(LIGNARA, 14),
+                    component(SYLVARA, 3),
+                    component(RESYRA, 2),
+                    component(DULCARA, 1)
+            )
             .existing(MaterialPart.LOG, "minecraft:oak_log")
             .existing(MaterialPart.STRIPPED_LOG, "minecraft:stripped_oak_log")
             .existing(MaterialPart.WOOD, "minecraft:oak_wood")
@@ -256,14 +341,29 @@ public final class WoodMaterials {
             .existing(MaterialPart.HANGING_SIGN, "minecraft:oak_hanging_sign")
             .existing(MaterialPart.WALL_HANGING_SIGN, "minecraft:oak_wall_hanging_sign")
             .existing(MaterialPart.WINDOW, "create:oak_window")
-            .existing(MaterialPart.WINDOW_PANE, "create:oak_window_pane");
+            .existing(MaterialPart.WINDOW_PANE, "create:oak_window_pane")
+            .existing(MaterialPart.STICK, "minecraft:stick")
+            .existing(MaterialPart.CHEST, "minecraft:chest")
+            .existing(MaterialPart.BOOKSHELF, "minecraft:bookshelf")
+            .existing(MaterialPart.CHISELED_BOOKSHELF, "minecraft:chiseled_bookshelf")
+            .existing(MaterialPart.LADDER, "minecraft:ladder")
+            .existing(MaterialPart.BOWL, "minecraft:bowl")
+            .existing(MaterialPart.BOAT, "minecraft:oak_boat")
+            .existing(MaterialPart.CHEST_BOAT, "minecraft:oak_chest_boat");
 
     public static final WoodMaterial SPRUCE = wood(
             "spruce",
             "Spruce",
-            0xA37845,
-            WoodModel.SPRUCE
+            0x735531,
+            WoodModel.SPRUCE,
+            MachineTier.ULV
     )
+            .contains(
+                    component(LIGNARA, 14),
+                    component(SYLVARA, 3),
+                    component(RESYRA, 2),
+                    component(DULCARA, 1)
+            )
             .existing(MaterialPart.LOG, "minecraft:spruce_log")
             .existing(MaterialPart.STRIPPED_LOG, "minecraft:stripped_spruce_log")
             .existing(MaterialPart.WOOD, "minecraft:spruce_wood")
@@ -284,14 +384,24 @@ public final class WoodMaterials {
             .existing(MaterialPart.HANGING_SIGN, "minecraft:spruce_hanging_sign")
             .existing(MaterialPart.WALL_HANGING_SIGN, "minecraft:spruce_wall_hanging_sign")
             .existing(MaterialPart.WINDOW, "create:spruce_window")
-            .existing(MaterialPart.WINDOW_PANE, "create:spruce_window_pane");
+            .existing(MaterialPart.WINDOW_PANE, "create:spruce_window_pane")
+            .existing(MaterialPart.BARREL, "minecraft:barrel")
+            .existing(MaterialPart.BOAT, "minecraft:spruce_boat")
+            .existing(MaterialPart.CHEST_BOAT, "minecraft:spruce_chest_boat");
 
     public static final WoodMaterial WARPED = wood(
             "warped",
             "Warped",
-            0x409B93,
-            WoodModel.WARPED
+            0x2B6963,
+            WoodModel.WARPED,
+            MachineTier.ULV
     )
+            .contains(
+                    component(LIGNARA, 14),
+                    component(SYLVARA, 3),
+                    component(RESYRA, 2),
+                    component(DULCARA, 1)
+            )
             .existing(MaterialPart.LOG, "minecraft:warped_stem")
             .existing(MaterialPart.STRIPPED_LOG, "minecraft:stripped_warped_stem")
             .existing(MaterialPart.WOOD, "minecraft:warped_hyphae")
@@ -329,7 +439,9 @@ public final class WoodMaterials {
     private WoodMaterials() {
     }
 
-    public static WoodMaterial wood(String id, String displayName, int color, WoodModel model) {
-        return new WoodMaterial(id, displayName, color, model);
+    public static WoodMaterial wood(String id, String displayName, int color, WoodModel model, MachineTier tier) {
+        // Composition belongs on each definition so individual woods can add or change components
+        // without silently changing every other wood species.
+        return new WoodMaterial(id, displayName, color, model, tier);
     }
 }

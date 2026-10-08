@@ -11,6 +11,7 @@ public final class KineticMachineStress {
     }
 
     public static void register() {
+        KineticMachines.registerStress();
         MachineDefinition.INSTANCES.stream()
                 .filter(instance -> instance.definition().power() == SingleBlockMachinePower.KINETIC)
                 .forEach(instance -> {

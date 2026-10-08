@@ -22,7 +22,8 @@ public record BlockInteraction(
         int limit,
         int interval,
         int actionsPerInterval,
-        int actionMultiplierPerTier
+        int actionMultiplierPerTier,
+        int minimumMatches
 ) {
     public static final Codec<BlockInteraction> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Codec.STRING.xmap(Type::valueOf, Type::name).fieldOf("type").forGetter(BlockInteraction::type),
@@ -35,7 +36,8 @@ public record BlockInteraction(
             Codec.INT.optionalFieldOf("limit", 1).forGetter(BlockInteraction::limit),
             Codec.INT.optionalFieldOf("interval", 1).forGetter(BlockInteraction::interval),
             Codec.INT.optionalFieldOf("actions_per_interval", 1).forGetter(BlockInteraction::actionsPerInterval),
-            Codec.INT.optionalFieldOf("action_multiplier_per_tier", 1).forGetter(BlockInteraction::actionMultiplierPerTier)
+            Codec.INT.optionalFieldOf("action_multiplier_per_tier", 1).forGetter(BlockInteraction::actionMultiplierPerTier),
+            Codec.INT.optionalFieldOf("minimum_matches", 1).forGetter(BlockInteraction::minimumMatches)
     ).apply(instance, BlockInteraction::new));
 
     public static Builder require() { return new Builder(Type.REQUIRE); }
@@ -72,6 +74,7 @@ public record BlockInteraction(
         private int interval = 1;
         private int actionsPerInterval = 1;
         private int actionMultiplierPerTier = 1;
+        private int minimumMatches = 1;
 
         private Builder(Type type) { this.type = type; }
 
@@ -125,6 +128,13 @@ public record BlockInteraction(
             return this;
         }
 
+        /** Requires at least this many selected positions to satisfy the requirement. */
+        public Builder minimumMatches(int count) {
+            if (count < 1) throw new IllegalArgumentException("Minimum matches must be at least 1");
+            this.minimumMatches = count;
+            return this;
+        }
+
         public Builder when(InteractionPhase when) { this.when = when; return this; }
         public Builder requires(BlockRequirement requirement) { this.requirement = requirement; return this; }
         public Builder to(String blockId) { this.targetBlockId = Optional.of(id(blockId)); return this; }
@@ -138,7 +148,7 @@ public record BlockInteraction(
             if (type == Type.SPRINKLER && area.isEmpty()) {
                 throw new IllegalStateException("SPRINKLER block interaction needs .inArea(...)");
             }
-            return new BlockInteraction(type, pos, when, requirement, targetBlockId, area, selection, limit, interval, actionsPerInterval, actionMultiplierPerTier);
+            return new BlockInteraction(type, pos, when, requirement, targetBlockId, area, selection, limit, interval, actionsPerInterval, actionMultiplierPerTier, minimumMatches);
         }
     }
 

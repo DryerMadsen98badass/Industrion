@@ -10,7 +10,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 
-/** Keeps Create's replaced fluid-transport blocks registered but out of normal creative access. */
+/** Keeps externally replaced blocks/items registered but out of normal creative access. */
 @EventBusSubscriber(modid = Industron.MOD_ID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
 public final class ExternalCreativeTabSuppression {
     private ExternalCreativeTabSuppression() {
@@ -18,13 +18,19 @@ public final class ExternalCreativeTabSuppression {
 
     @SubscribeEvent
     public static void buildCreativeTab(BuildCreativeModeTabContentsEvent event) {
-        for (var id : ExternalMaterialSuppression.suppressedExternalTransportIds()) {
-            BuiltInRegistries.ITEM.getOptional(id).ifPresent(item ->
-                    event.remove(
-                            new ItemStack(item),
-                            CreativeModeTab.TabVisibility.PARENT_AND_SEARCH_TABS
-                    )
-            );
-        }
+        java.util.stream.Stream.concat(
+                        java.util.stream.Stream.concat(
+                                ExternalMaterialSuppression.suppressedExternalTransportIds().stream(),
+                                ExternalMaterialSuppression.suppressedExternalTestToolIds().stream()
+                        ),
+                        ExternalMaterialSuppression.suppressedExternalProcessingBlockIds().stream()
+                )
+                .distinct()
+                .forEach(id -> BuiltInRegistries.ITEM.getOptional(id).ifPresent(item ->
+                        event.remove(
+                                new ItemStack(item),
+                                CreativeModeTab.TabVisibility.PARENT_AND_SEARCH_TABS
+                        )
+                ));
     }
 }

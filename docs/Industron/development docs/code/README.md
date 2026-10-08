@@ -5,6 +5,7 @@ Dette området beskriver målarkitektur og videre plan, ikke en historikk over e
 - `elements/`: minimal elementdefinition, atomic/electron model og ioner.
 - `materials/`: properties, generated forms, WoodMaterial/StoneMaterial, structure sets, ores, wires og fluid transport.
 - `chemistry/`: universal composition, compounds, rules, reactions og balancing.
+- `organic/`: organic compounds og senere crops, food, nutrition, farming og animals.
 - `recipes/`: tier-baserte requests og generation fra validerte reactions/processes.
 - `energy/`: sentrale tier-profiler; recipes skriver tier, ikke manuelt energitall.
 - `machines/`: machine definitions/runtime uten chemistry-logikk i tick-koden.

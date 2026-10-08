@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 /**
  * Removes vanilla surface-rule geology stones that bypass placed-feature removal.
  *
- * <p>Calcite and sandstone layers become normal stone. Basalt-delta blackstone becomes basalt.
+ * <p>Calcite and sandstone layers become normal stone. Basalt-delta blackstone becomes netherrack; vanilla basalt itself is left untouched.
  * The blocks themselves remain registered and may still be placed by Industron geology or structures.</p>
  */
 @Mixin(SurfaceRuleData.class)
@@ -57,6 +57,6 @@ public abstract class SurfaceRuleDataMixin {
             )
     )
     private static Block industron$replaceNaturalBlackstone() {
-        return Blocks.BASALT;
+        return Blocks.NETHERRACK;
     }
 }

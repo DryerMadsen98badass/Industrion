@@ -162,10 +162,15 @@ public final class InteractionRuntime {
             BlockInteraction interaction,
             InteractionContext context
     ) {
+        BlockRequirement first = null;
+        int matches = 0;
         for (BlockPos pos : targetPositions(interaction, context)) {
             Optional<BlockRequirement> match = matchingRequirementAt(interaction, context.level(), pos);
-            if (match.isPresent()) {
-                return match;
+            if (match.isEmpty()) continue;
+            if (first == null) first = match.get();
+            matches++;
+            if (matches >= interaction.minimumMatches()) {
+                return Optional.of(first);
             }
         }
         return Optional.empty();
@@ -248,12 +253,14 @@ public final class InteractionRuntime {
     ) {
         Level level = context.level();
         boolean matchedAny = false;
+        int matchedCount = 0;
 
         for (BlockPos pos : targetPositions(interaction, context)) {
             Optional<BlockRequirement> requirement = matchingRequirementAt(interaction, level, pos);
             if (requirement.isEmpty()) continue;
 
             matchedAny = true;
+            matchedCount++;
             BlockRequirement matched = requirement.get();
             if (interaction.type() != BlockInteraction.Type.DAMAGE
                     && interaction.type() != BlockInteraction.Type.TREE_EXTRACT
@@ -282,7 +289,9 @@ public final class InteractionRuntime {
             }
         }
 
-        return matchedAny;
+        return interaction.type() == BlockInteraction.Type.REQUIRE
+                ? matchedCount >= interaction.minimumMatches()
+                : matchedAny;
     }
 
     private static boolean extractTreeResource(

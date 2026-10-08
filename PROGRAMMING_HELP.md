@@ -21,7 +21,7 @@ Datagen er stor. `gradle.properties` bruker `org.gradle.jvmargs=-Xmx6G`; senk ba
 
 `createMinecraftArtifacts` er ekskludert fordi oppryddingen er verifisert mot vanlig kompilering, datagen og jar-bygging.
 
-Siste status: material-block datagen bruker delte tinted cube/cutout/layer templates for aa redusere gjentatt per-material modellgeometri. Compile/runData ble ikke kjoert i denne sandboxen fordi `java`/`javac` ikke var tilgjengelig fra miljoet.
+Siste status: material-block datagen bruker delte tinted cube/cutout/layer templates for aa redusere gjentatt per-material modellgeometri. Mold-texturer bruker naa standardregelen `mold.png` i formen/itemets texture-mappe, mens registry-ID-er som `cast_*_mold` beholdes. Terracotta-texturer bruker tilsvarende standardregel `terracotta.png` i formen/itemets texture-mappe, mens item-ID-er som `terracotta_*` beholdes. Forms uten dedikert `mold.png` skal fortsatt bruke `empty_mold` som model-fallback.
 
 ## Viktige kataloger
 

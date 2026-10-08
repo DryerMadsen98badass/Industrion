@@ -16,20 +16,36 @@ import net.mads.industron.transport.color.PipeColorDefinitions;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.mads.industron.kinetics.shaft.AbstractMaterialShaftBlock;
 
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 public final class IndustronPartialModels {
+    public static final PartialModel BRICK_MOLD_INSIDE = block("brick_mold_inside");
     private static final Map<String, Map<Direction, PartialModel>> ENERGY_WIRE_ARMS = new LinkedHashMap<>();
     private static final Map<String, PartialModel> FLUID_PIPE_CASINGS = new LinkedHashMap<>();
+    private static final Map<Block, PartialModel> MATERIAL_SHAFTS = new LinkedHashMap<>();
     private static final Map<
             String,
             Map<FluidTransportBehaviour.AttachmentTypes.ComponentPartials, Map<Direction, PartialModel>>
             > PIPE_ATTACHMENTS = new LinkedHashMap<>();
 
+    private static final Map<String, PartialModel> KINETIC_MACHINE_PARTS = new LinkedHashMap<>();
+
     static {
+        registerKineticParts("lathe");
+        registerKineticParts("mechanical_centrifuge");
+        registerKineticParts("mechanical_sifter");
+        registerKineticParts("pulverizer");
+        registerKineticParts("wire_drawing_machine");
+        registerKineticParts("winding_machine");
+        registerKineticParts("mechanical_bender");
+        registerKineticParts("magnetic_separator");
+
         for (WireThickness thickness : WireThickness.ALL) {
             registerEnergyWireModels(thickness, false);
             registerEnergyWireModels(thickness, true);
@@ -40,6 +56,22 @@ public final class IndustronPartialModels {
         for (DyeColor color : DyeColor.values()) {
             registerPipeModels(PipeColorDefinitions.sharedColoredModelId(color));
         }
+    }
+
+    private static void registerKineticParts(String id) {
+        for (String part : new String[]{"rotor", "moving"}) {
+            for (Direction facing : Direction.Plane.HORIZONTAL) {
+                String key = id + "/" + part + "_" + facing.getSerializedName();
+                KINETIC_MACHINE_PARTS.put(key, block("machines/kinetic/" + key));
+            }
+        }
+    }
+
+    public static PartialModel kineticPart(String id, String part, Direction facing) {
+        String key = id + "/" + part + "_" + facing.getSerializedName();
+        PartialModel model = KINETIC_MACHINE_PARTS.get(key);
+        if (model == null) throw new IllegalArgumentException("Missing kinetic partial " + key);
+        return model;
     }
 
     private IndustronPartialModels() {
@@ -123,7 +155,32 @@ public final class IndustronPartialModels {
     }
 
     public static void initClient() {
+        registerMaterialShafts();
         registerStructureFoldingDoors();
+    }
+
+    public static PartialModel materialShaft(Block block) {
+        PartialModel model = MATERIAL_SHAFTS.get(block);
+        if (model == null) {
+            throw new IllegalArgumentException("Missing material shaft partial for " + BuiltInRegistries.BLOCK.getKey(block));
+        }
+        return model;
+    }
+
+    private static void registerMaterialShafts() {
+        BuiltInRegistries.BLOCK.forEach(block -> {
+            if (!(block instanceof AbstractMaterialShaftBlock)) {
+                return;
+            }
+            ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
+            MATERIAL_SHAFTS.put(
+                    block,
+                    PartialModel.of(ResourceLocation.fromNamespaceAndPath(
+                            id.getNamespace(),
+                            "block/" + id.getPath() + "_rotating"
+                    ))
+            );
+        });
     }
 
     private static void registerStructureFoldingDoors() {

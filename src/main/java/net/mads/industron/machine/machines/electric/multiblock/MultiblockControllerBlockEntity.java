@@ -32,7 +32,7 @@ import net.mads.industron.machine.runtime.CERecipeStatus;
 import net.mads.industron.machine.control.MachineControlContext;
 import net.mads.industron.machine.control.MachineControlSnapshot;
 import net.mads.industron.machine.control.MachineControlTarget;
-import net.mads.industron.machine.coil.CoilBlock;
+import net.mads.industron.block.coils.CoilBlock;
 import net.mads.industron.recipe.CERecipe;
 import net.mads.industron.recipe.CEChancedFluidInput;
 import net.mads.industron.recipe.CEChancedFluidOutput;
@@ -91,8 +91,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class MultiblockControllerBlockEntity extends BlockEntity implements MenuProvider, CERecipeLogicMachine, MachineControlTarget {
-    private static final int VALIDATION_INTERVAL = 40;
+public class MultiblockControllerBlockEntity extends BlockEntity implements MenuProvider, CERecipeLogicMachine, MachineControlTarget, net.mads.industron.machine.foundry.FoundryHeatSource {
+    private final net.mads.industron.machine.runtime.AsyncRecipeSearch asyncSearch = new net.mads.industron.machine.runtime.AsyncRecipeSearch();
+
+    private static final int VALIDATION_INTERVAL = 300;
     private static final int IDLE_RECIPE_CHECK_INTERVAL = 20;
     private static final int ACTIVE_SYNC_INTERVAL = 20;
     private static final int EXTERNAL_OPERATION_DURATION = 20;
@@ -109,6 +111,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
     private static final String LEGACY_PH_WEIGHT_DATA = "PhWeightMb";
     private static final String LEGACY_PH_WEIGHTED_SUM_DATA = "PhWeightedHundredthsMb";
     private static final String MACHINE_DURABILITY_DATA = "MachineDurabilityHundredths";
+    private static final String MANUAL_ACTIVATION_DATA = "ManualActivationGranted";
     private static final int CB_NEUTRALIZE_INTERVAL = 1;
     private static final long CB_UNITS_PER_HUNDREDTH = 100L;
     private static final long CB_NEUTRAL_TEN_THOUSANDTHS = ChemicalBalanceRange.NEUTRAL_HUNDREDTHS * CB_UNITS_PER_HUNDREDTH;
@@ -117,6 +120,9 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
     // 0.05 CB per tick = 1.00 CB per second at 20 TPS.
     private static final long CB_NEUTRALIZE_STEP = 5L * CB_UNITS_PER_HUNDREDTH;
 
+    // Runtime-only: persisted ACTIVE state is not proof that energy was paid after a reload.
+    private long lastContinuousEnergyTick = Long.MIN_VALUE;
+    private long foundryHeatRevision;
     private boolean formed;
     private boolean dirty = true;
     private int validationCooldown;
@@ -135,13 +141,14 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
     private Set<BlockPos> sequentialInputPositionSet = Set.of();
     private Map<Integer, BlockPos> sequentialOutputPositions = Map.of();
     private Map<BlockPos, ResourceLocation> formedOverlayModels = Map.of();
+    private ResourceLocation formedCasingModel;
     private List<MachinePortBlockEntity> machineControlRedstonePorts = List.of();
     private boolean cbHatchPresent;
     private long chemicalBalanceTenThousandths = CB_NEUTRAL_TEN_THOUSANDTHS;
     private long machineDurabilityHundredths = -1L;
     private int recipeProgress;
     private int recipeDuration;
-    private int activeCEt;
+    private long activeCEt;
     private int activeSyncCooldown;
     private int overlayFrame;
     private int overlayFrameTicks;
@@ -149,11 +156,12 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
     private int activeBlockFrameTicks;
     private ResourceLocation preferredRecipeId;
     private int externalActiveTicks;
-    private int externalCEt;
+    private long externalCEt;
     private int externalWarmupTicks;
     private final InteractionWearStore interactionWear = new InteractionWearStore();
     private final CERecipeLogic recipeLogic = new CERecipeLogic(new RecipeHost());
     private boolean machineEnabled = true;
+    private boolean manualActivationGranted;
     private long machineControlSnapshotTick = Long.MIN_VALUE;
     private MachineControlSnapshot machineControlSnapshot;
     private long machineControlInputRevision;
@@ -163,6 +171,11 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
     private long fanInputCacheTick = Long.MIN_VALUE;
     private FanInputStats fanInputCache = FanInputStats.NONE;
     private boolean clientSyncPending;
+
+    @Override public void setRemoved() {
+        net.mads.industron.runtime.StructureWatch.unregister(this);
+        super.setRemoved();
+    }
 
     public MultiblockControllerBlockEntity(BlockPos pos, BlockState state) {
         super(BlockEntityRegistry.MULTIBLOCK_CONTROLLER.get(), pos, state);
@@ -181,7 +194,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
 
             if (controller.dirty || controller.validationCooldown <= 0) {
                 controller.validateStructure(state);
-                controller.validationCooldown = VALIDATION_INTERVAL;
+                controller.validationCooldown = VALIDATION_INTERVAL + (int) Math.floorMod(pos.asLong(), 61L);
             }
 
             controller.tickChemicalBalanceSystem();
@@ -191,14 +204,41 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
             controller.applyMachineControlSchedules();
             controller.tickRecipe();
             controller.tickMufflerSmoke();
-            controller.tickOverlayFrame();
-            controller.tickActiveBlockFrame();
             controller.syncKineticOutputPorts();
         } finally {
             controller.flushClientSync();
             CEPerformanceProfiler.record(CEPerformanceProfiler.Metric.MULTIBLOCK_TICK, profileStart);
         }
     }
+
+    @Override
+    public boolean matchesFoundryFootprint(int minX, int minZ, int baseY, int outerSize) {
+        if (!formed || currentDefinition() != net.mads.industron.machine.machines.electric.multiblock.machines.ElectricHeater.DEFINITION
+                || formedPositions.size() != outerSize * outerSize * 2) return false;
+        for (BlockPos pos : formedPositions) {
+            if (pos.getX() < minX || pos.getX() >= minX + outerSize
+                    || pos.getZ() < minZ || pos.getZ() >= minZ + outerSize
+                    || pos.getY() < baseY - 2 || pos.getY() >= baseY) return false;
+        }
+        return true;
+    }
+
+    @Override
+    public double availableFoundryHeatPerTick() {
+        if (isRemoved() || !formed || dirty || !machineEnabled || level == null || level.isClientSide()
+                || currentDefinition() != net.mads.industron.machine.machines.electric.multiblock.machines.ElectricHeater.DEFINITION
+                || lastContinuousEnergyTick == Long.MIN_VALUE
+                || level.getGameTime() - lastContinuousEnergyTick > 1L
+                || !getBlockState().getValue(MultiblockControllerBlock.ACTIVE)) return 0.0;
+        return (double) formedCoilHeat * formedCoilCount
+                * net.mads.industron.machine.foundry.FoundryThermalRules.HEAT_PER_COIL_DEGREE;
+    }
+
+    @Override
+    public double maximumFoundryTemperature() { return formedCoilHeat; }
+
+    @Override
+    public long foundryHeatRevision() { return foundryHeatRevision; }
 
     public boolean isFormed() {
         return formed;
@@ -216,6 +256,12 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
         return formedTier;
     }
 
+    /** Highest installed Energy Input Hatch tier. Kept separate from the structural casing tier. */
+    @Nullable
+    public MachineTier formedEnergyInputTier() {
+        return formed ? highestPortTier(MultiblockAbility.ENERGY_INPUT).orElse(null) : null;
+    }
+
     public int formedCoilHeat() {
         return formedCoilHeat;
     }
@@ -224,11 +270,16 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
         return formedCoilCount;
     }
 
+    @Nullable
+    public ResourceLocation formedCasingModel() {
+        return formedCasingModel;
+    }
+
     public boolean hasFormedPosition(BlockPos pos) {
         return formedPositionSet.contains(pos);
     }
 
-    public boolean consumeExternalHeatEnergy(int energyPerTick, int ticks) {
+    public boolean consumeExternalHeatEnergy(long energyPerTick, int ticks) {
         if (level == null || !formed || !machineEnabled || energyPerTick <= 0 || ticks <= 0) {
             return false;
         }
@@ -334,13 +385,16 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
     }
 
     public void markStructureDirty() {
+        asyncSearch.invalidate();
         dirty = true;
         validationCooldown = 0;
         setChanged();
     }
 
     public void clearFormation() {
+        lastPartsActive = null;
         if (formationAlreadyClear()) return;
+        foundryHeatRevision++;
         setCoilsActive(false);
         setFireboxesActive(false);
         detachParts();
@@ -359,6 +413,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
         sequentialInputPositionSet = Set.of();
         sequentialOutputPositions = Map.of();
         formedOverlayModels = Map.of();
+        formedCasingModel = null;
         machineControlRedstonePorts = List.of();
         cbHatchPresent = false;
         resetChemicalBalanceState();
@@ -366,6 +421,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
         externalActiveTicks = 0;
         externalCEt = 0;
         externalWarmupTicks = 0;
+        manualActivationGranted = false;
         activeBlockFrame = 0;
         activeBlockFrameTicks = 0;
         recipeLogic.cancel();
@@ -392,12 +448,14 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
                 || !sequentialInputPositionSet.isEmpty()
                 || !sequentialOutputPositions.isEmpty()
                 || !formedOverlayModels.isEmpty()
+                || formedCasingModel != null
                 || !machineControlRedstonePorts.isEmpty()
                 || cbHatchPresent
                 || chemicalBalanceTenThousandths != CB_NEUTRAL_TEN_THOUSANDTHS
                 || externalActiveTicks != 0
                 || externalCEt != 0
                 || externalWarmupTicks != 0
+                || manualActivationGranted
                 || recipeProgress != 0
                 || recipeDuration != 0
                 || activeCEt != 0
@@ -413,6 +471,8 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
     }
 
     private void validateStructure(BlockState state) {
+        long performanceStart = net.mads.industron.debug.CEPerformanceProfiler.begin(level);
+        try {
         boolean structureWasDirty = dirty;
         dirty = false;
         if (level == null || !(state.getBlock() instanceof MultiblockControllerBlock controllerBlock)) {
@@ -444,6 +504,9 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
         }
 
         form(result);
+            } finally {
+            net.mads.industron.debug.CEPerformanceProfiler.record(net.mads.industron.debug.CEPerformanceProfiler.Metric.STRUCTURE_VALIDATION, performanceStart);
+        }
     }
 
     private boolean matchesCurrentFormation(MultiblockMatchResult result) {
@@ -457,7 +520,8 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
                 || !abilityPositions.equals(result.abilityPositions())
                 || !sequentialInputPositions.equals(result.sequentialInputPositions())
                 || !sequentialOutputPositions.equals(result.sequentialOutputPositions())
-                || !formedOverlayModels.equals(result.overlayModels())) {
+                || !formedOverlayModels.equals(result.overlayModels())
+                || !java.util.Objects.equals(formedCasingModel, result.casingModel())) {
             return false;
         }
         return true;
@@ -485,6 +549,8 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
     }
 
     private void form(MultiblockMatchResult result) {
+        lastPartsActive = null;
+        foundryHeatRevision++;
         boolean keepActive = isProcessing();
         setCoilsActive(false);
         setFireboxesActive(false);
@@ -497,6 +563,9 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
         formedCoilCount = result.coilCount();
         formedPositions = result.positions();
         formedPositionSet = Set.copyOf(result.positions());
+        java.util.Set<BlockPos> watched = new java.util.HashSet<>(formedPositions);
+        for (BlockPos part : formedPositions) for (Direction direction : Direction.values()) watched.add(part.relative(direction));
+        net.mads.industron.runtime.StructureWatch.register(this, watched);
         formedPartPositions = collectFormedPartPositions(result.positions());
         abilityPositions = result.abilityPositions();
         sortedAbilityPositions = sortAbilityPositions(result.abilityPositions());
@@ -504,6 +573,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
         sequentialInputPositionSet = Set.copyOf(result.sequentialInputPositions().values());
         sequentialOutputPositions = result.sequentialOutputPositions();
         formedOverlayModels = result.overlayModels();
+        formedCasingModel = result.casingModel();
         cbHatchPresent = !abilityPositions(MultiblockAbility.CB_INPUT).isEmpty();
         initializeMachineDurability(currentDefinition());
         if (!cbHatchPresent) {
@@ -631,10 +701,30 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
 
         if (definition == null || definition.recipeTypes().isEmpty()) {
             recipeLogic.cancel();
-            tickExternalOperation(definition);
+            if (definition != null && definition.hasContinuousEnergyUsage()) {
+                tickContinuousEnergy(definition);
+            } else {
+                tickExternalOperation(definition);
+            }
             return;
         }
         recipeLogic.serverTick();
+    }
+
+    private void tickContinuousEnergy(MultiblockDefinition definition) {
+        long demand = definition.continuousEnergyUsage(this);
+        if (demand <= 0L || !transferEnergy(demand, true) || !transferEnergy(demand, false)) {
+            activeCEt = 0L;
+            clearActiveRecipe();
+            setActive(false);
+            return;
+        }
+
+        activeCEt = demand;
+        lastContinuousEnergyTick = level.getGameTime();
+        setActive(true);
+        setChanged();
+        syncActiveProgress();
     }
 
     private boolean externallyActive() {
@@ -840,89 +930,6 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
         }
     }
 
-    private void tickOverlayFrame() {
-        if (level == null || !(getBlockState().getBlock() instanceof MultiblockControllerBlock controllerBlock)) {
-            return;
-        }
-
-        BlockState state = getBlockState();
-        if (!state.hasProperty(MultiblockControllerBlock.ACTIVE) || !state.hasProperty(MultiblockControllerBlock.OVERLAY_FRAME)) {
-            return;
-        }
-
-        boolean active = state.getValue(MultiblockControllerBlock.ACTIVE);
-        int frames = controllerBlock.definition().activeOverlayFrameCount();
-        if (!active || frames <= 1) {
-            overlayFrame = 0;
-            overlayFrameTicks = 0;
-            if (state.getValue(MultiblockControllerBlock.OVERLAY_FRAME) != 0) {
-                level.setBlock(worldPosition, state.setValue(MultiblockControllerBlock.OVERLAY_FRAME, 0), 3);
-            }
-            return;
-        }
-
-        overlayFrameTicks++;
-        if (overlayFrameTicks >= 5) {
-            overlayFrameTicks = 0;
-            overlayFrame = (overlayFrame + 1) % Math.min(frames, 10);
-        }
-
-        if (state.getValue(MultiblockControllerBlock.OVERLAY_FRAME) != overlayFrame) {
-            level.setBlock(worldPosition, state.setValue(MultiblockControllerBlock.OVERLAY_FRAME, overlayFrame), 3);
-        }
-    }
-
-    private void tickActiveBlockFrame() {
-        if (level == null) {
-            return;
-        }
-
-        boolean hasAnimatedFirebox = false;
-        for (BlockPos partPos : formedPositions) {
-            BlockState state = level.getBlockState(partPos);
-            if (!(state.getBlock() instanceof FireboxBlock firebox)
-                    || !state.hasProperty(FireboxBlock.ACTIVE)
-                    || !state.getValue(FireboxBlock.ACTIVE)
-                    || !state.hasProperty(FireboxBlock.OVERLAY_FRAME)) {
-                continue;
-            }
-
-            ActiveBlockDefinition definition = firebox.definition();
-            int frames = definition == null ? 1 : Math.min(definition.activeFrameCount(), 10);
-            if (frames > 1) {
-                hasAnimatedFirebox = true;
-            }
-        }
-
-        if (!hasAnimatedFirebox) {
-            activeBlockFrame = 0;
-            activeBlockFrameTicks = 0;
-        } else {
-            activeBlockFrameTicks++;
-            if (activeBlockFrameTicks >= 5) {
-                activeBlockFrameTicks = 0;
-                activeBlockFrame = (activeBlockFrame + 1) % 10;
-            }
-        }
-
-        for (BlockPos partPos : formedPositions) {
-            BlockState state = level.getBlockState(partPos);
-            if (!(state.getBlock() instanceof FireboxBlock firebox)
-                    || !state.hasProperty(FireboxBlock.ACTIVE)
-                    || !state.hasProperty(FireboxBlock.OVERLAY_FRAME)) {
-                continue;
-            }
-
-            boolean active = state.getValue(FireboxBlock.ACTIVE);
-            ActiveBlockDefinition definition = firebox.definition();
-            int frames = definition == null ? 1 : Math.min(definition.activeFrameCount(), 10);
-            int frame = active && frames > 1 ? activeBlockFrame % frames : 0;
-            if (state.getValue(FireboxBlock.OVERLAY_FRAME) != frame) {
-                level.setBlock(partPos, state.setValue(FireboxBlock.OVERLAY_FRAME, frame), 3);
-            }
-        }
-    }
-
     private void syncActiveProgress() {
         if (activeSyncCooldown > 0) {
             activeSyncCooldown--;
@@ -934,15 +941,18 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
     }
 
     private Optional<RecipeHolder<CERecipe>> matchingRecipe(MultiblockDefinition definition, CERecipeInput input) {
+        return matchingRecipe(definition, input, false);
+    }
+    private Optional<RecipeHolder<CERecipe>> matchingRecipe(MultiblockDefinition definition, CERecipeInput input, boolean asynchronous) {
         long profileStart = CEPerformanceProfiler.begin(level);
         try {
-            return matchingRecipeInner(definition, input);
+            return matchingRecipeInner(definition, input, asynchronous);
         } finally {
             CEPerformanceProfiler.record(CEPerformanceProfiler.Metric.RECIPE_LOOKUP, profileStart);
         }
     }
 
-    private Optional<RecipeHolder<CERecipe>> matchingRecipeInner(MultiblockDefinition definition, CERecipeInput input) {
+    private Optional<RecipeHolder<CERecipe>> matchingRecipeInner(MultiblockDefinition definition, CERecipeInput input, boolean asynchronous) {
         if (level == null) {
             return Optional.empty();
         }
@@ -957,6 +967,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
                             preferredRecipeId,
                             Set.copyOf(definition.recipeTypes())
                     )
+                    .filter(recipe -> recipe.value().tools().isEmpty())
                     .filter(recipe -> definition.drive() == MachineDrive.KINETIC
                             ? recipe.value().matchesIgnoringRpm(input, level)
                             : recipe.value().matches(input, level))
@@ -967,12 +978,16 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
                     .filter(recipe -> definition.drive() != MachineDrive.KINETIC_OUTPUT
                             || resolvedOutputRpm(definition, recipe.value()) > 0);
             if (preferred.isPresent()) {
+                if (asynchronous) asyncSearch.discardFinished();
                 return preferred;
             }
         }
 
-        return CERecipeLookup.candidatesByTypes(level.getRecipeManager(), definition.recipeTypes(), input)
+        return (asynchronous && !level.isClientSide()
+                ? asyncSearch.candidates(level.getRecipeManager(), CERecipeLookup.candidatesByTypes(level.getRecipeManager(), definition.recipeTypes(), input), input, machineControlInputRevision)
+                : CERecipeLookup.candidatesByTypes(level.getRecipeManager(), definition.recipeTypes(), input))
                 .stream()
+                .filter(recipe -> recipe.value().tools().isEmpty())
                 .filter(recipe -> definition.drive() == MachineDrive.KINETIC
                         ? recipe.value().matchesIgnoringRpm(input, level)
                         : recipe.value().matches(input, level))
@@ -996,6 +1011,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
 
         return CERecipeLookup.byTypes(level.getRecipeManager(), definition.recipeTypes())
                 .stream()
+                .filter(recipe -> recipe.value().tools().isEmpty())
                 .filter(recipe -> definition.drive() == MachineDrive.KINETIC
                         ? recipe.value().matchesIgnoringRpm(input, level)
                         : recipe.value().matches(input, level))
@@ -1150,7 +1166,19 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
         return Optional.ofNullable(lowest);
     }
 
+    /**
+     * Available process temperature. Coil multiblocks use formed coil heat; passive controllers
+     * with a fixed machine tier use the same 500 C-per-tier progression as the existing thermal
+     * machine system. The concrete machine definition therefore only declares its tier.
+     */
+    private int availableProcessTemperature(@Nullable MultiblockDefinition definition) {
+        if (formedCoilHeat > 0) return formedCoilHeat;
+        if (definition == null || definition.controller() == null || definition.controller().tier() == null) return 0;
+        return 500 * (MachineTierStats.tierIndex(definition.controller().tier().recipeTier()) + 1);
+    }
+
     private Optional<MachineTier> processingTier(MultiblockDefinition definition) {
+        if(isFuelBlastFurnace(definition))return Optional.of(MachineTier.LV);
         Optional<MachineTier> tierFromPower = switch (definition.drive()) {
             case ELECTRIC -> highestPortTier(MultiblockAbility.ENERGY_INPUT);
             case KINETIC -> highestPortTier(MultiblockAbility.KINETIC_INPUT);
@@ -1315,6 +1343,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
             MultiblockDefinition definition,
             MachineTier runtimeTier
     ) {
+        if(isFuelBlastFurnace(definition))return 1;
         return switch (definition.drive()) {
             case ELECTRIC -> MachineTierStats.machineEnergyUsage(
                     definition.energyUsage(),
@@ -1375,15 +1404,15 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
         return Math.max(minimum, Math.min(maximum, Math.max(1, liveRpm)));
     }
 
-    private boolean canProcessEnergy(int signedCEt) {
+    private boolean canProcessEnergy(long signedCEt) {
         return transferEnergy(signedCEt, true);
     }
 
-    private boolean processEnergy(int signedCEt) {
+    private boolean processEnergy(long signedCEt) {
         return transferEnergy(signedCEt, false);
     }
 
-    private boolean transferEnergy(int signedCEt, boolean simulate) {
+    private boolean transferEnergy(long signedCEt, boolean simulate) {
         long profileStart = CEPerformanceProfiler.begin(level);
         try {
             return transferEnergyInner(signedCEt, simulate);
@@ -1392,13 +1421,13 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
         }
     }
 
-    private boolean transferEnergyInner(int signedCEt, boolean simulate) {
+    private boolean transferEnergyInner(long signedCEt, boolean simulate) {
         if (signedCEt == 0) {
             return true;
         }
 
         MultiblockAbility ability = signedCEt > 0 ? MultiblockAbility.ENERGY_INPUT : MultiblockAbility.ENERGY_OUTPUT;
-        int remaining = Math.abs(signedCEt);
+        long remaining = signedCEt == Long.MIN_VALUE ? Long.MAX_VALUE : Math.abs(signedCEt);
         for (BlockPos pos : abilityPositions(ability)) {
             if (level == null || !(level.getBlockEntity(pos) instanceof MachinePortBlockEntity port)) {
                 continue;
@@ -1411,19 +1440,18 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
 
             long moved;
             if (signedCEt > 0) {
-                long inputVoltage = port.displayInputVoltage();
-                long portLimit = Math.max(0L, saturatedMultiply(inputVoltage, container.getInputAmperage()));
-                if (portLimit <= 0) {
-                    continue;
-                }
-                moved = container.extract(Math.min(remaining, portLimit), simulate);
+                // ENERGY_INPUT hatches are buffers: the wire/network rules decide how fast
+                // they can be filled, while the formed multiblock consumes the CE that is
+                // already stored in those buffers. Consumption must therefore not depend on
+                // whether CE arrived from the network this tick, nor on the hatch input rate.
+                moved = container.extract(remaining, simulate);
                 if (!simulate && moved > 0) {
-                    port.recordEnergyInputLoad(moved, inputVoltage);
+                    port.recordEnergyInputLoad(moved, container.getInputVoltage());
                 }
             } else {
                 moved = container.insert(remaining, simulate);
             }
-            remaining -= (int) moved;
+            remaining -= moved;
             if (remaining <= 0) {
                 return true;
             }
@@ -1473,7 +1501,42 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
         return false;
     }
 
+    private double blastFuelCredit;
+
+    private static boolean isFuelBlastFurnace(MultiblockDefinition definition) {
+        return definition == net.mads.industron.machine.machines.without_energy.multiblock.machines.BlastFurnace.DEFINITION;
+    }
+
+    /** Preview never consumes fuel. Commit first checks the entire required payment. */
+    private boolean transferBlastFuel(int workTicks, boolean simulate) {
+        double cost=net.mads.industron.machine.foundry.BlastFuelRules.units(workTicks);
+        if(blastFuelCredit+1e-9>=cost) {
+            if(!simulate){blastFuelCredit=Math.max(0,blastFuelCredit-cost);setChanged();}
+            return true;
+        }
+        record FuelSlot(MachinePortBlockEntity port,int slot,int count,double units){}
+        List<FuelSlot> payment=new ArrayList<>();
+        double available=blastFuelCredit;
+        for(MachinePortBlockEntity port:itemPorts(MultiblockAbility.ITEM_INPUT)) {
+            for(int slot=0;slot<port.items().getSlots()&&available+1e-9<cost;slot++) {
+                ItemStack stack=port.items().getStackInSlot(slot);
+                double units=net.mads.industron.recipe.recipetypes.FuelRecipeLookup.itemFuelUnits(level,stack);
+                if(!Double.isFinite(units)||units<=0)continue;
+                int count=(int)Math.min(stack.getCount(),Math.ceil((cost-available)/units));
+                if(count<=0||port.items().extractItem(slot,count,true).getCount()!=count)continue;
+                payment.add(new FuelSlot(port,slot,count,units));available+=count*units;
+            }
+        }
+        if(available+1e-9<cost)return false;
+        if(!simulate) {
+            for(FuelSlot slot:payment){slot.port().items().extractItem(slot.slot(),slot.count(),false);slot.port().syncToClient();}
+            blastFuelCredit=Math.max(0,available-cost);setChanged();
+        }
+        return true;
+    }
+
     private boolean canProcessMachineResource(MultiblockDefinition definition, int amount) {
+        if(isFuelBlastFurnace(definition))return transferBlastFuel(amount,true);
         if (amount <= 0) {
             return true;
         }
@@ -1485,6 +1548,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
     }
 
     private boolean processMachineResource(MultiblockDefinition definition, int amount) {
+        if(isFuelBlastFurnace(definition))return transferBlastFuel(amount,false);
         if (amount <= 0) {
             return true;
         }
@@ -2499,22 +2563,57 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
         }
     }
 
+    @Nullable
+    private static MachineTier machineTier(String id) {
+        for (MachineTier tier : MachineTier.ALL) {
+            if (tier.id().equals(id)) {
+                return tier;
+            }
+        }
+        return null;
+    }
+
+    /** Grants the next recipe run for a formed multiblock that declares activationItem(...). */
+    public boolean grantManualActivation() {
+        MultiblockDefinition definition = currentDefinition();
+        if (!formed || definition == null || !definition.requiresActivation() || manualActivationGranted) {
+            return false;
+        }
+        manualActivationGranted = true;
+        setChanged();
+        syncToClient();
+        return true;
+    }
+
+    private void consumeManualActivation(MultiblockDefinition definition) {
+        if (definition != null && definition.requiresActivation() && manualActivationGranted) {
+            manualActivationGranted = false;
+            setChanged();
+            syncToClient();
+        }
+    }
+
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
+        tag.putDouble("BlastFuelCredit",blastFuelCredit);
         tag.putBoolean("Formed", formed);
         tag.putBoolean("MachineEnabled", machineEnabled);
+        tag.putBoolean(MANUAL_ACTIVATION_DATA, manualActivationGranted);
         tag.putString("FormedVariant", formedVariant);
         tag.putInt("VariantLevel", variantLevel);
         if (formedTier != null) {
             tag.putString("FormedTier", formedTier.id());
         }
+        if (formedCasingModel != null) {
+            tag.putString("FormedCasingModel", formedCasingModel.toString());
+        }
         tag.putInt("FormedCoilHeat", formedCoilHeat);
         tag.putInt("FormedCoilCount", formedCoilCount);
         tag.putInt("RecipeProgress", recipeProgress);
         tag.putInt("RecipeDuration", recipeDuration);
-        tag.putInt("ActiveCEt", activeCEt);
-        tag.putInt("ExternalCEt", externalCEt);
+        tag.putLong("ActiveCEt", activeCEt);
+        tag.putLong("ExternalCEt", externalCEt);
         tag.putBoolean(CB_HATCH_PRESENT_DATA, cbHatchPresent);
         tag.putLong(CB_VALUE_DATA, chemicalBalanceTenThousandths);
         if (machineDurabilityHundredths >= 0L) {
@@ -2530,26 +2629,22 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
+        blastFuelCredit=net.mads.industron.machine.foundry.BlastFuelRules.restore(tag.getDouble("BlastFuelCredit"));
         formed = tag.getBoolean("Formed");
         machineEnabled = !tag.contains("MachineEnabled") || tag.getBoolean("MachineEnabled");
+        manualActivationGranted = tag.getBoolean(MANUAL_ACTIVATION_DATA);
         formedVariant = tag.getString("FormedVariant");
         variantLevel = tag.getInt("VariantLevel");
-        formedTier = null;
-        if (tag.contains("FormedTier")) {
-            String tierId = tag.getString("FormedTier");
-            for (MachineTier tier : MachineTier.ALL) {
-                if (tier.id().equals(tierId)) {
-                    formedTier = tier;
-                    break;
-                }
-            }
-        }
+        formedTier = tag.contains("FormedTier") ? machineTier(tag.getString("FormedTier")) : null;
+        formedCasingModel = tag.contains("FormedCasingModel")
+                ? ResourceLocation.tryParse(tag.getString("FormedCasingModel"))
+                : null;
         formedCoilHeat = tag.getInt("FormedCoilHeat");
         formedCoilCount = tag.getInt("FormedCoilCount");
         recipeProgress = tag.getInt("RecipeProgress");
         recipeDuration = tag.getInt("RecipeDuration");
-        activeCEt = tag.getInt("ActiveCEt");
-        externalCEt = tag.getInt("ExternalCEt");
+        activeCEt = tag.getLong("ActiveCEt");
+        externalCEt = tag.getLong("ExternalCEt");
         cbHatchPresent = tag.contains(CB_HATCH_PRESENT_DATA)
                 ? tag.getBoolean(CB_HATCH_PRESENT_DATA)
                 : tag.getBoolean(LEGACY_PH_HATCH_PRESENT_DATA);
@@ -2649,7 +2744,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
                 .fluidInputs(this::cachedMachineControlFluidInputs)
                 .multiblockFormed(formed)
                 .world(this::machineControlWorldSnapshot)
-                .temperature(formedCoilHeat)
+                .temperature(availableProcessTemperature(currentDefinition()))
                 .chemicalBalance(recipeMinimumChemicalBalanceHundredths(), recipeMaximumChemicalBalanceHundredths(), machineChemicalBalanceHundredths())
                 .rpm(recipeMinimumRpm(), recipeMaximumRpm(), usesKineticInput() ? kineticInputRpm() : 0)
                 .build();
@@ -2812,7 +2907,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
                     energyTier,
                     definition.drive(),
                     rpm,
-                    formedCoilHeat
+                    availableProcessTemperature(definition)
             );
             Optional<RecipeHolder<CERecipe>> match = matchingRecipe(definition, input);
             if (match.isEmpty()) continue;
@@ -2916,9 +3011,13 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
         syncToClient();
     }
 
+    private Boolean lastPartsActive;
+
     public void setActive(boolean active) {
         boolean targetActive = active && formed && machineEnabled;
         boolean changed = updateBlockActiveState(targetActive);
+        if (lastPartsActive != null && lastPartsActive == targetActive && !changed) return;
+        lastPartsActive = targetActive;
         boolean coilChanged = setCoilsActive(targetActive);
         boolean fireboxChanged = setFireboxesActive(targetActive);
         if (changed || coilChanged || fireboxChanged) {
@@ -2951,10 +3050,9 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
         }
 
         BlockState updated = state.setValue(MultiblockControllerBlock.ACTIVE, active);
-        if (!active && updated.hasProperty(MultiblockControllerBlock.OVERLAY_FRAME)) {
+        if (!active) {
             overlayFrame = 0;
             overlayFrameTicks = 0;
-            updated = updated.setValue(MultiblockControllerBlock.OVERLAY_FRAME, 0);
         }
 
         if (updated.equals(state)) {
@@ -2996,9 +3094,6 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
             }
 
             BlockState updated = state.setValue(FireboxBlock.ACTIVE, active);
-            if (!active && updated.hasProperty(FireboxBlock.OVERLAY_FRAME)) {
-                updated = updated.setValue(FireboxBlock.OVERLAY_FRAME, 0);
-            }
             level.setBlock(partPos, updated, 3);
             changed = true;
         }
@@ -3053,7 +3148,25 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
                 : Math.max(0, recipeDuration - recipeProgress);
     }
 
-    public int activeCEt() {
+    /**
+     * Resource rate shown in GUIs/integrations. Continuous-energy machines expose their
+     * calculated demand even while they are waiting for enough CE, instead of falling back to 0.
+     */
+    public long displayResourcePerTick() {
+        if (!machineEnabled) {
+            return 0L;
+        }
+        if (recipeLogic.isProcessing()) {
+            return recipeLogic.resourcePerTick();
+        }
+        MultiblockDefinition definition = currentDefinition();
+        if (definition != null && definition.hasContinuousEnergyUsage()) {
+            return definition.continuousEnergyUsage(this);
+        }
+        return activeCEt;
+    }
+
+    public long activeCEt() {
         if (!machineEnabled) {
             return 0;
         }
@@ -3118,10 +3231,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
         if (level == null) {
             return Optional.empty();
         }
-        return level.getRecipeManager()
-                .byKey(recipeId)
-                .filter(holder -> holder.value() instanceof CERecipe)
-                .map(holder -> (CERecipe) holder.value());
+        return CERecipeLookup.byId(level.getRecipeManager(), recipeId).map(RecipeHolder::value);
     }
 
     private InteractionContext interactionContext(List<ItemStack> items, List<FluidStack> fluids) {
@@ -3213,10 +3323,10 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
                     energyTier,
                     definition.drive(),
                     rpm,
-                    formedCoilHeat
+                    availableProcessTemperature(definition)
             );
 
-            Optional<RecipeHolder<CERecipe>> match = matchingRecipe(definition, input);
+            Optional<RecipeHolder<CERecipe>> match = matchingRecipe(definition, input, routes.size() == 1);
             if (match.isEmpty()) {
                 continue;
             }
@@ -3259,7 +3369,8 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
                     machineModifier,
                     recipeModifier
             );
-            int resourcePerTick = baseResourcePerTick;
+            int resourcePerTick = isFuelBlastFurnace(definition)
+                    ? Math.multiplyExact(baseResourcePerTick,parallel) : baseResourcePerTick;
             List<ItemStack> plannedItemOutputs = rollItemOutputs(recipe, parallel, input.processingTier());
             SequentialFluidOutputs sequentialFluidOutputs = definition.sequencedOutput()
                     ? rollSequentialFluidOutputs(recipe, parallel, input.processingTier())
@@ -3412,13 +3523,15 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
     }
 
     private final class RecipeHost implements CERecipeLogicHost {
+        @Override public boolean recipeSearchPending() { return asyncSearch.pending(); }
         @Override
         public boolean recipeMachineReady() {
             MultiblockDefinition definition = currentDefinition();
             return level != null
                     && formed
                     && definition != null
-                    && !definition.recipeTypes().isEmpty();
+                    && !definition.recipeTypes().isEmpty()
+                    && (!definition.requiresActivation() || manualActivationGranted);
         }
 
         @Override
@@ -3458,7 +3571,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
                 }
             }
 
-            if (definition.drive() != MachineDrive.NONE && recipe.get().requiredTier().isPresent()) {
+            if ((definition.drive() != MachineDrive.NONE || isFuelBlastFurnace(definition)) && recipe.get().requiredTier().isPresent()) {
                 Optional<MachineTier> actualTier = processingTier(definition);
                 if (actualTier.isEmpty()
                         || !MachineTierStats.isAtLeast(actualTier.get(), recipe.get().requiredTier().get())) {
@@ -3545,12 +3658,14 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
                 InputRoute route = executionRoute(execution);
                 List<MachinePortBlockEntity> itemOutputPorts =
                         outputPorts(MultiblockAbility.ITEM_OUTPUT, route);
-                return !itemOutputPorts.isEmpty()
+                boolean completed = !itemOutputPorts.isEmpty()
                         && insertItemOutputs(
                         itemOutputPorts,
                         dirtyAssemblerRefundItems(execution, recipe.get()),
                         false
                 );
+                if (completed) consumeManualActivation(definition);
+                return completed;
             }
 
             InputRoute route = executionRoute(execution);
@@ -3568,6 +3683,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Menu
                             execution.fluidOutputs(),
                             false
                     );
+            if (insertedFluids) consumeManualActivation(definition);
             return insertedFluids;
         }
 

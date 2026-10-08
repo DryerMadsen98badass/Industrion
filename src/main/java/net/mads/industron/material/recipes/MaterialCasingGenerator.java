@@ -4,12 +4,13 @@ import net.mads.industron.machine.MachineTier;
 import net.mads.industron.material.IndustrialMaterial;
 import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.MaterialPart;
-import net.mads.industron.recipe.recipetypes.assembly.AssemblyMetal;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyMaterialSelector;
 import net.mads.industron.recipe.recipetypes.assembly.AssemblyRequirement;
 import net.mads.industron.recipe.recipetypes.assembly.AssemblyTools;
 import net.mads.industron.recipe.recipes.assembly.ComponentDefinitions;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -34,7 +35,7 @@ public final class MaterialCasingGenerator {
         public String displayName() { return material.displayName() + " " + definition.displayName(); }
     }
 
-    public static final List<GeneratedCasing> ALL = generate(MaterialCasingRecipes.ALL);
+    public static final List<GeneratedCasing> ALL = generate(MaterialCasingRecipes.ALL, IndustrialMaterials.ALL);
 
     private MaterialCasingGenerator() {
     }
@@ -69,17 +70,32 @@ public final class MaterialCasingGenerator {
         return List.copyOf(combined);
     }
 
-    private static List<GeneratedCasing> generate(List<CasingDefinition> definitions) {
+    /**
+     * Deterministically ordered casing resolution used by registration and validation.
+     * Definition/material declaration order is deliberately not part of generated identity.
+     */
+    public static List<GeneratedCasing> generate(
+            List<CasingDefinition> definitions,
+            List<IndustrialMaterial> materials
+    ) {
         List<GeneratedCasing> result = new ArrayList<>();
         Set<String> ids = new LinkedHashSet<>();
 
-        for (CasingDefinition definition : definitions) {
+        List<CasingDefinition> orderedDefinitions = definitions.stream()
+                .sorted(Comparator.comparing(CasingDefinition::id))
+                .toList();
+        List<IndustrialMaterial> orderedMaterials = materials.stream()
+                .sorted(Comparator.comparing(IndustrialMaterial::id))
+                .toList();
+
+        for (CasingDefinition definition : orderedDefinitions) {
             int startIndex = MachineTier.ALL.indexOf(definition.startTier());
             if (startIndex < 0) {
                 throw new IllegalStateException("Unknown casing start tier: " + definition.startTier().id());
             }
 
-            for (IndustrialMaterial material : IndustrialMaterials.ALL) {
+            for (IndustrialMaterial material : orderedMaterials) {
+                if (material.isClayMaterial()) continue;
                 int tierIndex = MachineTier.ALL.indexOf(material.tier());
                 if (tierIndex < startIndex) continue;
 
@@ -108,14 +124,14 @@ public final class MaterialCasingGenerator {
             List<AssemblyRequirement> requirements = effectiveInputRequirements(generated, input);
             switch (input.kind()) {
                 case MATERIAL -> {
-                    if (!materialInputAvailable(input.material(), input.metalOverride(), casingMaterial, requirements)) {
+                    if (!materialInputAvailable(input.material(), input.materialOverride(), casingMaterial, requirements)) {
                         return false;
                     }
                 }
                 case COMPONENT -> {
                     if (!componentInputAvailable(
                             input.component(),
-                            input.metalOverride(),
+                            input.materialOverride(),
                             casingMaterial,
                             requirements
                     )) {
@@ -123,7 +139,7 @@ public final class MaterialCasingGenerator {
                     }
                 }
                 case TOOL -> {
-                    if (AssemblyTools.all().stream().noneMatch(tool -> tool.type().equals(input.tool()))) {
+                    if (!AssemblyTools.hasType(input.tool())) {
                         return false;
                     }
                 }
@@ -137,30 +153,30 @@ public final class MaterialCasingGenerator {
 
     private static boolean materialInputAvailable(
             MaterialPart part,
-            AssemblyMetal override,
+            AssemblyMaterialSelector override,
             IndustrialMaterial inherited,
             List<AssemblyRequirement> requirements
     ) {
         if (override == null) return matchesForm(inherited, part, requirements);
-        if (!override.isAny()) return matchesForm(override.resolve(), part, requirements);
+        if (override.isFixed()) return matchesForm(override.resolve(), part, requirements);
 
-        return IndustrialMaterials.ALL.stream()
+        return override.candidates().stream()
                 .anyMatch(material -> matchesForm(material, part, requirements));
     }
 
     private static boolean componentInputAvailable(
             net.mads.industron.recipe.recipetypes.assembly.AssemblyComponent component,
-            AssemblyMetal override,
+            AssemblyMaterialSelector override,
             IndustrialMaterial inherited,
             List<AssemblyRequirement> requirements
     ) {
         if (override == null) {
             return ComponentDefinitions.canResolve(component, inherited, requirements);
         }
-        if (!override.isAny()) {
+        if (override.isFixed()) {
             return ComponentDefinitions.canResolve(component, override.resolve(), requirements);
         }
-        return ComponentDefinitions.canResolveFree(component, requirements);
+        return ComponentDefinitions.canResolve(component, override, requirements);
     }
 
     private static boolean matchesForm(
@@ -195,4 +211,3 @@ public final class MaterialCasingGenerator {
         return List.copyOf(result);
     }
 }
-

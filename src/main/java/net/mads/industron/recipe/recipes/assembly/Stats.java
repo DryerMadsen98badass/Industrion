@@ -13,7 +13,7 @@ import java.util.List;
  * .input(Component.PLATE, 8)
  *     .stat(Stats.STRUCTURAL_STRENGTH).atLeast(50)
  *     .stat(Stats.PRESSURE_RESISTANCE).atLeast(100)
- * .input(Material.ROD, Metal.VERNIUM, 2)
+ * .input(Material.ROD, IndustrialMaterials.VERNIUM, 2)
  *     .stat(Stats.HARDNESS).range(100, 250)
  * </pre>
  */
@@ -139,7 +139,7 @@ public final class Stats {
     public static final AssemblyProperty<MaterialProperties.ElectronicFamily> ELECTRONIC_FAMILY =
             new AssemblyProperty<>("Electronic Family", MaterialProperties::electronicFamily);
     public static final AssemblyProperty<MaterialProperties.ElectricalBehavior> ELECTRICAL_BEHAVIOR =
-            new AssemblyProperty<>("Electrical Behavior", MaterialProperties::electricalBehavior);
+            new AssemblyProperty<>("Electrical Behavior", "electricalBehavior", MaterialProperties::electricalBehavior);
     public static final AssemblyProperty<MaterialProperties.CrystalStructure> CRYSTAL_STRUCTURE =
             new AssemblyProperty<>("Crystal Structure", MaterialProperties::crystalStructure);
     public static final AssemblyProperty<MaterialProperties.FractureBehavior> FRACTURE_BEHAVIOR =
@@ -165,9 +165,9 @@ public final class Stats {
             new AssemblyProperty<>("Furnace Fuel", MaterialProperties::furnaceFuel);
 
     public static final AssemblyProperty<Boolean> ELECTRICALLY_CONDUCTIVE =
-            new AssemblyProperty<>("Electrically Conductive", MaterialProperties::electricallyConductive);
+            new AssemblyProperty<>("Electrically Conductive", "electricalBehavior", MaterialProperties::electricallyConductive);
     public static final AssemblyProperty<Boolean> ELECTRICALLY_INSULATING =
-            new AssemblyProperty<>("Electrically Insulating", MaterialProperties::electricallyInsulating);
+            new AssemblyProperty<>("Electrically Insulating", "electricalBehavior", MaterialProperties::electricallyInsulating);
 
     private Stats() {
     }

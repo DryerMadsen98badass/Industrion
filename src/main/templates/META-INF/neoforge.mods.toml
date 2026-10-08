@@ -40,7 +40,7 @@ side="BOTH"
 modId="create"
 type="required"
 versionRange="[6.0.10,6.1.0)"
-ordering="NONE"
+ordering="AFTER"
 side="BOTH"
 
 [[dependencies.industron]]

@@ -4,6 +4,8 @@ import net.mads.industron.machine.MachineTier;
 import net.mads.industron.material.atomic.AtomicModel;
 import net.mads.industron.material.atomic.AtomicState;
 
+import java.util.Set;
+
 public final class MaterialPropertyCalculator {
     public static final int AMBIENT_TEMPERATURE_C = 20;
     public static final int METAL_MELTING_TIER_BAND_C = 500;
@@ -440,11 +442,15 @@ public final class MaterialPropertyCalculator {
                 atomic,
                 reactivityProfile,
                 oxidationTendency,
-                oxidationResistanceScore
+                electrochemicalPotential,
+                chemicalStabilityScore,
+                volatility,
+                metal,
+                metallicityProfile
         );
-        boolean furnaceFuel = furnaceFuelPotential >= 70;
+        boolean furnaceFuel = furnaceFuelPotential >= 50;
         int furnaceBurnTimeTicks = furnaceFuel
-                ? safePositiveInt(tierMultiplier * (200.0D + furnaceFuelPotential * 10.0D))
+                ? safePositiveInt(200.0D + furnaceFuelPotential * 10.0D)
                 : 0;
 
         int frictionScore = clampScore(weighted(
@@ -469,7 +475,9 @@ public final class MaterialPropertyCalculator {
                 wearResistance, 0.20,
                 fractureToughness, 0.20
         ));
-        double pumpFlowRate = roundToOneDecimal(exponentialTransportDouble(pumpFlowScore, 4.0D));
+        double pumpFlowRate = FluidTransportLimits.tierCapacity(
+                tierIndex, MachineTier.ALL.size(), pumpFlowScore,
+                4.0D, FluidTransportLimits.MAX_PUMP_RATE);
 
         int normalizedFriction = clampScore((int) Math.round((frictionCoefficient - 0.1D) / 1.4D * 100.0D));
         int pumpStressScore = clampScore(weighted(
@@ -478,7 +486,7 @@ public final class MaterialPropertyCalculator {
                 100 - fatigueScore, 0.15,
                 100 - elasticityScore, 0.10
         ));
-        int pumpStressImpact = Math.max(1, (int) Math.round(1.0D + pumpStressScore * 15.0D / 100.0D));
+        int pumpStressImpact = FluidTransportLimits.pumpStress(tierMultiplier, pumpFlowRate, pumpStressScore);
 
         int maxFluidTemperature = maxFluidTemperatureC(
                 state,
@@ -501,7 +509,9 @@ public final class MaterialPropertyCalculator {
                 fractureToughness, 0.15,
                 fatigueResistance, 0.10
         ));
-        int tankCapacity = exponentialTransportValue(tankCapabilityScore, 5500.0D);
+        int tankCapacity = (int) Math.floor(FluidTransportLimits.tierCapacity(
+                tierIndex, MachineTier.ALL.size(), tankCapabilityScore,
+                5500.0D, FluidTransportLimits.MAX_TANK_CAPACITY));
 
         return new MaterialProperties(
                 tierMultiplier,
@@ -613,7 +623,8 @@ public final class MaterialPropertyCalculator {
                 minChemicalRange,
                 maxChemicalRange,
                 tankCapabilityScore,
-                tankCapacity
+                tankCapacity,
+                Set.of()
         );
     }
 
@@ -646,6 +657,9 @@ public final class MaterialPropertyCalculator {
     }
 
     public static int temperatureFor(MaterialProperties properties, MaterialPart part) {
+        // Manual-forging hot solids use exactly half the material melting point. Integer division
+        // deliberately discards any .5 remainder, matching the anvil arithmetic rule.
+        if (part != null && part.isHotForgePart()) return Math.max(0, properties.meltingPoint() / 2);
         if (part == MaterialPart.MOLTEN_FLUID) {
             return properties.castTemperature();
         }
@@ -1280,16 +1294,27 @@ public final class MaterialPropertyCalculator {
             AtomicState atomic,
             int reactivity,
             int oxidationTendency,
-            int oxidationResistanceScore
+            int electrochemicalPotential,
+            int chemicalStability,
+            int volatility,
+            boolean metal,
+            int metallicity
     ) {
-        if (atomic.family() == MaterialProperties.ElectronicFamily.NOBLE_GAS_LIKE) {
+        if (atomic.family() == MaterialProperties.ElectronicFamily.NOBLE_GAS_LIKE || metal) {
             return 0;
         }
+        int stabilityWindow = clampScore((int) Math.round(
+                100.0D - Math.abs(chemicalStability - 55.0D) * 1.6D
+        ));
+        int nonMetal = clampScore(100 - metallicity);
         return clampScore(weighted(
-                reactivity, 0.40,
-                atomic.electronDonationTendency(), 0.30,
-                oxidationTendency, 0.20,
-                100 - oxidationResistanceScore, 0.10
+                atomic.electronDonationTendency(), 0.22,
+                electrochemicalPotential, 0.20,
+                oxidationTendency, 0.18,
+                reactivity, 0.12,
+                volatility, 0.10,
+                nonMetal, 0.12,
+                stabilityWindow, 0.06
         ));
     }
 

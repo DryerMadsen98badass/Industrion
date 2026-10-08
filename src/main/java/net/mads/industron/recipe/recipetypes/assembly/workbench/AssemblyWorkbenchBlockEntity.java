@@ -27,7 +27,7 @@ public final class AssemblyWorkbenchBlockEntity extends BlockEntity {
     public boolean resultReady() { return resultReady; }
 
     public void setDisplayedStack(ItemStack stack, boolean result) {
-        displayedStack = stack.copyWithCount(1);
+        displayedStack = stack.copy();
         resultReady = result && !displayedStack.isEmpty();
         contentChanged();
     }

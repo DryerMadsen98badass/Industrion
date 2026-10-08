@@ -15,6 +15,7 @@ public record FluidTransportTier(
 ) {
     private static final Pattern VALID_ID = Pattern.compile("[a-z0-9]+(?:_[a-z0-9]+)*");
     private static final Map<String, FluidTransportTier> ALL = new LinkedHashMap<>();
+    private static volatile List<FluidTransportTier> snapshot;
 
     public FluidTransportTier {
         Objects.requireNonNull(id, "id");
@@ -104,7 +105,12 @@ public record FluidTransportTier(
 
     public static List<FluidTransportTier> all() {
         FluidTransportTiers.bootstrap();
-        return List.copyOf(ALL.values());
+        List<FluidTransportTier> result = snapshot;
+        if (result == null) {
+            result = List.copyOf(ALL.values());
+            snapshot = result;
+        }
+        return result;
     }
 
     public static FluidTransportTier byId(String id) {
@@ -121,6 +127,7 @@ public record FluidTransportTier(
         if (previous != null) {
             throw new IllegalStateException("Duplicate fluid transport tier id: " + tier.id());
         }
+        snapshot = null;
         return tier;
     }
 

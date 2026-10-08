@@ -1,12 +1,15 @@
 package net.mads.industron.recipe;
 
-import net.mads.industron.recipe.recipetypes.TestProcessingRecipeType;
+import net.mads.industron.recipe.recipetypes.PressureArcFurnaceRecipeType;
 import net.mads.industron.recipe.recipetypes.PulverizingRecipeType;
 import net.mads.industron.recipe.recipetypes.CrushingRecipeType;
 import net.mads.industron.recipe.recipetypes.GrindingRecipeType;
 import net.mads.industron.recipe.recipetypes.SiftingRecipeType;
 import net.mads.industron.recipe.recipetypes.WashingRecipeType;
+import net.mads.industron.recipe.recipetypes.RiverWasherRecipeType;
 import net.mads.industron.recipe.recipetypes.MixingRecipeType;
+import net.mads.industron.recipe.recipetypes.BasinMixingRecipeType;
+import net.mads.industron.recipe.recipetypes.BasinMortaringRecipeType;
 import net.mads.industron.recipe.recipetypes.HeatingRecipeType;
 import net.mads.industron.recipe.recipetypes.CoolingRecipeType;
 import net.mads.industron.recipe.recipetypes.DryingRecipeType;
@@ -49,6 +52,7 @@ import net.mads.industron.recipe.recipetypes.AdsorptionRecipeType;
 import net.mads.industron.recipe.recipetypes.DistillationRecipeType;
 import net.mads.industron.recipe.recipetypes.FractionationRecipeType;
 import net.mads.industron.recipe.recipetypes.CompactingRecipeType;
+import net.mads.industron.recipe.recipetypes.DecompactingRecipeType;
 import net.mads.industron.recipe.recipetypes.CompressingRecipeType;
 import net.mads.industron.recipe.recipetypes.ExtrudingRecipeType;
 import net.mads.industron.recipe.recipetypes.RollingRecipeType;
@@ -58,11 +62,18 @@ import net.mads.industron.recipe.recipetypes.TurningRecipeType;
 import net.mads.industron.recipe.recipetypes.BendingRecipeType;
 import net.mads.industron.recipe.recipetypes.WireDrawingRecipeType;
 import net.mads.industron.recipe.recipetypes.WindingRecipeType;
-import net.mads.industron.recipe.recipetypes.PrecisionMachiningRecipeType;
-import net.mads.industron.recipe.recipetypes.AssemblingRecipeType;
 import net.mads.industron.recipe.recipetypes.MagneticSeparationRecipeType;
 import net.mads.industron.recipe.recipetypes.MagnetizingRecipeType;
 import net.mads.industron.recipe.recipetypes.PolishingRecipeType;
+import net.mads.industron.recipe.recipetypes.BrickMoldingRecipeType;
+import net.mads.industron.recipe.recipetypes.RackDryingRecipeType;
+import net.mads.industron.recipe.recipetypes.KilnFiringRecipeType;
+import net.mads.industron.recipe.recipetypes.FuelRecipeType;
+import net.mads.industron.recipe.recipetypes.BlastFurnaceRecipeType;
+import net.mads.industron.recipe.recipetypes.CompostingRecipeType;
+import net.mads.industron.recipe.recipetypes.PrimitiveSiftingRecipeType;
+import net.mads.industron.recipe.recipetypes.PrimitivePyrolysisRecipeType;
+import net.mads.industron.recipe.recipetypes.HandProcessingRecipeType;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
@@ -71,13 +82,16 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public final class CERecipeTypes {
-    public static final RecipeTypeDefinition TEST_PROCESSING = TestProcessingRecipeType.DEFINITION;
+    public static final RecipeTypeDefinition PRESSURE_ARC_FURNACE = PressureArcFurnaceRecipeType.DEFINITION;
     public static final RecipeTypeDefinition PULVERIZING = PulverizingRecipeType.DEFINITION;
     public static final RecipeTypeDefinition CRUSHING = CrushingRecipeType.DEFINITION;
     public static final RecipeTypeDefinition GRINDING = GrindingRecipeType.DEFINITION;
     public static final RecipeTypeDefinition SIFTING = SiftingRecipeType.DEFINITION;
     public static final RecipeTypeDefinition WASHING = WashingRecipeType.DEFINITION;
+    public static final RecipeTypeDefinition RIVER_WASHER = RiverWasherRecipeType.DEFINITION;
     public static final RecipeTypeDefinition MIXING = MixingRecipeType.DEFINITION;
+    public static final RecipeTypeDefinition BASIN_MIXING = BasinMixingRecipeType.DEFINITION;
+    public static final RecipeTypeDefinition BASIN_MORTARING = BasinMortaringRecipeType.DEFINITION;
     public static final RecipeTypeDefinition HEATING = HeatingRecipeType.DEFINITION;
     public static final RecipeTypeDefinition COOLING = CoolingRecipeType.DEFINITION;
     public static final RecipeTypeDefinition DRYING = DryingRecipeType.DEFINITION;
@@ -120,6 +134,7 @@ public final class CERecipeTypes {
     public static final RecipeTypeDefinition DISTILLATION = DistillationRecipeType.DEFINITION;
     public static final RecipeTypeDefinition FRACTIONATION = FractionationRecipeType.DEFINITION;
     public static final RecipeTypeDefinition COMPACTING = CompactingRecipeType.DEFINITION;
+    public static final RecipeTypeDefinition DECOMPACTING = DecompactingRecipeType.DEFINITION;
     public static final RecipeTypeDefinition COMPRESSING = CompressingRecipeType.DEFINITION;
     public static final RecipeTypeDefinition EXTRUDING = ExtrudingRecipeType.DEFINITION;
     public static final RecipeTypeDefinition ROLLING = RollingRecipeType.DEFINITION;
@@ -129,20 +144,30 @@ public final class CERecipeTypes {
     public static final RecipeTypeDefinition BENDING = BendingRecipeType.DEFINITION;
     public static final RecipeTypeDefinition WIRE_DRAWING = WireDrawingRecipeType.DEFINITION;
     public static final RecipeTypeDefinition WINDING = WindingRecipeType.DEFINITION;
-    public static final RecipeTypeDefinition PRECISION_MACHINING = PrecisionMachiningRecipeType.DEFINITION;
-    public static final RecipeTypeDefinition ASSEMBLING = AssemblingRecipeType.DEFINITION;
     public static final RecipeTypeDefinition MAGNETIC_SEPARATION = MagneticSeparationRecipeType.DEFINITION;
     public static final RecipeTypeDefinition MAGNETIZING = MagnetizingRecipeType.DEFINITION;
     public static final RecipeTypeDefinition POLISHING = PolishingRecipeType.DEFINITION;
+    public static final RecipeTypeDefinition BRICK_MOLDING = BrickMoldingRecipeType.DEFINITION;
+    public static final RecipeTypeDefinition RACK_DRYING = RackDryingRecipeType.DEFINITION;
+    public static final RecipeTypeDefinition KILN_FIRING = KilnFiringRecipeType.DEFINITION;
+    public static final RecipeTypeDefinition FUEL = FuelRecipeType.DEFINITION;
+    public static final RecipeTypeDefinition BLAST_FURNACE = BlastFurnaceRecipeType.DEFINITION;
+    public static final RecipeTypeDefinition COMPOSTING = CompostingRecipeType.DEFINITION;
+    public static final RecipeTypeDefinition PRIMITIVE_SIFTING = PrimitiveSiftingRecipeType.DEFINITION;
+    public static final RecipeTypeDefinition PRIMITIVE_PYROLYSIS = PrimitivePyrolysisRecipeType.DEFINITION;
+    public static final RecipeTypeDefinition HAND_PROCESSING = HandProcessingRecipeType.DEFINITION;
 
     public static final List<RecipeTypeDefinition> ALL = List.of(
-            TEST_PROCESSING,
+            PRESSURE_ARC_FURNACE,
             PULVERIZING,
             CRUSHING,
             GRINDING,
             SIFTING,
             WASHING,
+            RIVER_WASHER,
             MIXING,
+            BASIN_MIXING,
+            BASIN_MORTARING,
             HEATING,
             COOLING,
             DRYING,
@@ -185,6 +210,7 @@ public final class CERecipeTypes {
             DISTILLATION,
             FRACTIONATION,
             COMPACTING,
+            DECOMPACTING,
             COMPRESSING,
             EXTRUDING,
             ROLLING,
@@ -194,11 +220,18 @@ public final class CERecipeTypes {
             BENDING,
             WIRE_DRAWING,
             WINDING,
-            PRECISION_MACHINING,
-            ASSEMBLING,
             MAGNETIC_SEPARATION,
             MAGNETIZING,
-            POLISHING
+            POLISHING,
+            BRICK_MOLDING,
+            RACK_DRYING,
+            KILN_FIRING,
+            FUEL,
+            BLAST_FURNACE,
+            COMPOSTING,
+            PRIMITIVE_SIFTING,
+            PRIMITIVE_PYROLYSIS,
+            HAND_PROCESSING
     );
 
     private static final Map<ResourceLocation, RecipeTypeDefinition> BY_ID = ALL.stream()

@@ -6,6 +6,7 @@ import net.mads.industron.recipe.recipetypes.assembly.AssemblyRecipeDefinition;
 import net.mads.industron.recipe.recipes.assembly.Component;
 import net.mads.industron.recipe.recipes.assembly.Material;
 import net.mads.industron.recipe.recipes.assembly.ComponentDefinitions;
+import net.mads.industron.recipe.recipes.assembly.WorkbenchLevels;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,6 +29,7 @@ public final class MaterialFrameAssemblyRecipes {
 
     private static AssemblyRecipeDefinition build(IndustrialMaterial material) {
         return AssemblyRecipeDefinition.recipe("material/recipes/" + material.id() + "_frame")
+                .level(WorkbenchLevels.forTier(material.tier()))
                 .baseItemInput(Material.VERY_LONG_ROD, material)
                 .input(Component.VERY_LONG_ROD, material, 11)
                 .baseBlockOutput(Material.FRAME, material)

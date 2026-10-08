@@ -7,6 +7,8 @@ public interface CERecipeLogicHost {
 
     Optional<CERecipeExecution> findAndConsumeRecipeInputs();
 
+    default boolean recipeSearchPending() { return false; }
+
     CERecipeTickResult consumeRecipeTick(CERecipeExecution execution);
 
     boolean canCompleteRecipe(CERecipeExecution execution);

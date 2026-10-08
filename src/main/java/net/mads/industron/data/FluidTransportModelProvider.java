@@ -71,6 +71,9 @@ public final class FluidTransportModelProvider implements DataProvider {
         List<String> tankModels = readLines("tank_models.txt");
         List<PipeColorDefinitions.PipeFamily> pipeFamilies = PipeColorDefinitions.allFamilies();
         Map<DyeColor, ColoredPipeModelSet> coloredModelSets = new EnumMap<>(DyeColor.class);
+        JsonObject[] pipeShapes = PipeShapeCompiler.compile(
+                JsonParser.parseString(readText("blockstates/fluid_pipe.json").replace("\uFEFF", "")).getAsJsonObject(),
+                path -> JsonParser.parseString(readText(path).replace("\uFEFF", "")).getAsJsonObject());
 
         removeLegacySharedPipeOverrides(resourcePackRoot(), pipeModels);
         removeLegacyColoredPipeModelCopies(resourcePackRoot(), pipeFamilies);
@@ -78,7 +81,7 @@ public final class FluidTransportModelProvider implements DataProvider {
         for (FluidTransportTier tier : FluidTransportTier.all()) {
             futures.add(DataProvider.saveStable(
                     cache,
-                    templateJson("blockstates/fluid_pipe.json", tier),
+                    sharedPipeBlockState(tier.pipeId()),
                     blockstates.resolve(tier.pipeId() + ".json")
             ));
             futures.add(DataProvider.saveStable(
@@ -98,6 +101,12 @@ public final class FluidTransportModelProvider implements DataProvider {
             ));
 
             addModels(futures, cache, tier, "fluid_pipe", tier.pipeId(), pipeModels, blockModels);
+            for (int mask = 0; mask < 64; mask++) {
+                futures.add(DataProvider.saveStable(cache,
+                        JsonParser.parseString(pipeShapes[mask].toString()
+                                .replace("bronze_pipes", tier.id() + "_pipes")).getAsJsonObject(),
+                        blockModels.resolve(tier.pipeId()).resolve("shared/shape_" + mask + ".json")));
+            }
             addModels(futures, cache, tier, "mechanical_pump", tier.pumpId(), pumpModels, blockModels);
             addModels(futures, cache, tier, "fluid_tank", tier.tankId(), tankModels, blockModels);
 
@@ -122,7 +131,7 @@ public final class FluidTransportModelProvider implements DataProvider {
 
         for (DyeColor color : DyeColor.values()) {
             writeColoredPipeTextures(cache, color, blockTextures.resolve("pipe_colors"));
-            addSharedColoredPipeModels(futures, cache, color, pipeModels, blockModels);
+            addSharedColoredPipeModels(futures, cache, color, pipeModels, blockModels, pipeShapes);
             coloredModelSets.put(color, createColoredPipeModelSet(color));
         }
 
@@ -236,10 +245,18 @@ public final class FluidTransportModelProvider implements DataProvider {
             CachedOutput cache,
             DyeColor color,
             List<String> pipeModels,
-            Path blockModels
+            Path blockModels,
+            JsonObject[] pipeShapes
     ) {
         String modelId = PipeColorDefinitions.sharedColoredModelId(color);
         Path modelRoot = blockModels.resolve(modelId);
+
+        for (int mask = 0; mask < 64; mask++) {
+            futures.add(DataProvider.saveStable(cache,
+                    JsonParser.parseString(pipeShapes[mask].toString()
+                            .replace("bronze_pipes", "pipe_colors/" + color.getName() + "_pipes")).getAsJsonObject(),
+                    modelRoot.resolve("shared/shape_" + mask + ".json")));
+        }
 
         futures.add(DataProvider.saveStable(
                 cache,
@@ -303,7 +320,7 @@ public final class FluidTransportModelProvider implements DataProvider {
     private static ColoredPipeModelSet createColoredPipeModelSet(DyeColor color) {
         String modelId = PipeColorDefinitions.sharedColoredModelId(color);
         return new ColoredPipeModelSet(
-                coloredPipeTemplateJson("blockstates/fluid_pipe.json", modelId, color),
+                sharedPipeBlockState(modelId),
                 coloredGlassPipeBlockState(modelId),
                 coloredEncasedPipeBlockState(modelId),
                 parentModel(Industron.MOD_ID + ":block/" + modelId + "/item")
@@ -353,6 +370,28 @@ public final class FluidTransportModelProvider implements DataProvider {
         JsonObject root = new JsonObject();
         root.add("variants", variants);
         return root;
+    }
+
+    /** All block IDs use the same model locations per colour and connection mask.
+     * Waterlogging remains a real state, but does not duplicate identical geometry.
+     * These are ordinary vanilla models: no replacement renderer or state changes.
+     */
+    private static JsonObject sharedPipeBlockState(String modelId) {
+        String[] directions = {"down", "up", "north", "south", "west", "east"};
+        JsonObject variants = new JsonObject();
+        for (int mask = 0; mask < 64; mask++) {
+            StringBuilder state = new StringBuilder();
+            for (int index = 0; index < directions.length; index++) {
+                if (index != 0) state.append(',');
+                state.append(directions[index]).append('=').append((mask & (1 << index)) != 0);
+            }
+            JsonObject model = new JsonObject();
+            model.addProperty("model", Industron.MOD_ID + ":block/" + modelId + "/shared/shape_" + mask);
+            variants.add(state.toString(), model);
+        }
+        JsonObject result = new JsonObject();
+        result.add("variants", variants);
+        return result;
     }
 
     private static JsonObject coloredPipeTemplateJson(String path, String modelId, DyeColor color) {

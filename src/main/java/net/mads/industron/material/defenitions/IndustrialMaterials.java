@@ -13,6 +13,8 @@ import net.mads.industron.material.MaterialFormGenerator;
 import net.mads.industron.material.MaterialPart;
 import net.mads.industron.material.MaterialProperties;
 import net.mads.industron.material.MaterialPropertyCalculator;
+import net.mads.industron.material.chemistry.ChemistryPhase;
+import net.mads.industron.material.chemistry.process.ProcessIntermediateMaterials;
 
 import java.util.AbstractList;
 import java.util.ArrayList;
@@ -535,6 +537,9 @@ public final class IndustrialMaterials {
         CompoundMaterials.init();
         MineralDustMaterials.init();
         OreMaterials.init();
+        ClayMaterials.init();
+        CompoundMaterials.initAndesiteAlloys();
+        ProcessIntermediateMaterials.generate(REGISTERED_MATERIALS);
     }
 
     private static List<ElementDefinition> discoverElementDefinitions() {
@@ -585,12 +590,29 @@ public final class IndustrialMaterials {
 
     /** Starts a reviewed trace mineral that owns exactly one generated form: DUST. */
     public static IndustrialMaterialBuilder mineralDust(String id, String displayName) {
-        return new IndustrialMaterialBuilder(id, displayName, -1, MaterialContentProfile.MINERAL_DUST);
+        return new IndustrialMaterialBuilder(id, displayName, -1, MaterialContentProfile.MINERAL_DUST)
+                .phase(ChemistryPhase.SOLID);
     }
 
     /** Starts a reviewed natural ore. Color, chemistry, tier and geology are derived automatically. */
     public static IndustrialMaterialBuilder ore(String id, String displayName) {
         return new IndustrialMaterialBuilder(id, displayName, -1, MaterialContentProfile.ORE);
+    }
+
+    /**
+     * Starts a clay/ceramic definition. Its composition remains available to geology and recipes,
+     * while ceramic gameplay properties come from the explicit clay tier rather than compound chemistry.
+     */
+    public static IndustrialMaterialBuilder clay(String id, String displayName) {
+        return new IndustrialMaterialBuilder(id, displayName, -1, MaterialContentProfile.CLAY);
+    }
+
+    /**
+     * Starts a fired ceramic-brick definition whose raw feed is supplied by a dedicated process
+     * recipe instead of the wet-clay chain. Only BRICK/CRACKED_BRICK forms are owned generically.
+     */
+    public static IndustrialMaterialBuilder ceramicBrick(String id, String displayName) {
+        return new IndustrialMaterialBuilder(id, displayName, -1, MaterialContentProfile.CERAMIC_BRICK);
     }
 
     /** One top-level composition unit used by {@code .contains(...)}. */

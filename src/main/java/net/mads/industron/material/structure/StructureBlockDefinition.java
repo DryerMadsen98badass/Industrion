@@ -92,6 +92,7 @@ public record StructureBlockDefinition(
 
     public enum Shape {
         CUBE,
+        FALLING,
         PILLAR,
         SLAB,
         STAIRS,
@@ -105,11 +106,16 @@ public record StructureBlockDefinition(
         LEAVES,
         SAPLING,
         WINDOW,
+        BOOKSHELF,
+        BARREL,
+        CHISELED_BOOKSHELF,
+        CHEST,
         BARS,
         BRACKET,
         BULB,
         LADDER,
         SCAFFOLD,
+        SHAFT,
         WINDOW_PANE
     }
 

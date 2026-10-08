@@ -60,11 +60,9 @@ Generate large, deterministic, learnable deposits from Industron's fictional mat
 - [ ] No forced chunk loading/order dependence.
 - [ ] Fixed-seed tests in every dimension band.
 
-## Processing boundary
+## Processing boundary – current status
 
-Geology generates the source in host stone. The separate future ore-processing chain turns mined source ore into dust. Automatic composition processing then begins from that dust according to Phase 14.
-
-Do not implement ore-to-dust processing as part of Phase 22.
+Geology generates the source in host stone. `OreProcessingRecipes` now implements the separate mechanical chain from raw/crushed/washed/refined/impure/purified forms to the ore-material dust. Automatic chemistry begins only after that dust boundary. Stone/gravel host-dust recovery remains separate.
 
 ## Done when
 

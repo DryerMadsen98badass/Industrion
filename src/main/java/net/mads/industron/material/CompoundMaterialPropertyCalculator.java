@@ -9,6 +9,7 @@ import net.mads.industron.material.chemistry.MaterialAnalysis;
 import net.mads.industron.material.chemistry.MaterialClassification;
 import net.mads.industron.material.chemistry.MaterialSnapshot;
 import net.mads.industron.material.chemistry.MaterialSource;
+import net.mads.industron.material.structure.StructureMaterial;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.RecordComponent;
@@ -41,6 +42,11 @@ public final class CompoundMaterialPropertyCalculator {
     }
 
     private CompoundMaterialPropertyCalculator() {
+    }
+
+    /** Resolves properties for any definition type accepted by .contains(...). */
+    public static MaterialProperties propertiesFor(IndustrialSubstance substance) {
+        return propertiesOf(substance);
     }
 
     public static Result calculate(
@@ -157,6 +163,7 @@ public final class CompoundMaterialPropertyCalculator {
         String key = normalize(name);
         Class<?> type = field.getType();
 
+        if (name.equals("unavailableProperties")) return Set.of();
         if (name.equals("tierMultiplier")) return tierIndex + 1;
         if (name.equals("protons") || name.equals("neutrons") || name.equals("electrons")
                 || name.equals("outerShell") || name.equals("outerShellCapacity")
@@ -301,7 +308,9 @@ public final class CompoundMaterialPropertyCalculator {
         double total = 0;
         int weight = 0;
         for (MaterialComponent component : components) {
-            Object value = invoke(propertiesOf(component.substance()), accessor);
+            MaterialProperties componentProperties = propertiesOf(component.substance());
+            if (!componentProperties.hasProperty(accessor)) continue;
+            Object value = invoke(componentProperties, accessor);
             if (value instanceof Number number) {
                 total += number.doubleValue() * component.amount();
                 weight += component.amount();
@@ -323,27 +332,33 @@ public final class CompoundMaterialPropertyCalculator {
         for (RecordComponent component : MaterialProperties.class.getRecordComponents()) {
             Class<?> type = component.getType();
             if (type != int.class && type != double.class) continue;
+            if (!properties.hasProperty(component.getName())) continue;
             Object value = invoke(properties, component.getName());
             if (value instanceof Number number) values.put(normalize(component.getName()), number.doubleValue());
         }
         values.putIfAbsent("metalliccharacter", (double) properties.metallicity());
-        values.putIfAbsent("electronmobility", (double) properties.electricalConductivity());
+        if (properties.hasProperty("electricalConductivity")) {
+            values.putIfAbsent("electronmobility", (double) properties.electricalConductivity());
+        }
         return values;
     }
 
     private static Set<MaterialClassification> baseClassifications(MaterialProperties properties) {
         Set<MaterialClassification> result = EnumSet.noneOf(MaterialClassification.class);
         result.add(MaterialClassification.ELEMENT);
-        if (properties.electricalConductivity() >= 65) result.add(MaterialClassification.CONDUCTOR);
-        else if (properties.electricalConductivity() >= 15) result.add(MaterialClassification.SEMICONDUCTOR);
-        else result.add(MaterialClassification.INSULATOR);
+        if (properties.hasProperty("electricalConductivity")) {
+            if (properties.electricalConductivity() >= 65) result.add(MaterialClassification.CONDUCTOR);
+            else if (properties.electricalConductivity() >= 15) result.add(MaterialClassification.SEMICONDUCTOR);
+            else result.add(MaterialClassification.INSULATOR);
+        }
         return result;
     }
 
     private static List<CompositionEntry> nestedComposition(IndustrialSubstance substance) {
-        if (!(substance instanceof IndustrialMaterial material) || material.components().isEmpty()) return List.of();
+        List<MaterialComponent> components = componentsOf(substance);
+        if (components.isEmpty()) return List.of();
         List<CompositionEntry> result = new ArrayList<>();
-        for (MaterialComponent component : material.components()) {
+        for (MaterialComponent component : components) {
             result.add(new CompositionEntry(
                     component.substance().id(),
                     component.amount(),
@@ -358,19 +373,74 @@ public final class CompoundMaterialPropertyCalculator {
     }
 
     private static MaterialProperties propertiesOf(IndustrialSubstance substance) {
+        if (substance instanceof net.mads.industron.fluid.IndustrialFluid fluid) {
+            return calculate(fluid.id(), fluid.displayName(), fluid.color(), fluid.components(),
+                    Optional.empty(), Optional.of(fluid.isGas() ? ChemistryPhase.GAS : ChemistryPhase.LIQUID),
+                    Set.of(), Set.of(), Map.of()).properties();
+        }
+        if (substance instanceof net.mads.industron.material.organism.BiologicalMaterial biological) {
+            return calculate(biological.id(), biological.displayName(), biological.color(),
+                    biological.components(), Optional.empty(), Optional.empty(), Set.of(), Set.of(), Map.of()).properties();
+        }
+        if (substance instanceof net.mads.industron.material.organic.OrganicMaterial
+                || substance instanceof net.mads.industron.material.plant.PlantMaterial
+                || substance instanceof net.mads.industron.material.plant.PlantDerivedSubstance
+                || substance instanceof net.mads.industron.material.plant.PlantProcessIntermediate) {
+            return calculate(substance.id(), substance.displayName(), substance.color(), componentsOf(substance),
+                    Optional.empty(), Optional.empty(), Set.of(), Set.of(), Map.of()).properties();
+        }
         if (substance instanceof IndustrialMaterial material) return material.properties();
         if (substance instanceof ElementDefinition element) return MaterialPropertyCalculator.calculate(element);
+        if (substance instanceof StructureMaterial structureMaterial) {
+            if (structureMaterial.components().isEmpty()) {
+                throw new IllegalArgumentException("Structure material used by .contains(...) has no composition: "
+                        + structureMaterial.id());
+            }
+            return calculate(
+                    structureMaterial.id(),
+                    structureMaterial.displayName(),
+                    structureMaterial.color(),
+                    structureMaterial.components(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Set.of(),
+                    Set.of(),
+                    Map.of()
+            ).properties();
+        }
         throw new IllegalArgumentException("Unsupported IndustrialSubstance in compound: " + substance.getClass().getName());
     }
 
     private static int tierIndexOf(IndustrialSubstance substance) {
+        if (substance instanceof net.mads.industron.material.organism.BiologicalMaterial
+                || substance instanceof net.mads.industron.material.organic.OrganicMaterial
+                || substance instanceof net.mads.industron.material.plant.PlantMaterial
+                || substance instanceof net.mads.industron.material.plant.PlantDerivedSubstance
+                || substance instanceof net.mads.industron.material.plant.PlantProcessIntermediate
+                || substance instanceof net.mads.industron.fluid.IndustrialFluid) {
+            return MachineTier.ALL.indexOf(net.mads.industron.material.organism.BiologicalProcessingTier.of(substance));
+        }
         MachineTier tier = substance instanceof IndustrialMaterial material
                 ? material.tier()
                 : substance instanceof ElementDefinition element
                 ? element.tier()
+                : substance instanceof StructureMaterial
+                ? MachineTier.ALL.get(clamp(propertiesOf(substance).tierMultiplier() - 1, 0, MachineTier.ALL.size() - 1))
                 : MachineTier.ULV;
         int index = MachineTier.ALL.indexOf(tier);
         return index < 0 ? 0 : index;
+    }
+
+    private static List<MaterialComponent> componentsOf(IndustrialSubstance substance) {
+        if (substance instanceof net.mads.industron.material.organism.BiologicalMaterial biological) return biological.components();
+        if (substance instanceof net.mads.industron.fluid.IndustrialFluid fluid) return fluid.components();
+        if (substance instanceof net.mads.industron.material.organic.OrganicMaterial organic) return organic.components();
+        if (substance instanceof net.mads.industron.material.plant.PlantMaterial plant) return plant.components();
+        if (substance instanceof net.mads.industron.material.plant.PlantDerivedSubstance plant) return plant.components();
+        if (substance instanceof net.mads.industron.material.plant.PlantProcessIntermediate plant) return plant.components();
+        if (substance instanceof IndustrialMaterial material) return material.components();
+        if (substance instanceof StructureMaterial structureMaterial) return structureMaterial.components();
+        return List.of();
     }
 
     private static ChemistryPhase phaseOf(MaterialProperties properties) {

@@ -17,10 +17,16 @@ import java.util.function.Function;
  */
 public final class AssemblyProperty<T> {
     private final String displayName;
+    private final String propertyId;
     private final Function<MaterialProperties, T> getter;
 
     public AssemblyProperty(String displayName, Function<MaterialProperties, T> getter) {
+        this(displayName, null, getter);
+    }
+
+    public AssemblyProperty(String displayName, String propertyId, Function<MaterialProperties, T> getter) {
         this.displayName = Objects.requireNonNull(displayName, "displayName");
+        this.propertyId = propertyId;
         this.getter = Objects.requireNonNull(getter, "getter");
     }
 
@@ -33,6 +39,8 @@ public final class AssemblyProperty<T> {
     }
 
     boolean matches(MaterialProperties properties, Object expected) {
-        return Objects.equals(getter.apply(properties), expected);
+        return properties != null
+                && (propertyId == null || properties.hasProperty(propertyId))
+                && Objects.equals(getter.apply(properties), expected);
     }
 }

@@ -10,7 +10,8 @@ import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.RecipeType;
 import mezz.jei.api.recipe.category.IRecipeCategory;
 import net.mads.industron.Industron;
-import net.mads.industron.material.defenitions.IndustrialMaterials;
+import net.mads.industron.material.MaterialCatalog;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyMaterialCatalog;
 import net.mads.industron.recipe.recipetypes.assembly.ComponentDefinition;
 import net.mads.industron.recipe.recipes.assembly.ComponentDefinitions;
 import net.minecraft.client.Minecraft;
@@ -84,7 +85,7 @@ public final class AssemblyComponentJeiCategory implements IRecipeCategory<Assem
                 case MATERIAL -> {
                     slot.addItemStacks(AssemblyJeiStacks.directMaterial(
                             step.material(),
-                            step.metalOverride(),
+                            step.materialOverride(),
                             recipe.material(),
                             step.relativeRequirements(),
                             step.count()
@@ -94,7 +95,7 @@ public final class AssemblyComponentJeiCategory implements IRecipeCategory<Assem
                 case COMPONENT -> {
                     slot.addItemStacks(AssemblyJeiStacks.component(
                             step.component(),
-                            step.metalOverride(),
+                            step.materialOverride(),
                             recipe.material(),
                             step.relativeRequirements(),
                             step.count()
@@ -102,6 +103,7 @@ public final class AssemblyComponentJeiCategory implements IRecipeCategory<Assem
                     AssemblyJeiCategory.addComponentTooltip(slot, step.component().displayName());
                     addRelativeRequirementTooltip(slot, step.relativeRequirements());
                 }
+                case PLANT_PART -> slot.addItemStacks(AssemblyJeiStacks.plantPart(step.plantPart(), step.count()));
                 case ITEM -> slot.addItemStacks(AssemblyJeiStacks.exactItem(step.itemId(), step.count()));
                 case TOOL -> {
                     slot.addItemStacks(AssemblyJeiStacks.tools(step.tool()));
@@ -161,7 +163,7 @@ public final class AssemblyComponentJeiCategory implements IRecipeCategory<Assem
         Set<String> registeredOutputs = new LinkedHashSet<>();
         for (ComponentDefinition definition : ComponentDefinitions.ALL) {
             if (AssemblyJeiStacks.representativeIndex(definition) < 0) continue;
-            for (var material : IndustrialMaterials.ALL) {
+            for (var material : AssemblyMaterialCatalog.all()) {
                 if (!AssemblyJeiStacks.componentAvailable(definition.component(), material)) continue;
                 List<ItemStack> outputs = AssemblyJeiStacks.component(definition.component(), null, material, 1);
                 if (outputs.isEmpty()) continue;

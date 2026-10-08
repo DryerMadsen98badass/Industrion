@@ -6,7 +6,7 @@ import java.util.List;
  * Formats material formulas directly from .contains(...).
  *
  * <p>Normal compounds use component amounts as stoichiometric subscripts. Stone trace components
- * are chance weights, so StoneMaterial asks this formatter to omit the outer amounts while each
+ * are relative selection weights, so StoneMaterial asks this formatter to omit the outer amounts while each
  * contained compound keeps its own internal formula.</p>
  */
 public final class MaterialFormulaFormatter {

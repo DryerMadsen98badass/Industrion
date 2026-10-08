@@ -1,12 +1,12 @@
 # Phase 08 – Composition graph og substance-identitet
 
-`IndustrialSubstance` og `MaterialComponent` finnes allerede. Før alloys og compounds bygges må composition være canonical, rekursiv og sikker. Recipe types/process rules er definert i Phase 05–06, og Foundry/heat-grunnlaget ligger i Phase 07, slik at senere generated substances kan kobles til virkelige processer.
+`IndustrialSubstance` og `MaterialComponent` finnes. Dagens chemistry adapter analyserer composition, `ProcessSafetyValidator` flater rekursivt med cycle detection og bruker eksakte rational vectors for massebalanse. Foundry/heat-runtime finnes ikke ennå. Gjenstående arbeid er å gjøre canonical identity/signature til et gjenbrukbart offentlig domain-lag og støtte runtime dynamic mixtures.
 
 ## Gjenstår
 
 - [ ] Definer canonical composition representation med positive heltallsforhold og normaliserte fractions ved property calculations.
-- [ ] Implementer recursive flattening fra substance -> elemental composition.
-- [ ] Implementer cycle detection med konkret path i error-meldingen.
+- [x] Første recursive flattening og cycle detection finnes i chemistry/safety-pipelinen.
+- [ ] Trekk flattening/cycle-path/signature ut som én delt canonical tjeneste for chemistry, Foundry og validation.
 - [ ] Skill typed mellom `ELEMENT`, `MIXTURE`, `ALLOY`, `COMPOUND` og andre nødvendige substance kinds uten string-lookups.
 - [ ] Skill substance-kind fra phase/structure: en alloy kan f.eks. være en metallic solid solution og er ikke bare «ALLOY = physical class».
 - [ ] Sørg for at wood, stone, fluids/gases og generated substances fortsatt kan delta som `IndustrialSubstance` der det gir mening.
@@ -26,7 +26,8 @@ Minecraft registry freeze betyr at vilkårlige nye item/block registry IDs ikke 
 - [ ] Ikke pre-generer alle matematiske kombinasjoner av elementer og ratios.
 - [ ] Første anbefalte løsning: registrer eksplisitt requested/reachable substances før registration/datagen.
 - [ ] Lag dependency/reachability pass fra definitions/reactions/recipes slik at bare nødvendige substances blir registry-backed.
-- [ ] Vurder senere generic item/fluid carriers med data components hvis spilleren skal kunne oppdage reelt vilkårlige substances runtime.
+- [x] Generic item/fluid carriers med data components er valgt retning for Foundryens udefinerte runtime mixtures.
+- [ ] Implementer carrier-codec, payload limits, networking, tooltip og exact mass ledger.
 
 ## Ferdig når
 

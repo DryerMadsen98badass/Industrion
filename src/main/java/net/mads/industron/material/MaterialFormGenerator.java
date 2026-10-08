@@ -36,11 +36,19 @@ public final class MaterialFormGenerator {
             MaterialPart.REINFORCED_PLATE, MaterialPart.HEAT_EXCHANGER_PLATE,
             MaterialPart.FOIL, MaterialPart.FINE_WIRE,
             MaterialPart.WIRE_1X, MaterialPart.WIRE_2X, MaterialPart.WIRE_4X, MaterialPart.WIRE_8X, MaterialPart.WIRE_16X,
-            MaterialPart.COIL, MaterialPart.TURBINE_BLADE, MaterialPart.FRAME
+            MaterialPart.COIL, MaterialPart.TURBINE_BLADE, MaterialPart.FRAME,
+            MaterialPart.SHAFT
     );
 
-    private static final EnumSet<MaterialPart> MACHINED_METAL_FORMS = EnumSet.of(
-            MaterialPart.TOOL_HEAD_BUZZ_SAW
+    // Loose material parts only; completed machines are standalone tier items.
+    // Kept separate from METAL_FORMS to avoid automatic magnetic recipes.
+    private static final EnumSet<MaterialPart> MACHINE_COMPONENT_FORMS = EnumSet.of(
+            MaterialPart.TINY_MOTOR_ARMATURE, MaterialPart.SMALL_MOTOR_ARMATURE, MaterialPart.MOTOR_ARMATURE, MaterialPart.LARGE_MOTOR_ARMATURE, MaterialPart.HUGE_MOTOR_ARMATURE,
+            MaterialPart.TINY_MOTOR_COIL, MaterialPart.SMALL_MOTOR_COIL, MaterialPart.MOTOR_COIL, MaterialPart.LARGE_MOTOR_COIL, MaterialPart.HUGE_MOTOR_COIL,
+            MaterialPart.TINY_MOTOR_HOUSING, MaterialPart.SMALL_MOTOR_HOUSING, MaterialPart.MOTOR_HOUSING, MaterialPart.LARGE_MOTOR_HOUSING, MaterialPart.HUGE_MOTOR_HOUSING,
+            MaterialPart.TINY_MOTOR_SHAFT, MaterialPart.SMALL_MOTOR_SHAFT, MaterialPart.MOTOR_SHAFT, MaterialPart.LARGE_MOTOR_SHAFT, MaterialPart.HUGE_MOTOR_SHAFT,
+            MaterialPart.TINY_PISTON_ROD, MaterialPart.SMALL_PISTON_ROD, MaterialPart.PISTON_ROD, MaterialPart.LARGE_PISTON_ROD, MaterialPart.HUGE_PISTON_ROD,
+            MaterialPart.TINY_PUMP_IMPELLER, MaterialPart.SMALL_PUMP_IMPELLER, MaterialPart.PUMP_IMPELLER, MaterialPart.LARGE_PUMP_IMPELLER, MaterialPart.HUGE_PUMP_IMPELLER
     );
 
     private static final EnumSet<MaterialPart> INSULATOR_FORMS = EnumSet.of(
@@ -88,8 +96,18 @@ public final class MaterialFormGenerator {
         parts.add(MaterialPart.MOLTEN_FLUID);
 
         if (properties.metal()) {
+            net.mads.industron.machine.foundry.casting.CastingDefinitions.addMetalForms(parts);
             parts.addAll(METAL_FORMS);
-            parts.addAll(MACHINED_METAL_FORMS);
+            parts.addAll(MACHINE_COMPONENT_FORMS);
+            // Manual forging is definition-driven: adding a new MaterialPart with explicit mass,
+            // hidden forge value and a HOT counterpart automatically exposes both forms to every
+            // metal unless that material definition removes them later. No anvil recipe whitelist.
+            for (MaterialPart part : MaterialPart.values()) {
+                if (part.isHotForgePart() || !part.isForgeableForm()) continue;
+                parts.add(part);
+                MaterialPart hot = part.hotForgePart();
+                if (hot != null) parts.add(hot);
+            }
         } else {
             // Electrically insulating solids can be formed into insulating rings.
             // This is capability-driven content generation, not a hard-coded material name list.
@@ -98,6 +116,8 @@ public final class MaterialFormGenerator {
             }
             if (properties.gemCandidate()) {
                 parts.addAll(GEM_FORMS);
+                parts.add(MaterialPart.HELMET_SHELL); parts.add(MaterialPart.CHESTPLATE_SHELL);
+                parts.add(MaterialPart.LEGGINGS_SHELL); parts.add(MaterialPart.BOOTS_SHELL);
             }
         }
 
@@ -105,7 +125,7 @@ public final class MaterialFormGenerator {
     }
 
     public static boolean hasMagneticVariant(IndustrialMaterial material, MaterialPart part) {
-        return material.properties().metal()
+        return MaterialCategory.METAL.matches(material)
                 && material.properties().magnetic()
                 && part.isItem()
                 && MAGNETIC_ITEM_FORMS.contains(part);

@@ -18,10 +18,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 public class MachinePortModelProvider implements DataProvider {
-    private static final String CASING_TEXTURE = Industron.MOD_ID + ":block/machines/ino/casing";
     private static final String COLOR_OVERLAY_TEXTURE = Industron.MOD_ID + ":block/machines/ino/frame_coler_overlay";
-    private static final String KINETIC_MODEL_NAME = "machine_port/kinetic_box";
-    private static final String KINETIC_CASING_TEXTURE = Industron.MOD_ID + ":block/casings/universal_textures/casing";
     private static final String KINETIC_CASING_SINGLE_TEXTURE = Industron.MOD_ID + ":block/machines/ino/kinetic_casing_single";
     private static final String KINETIC_INSIDE_FRAME_TEXTURE = Industron.MOD_ID + ":block/machines/ino/kinetic_inside_frame";
     private static final String KINETIC_HOLE_TEXTURE = Industron.MOD_ID + ":block/machines/ino/kinetic_hole";
@@ -41,12 +38,10 @@ public class MachinePortModelProvider implements DataProvider {
         Path blockModels = assets.resolve("models").resolve("block");
         Path itemModels = assets.resolve("models").resolve("item");
 
-        futures.add(DataProvider.saveStable(cache, kineticBoxModel(), blockModels.resolve(KINETIC_MODEL_NAME + ".json")));
-
         for (MultiblockControllerDefinition controller : MultiblockDefinitions.controllers()) {
             String idleModel = controllerModelName(controller, false, 0);
             futures.add(DataProvider.saveStable(cache, controllerModel(controller, false, 0), blockModels.resolve(idleModel + ".json")));
-            for (int frame = 0; frame <= 9; frame++) {
+            for (int frame = 0; frame < 1; frame++) {
                 String activeModel = controllerModelName(controller, true, frame);
                 futures.add(DataProvider.saveStable(cache, controllerModel(controller, true, frame), blockModels.resolve(activeModel + ".json")));
             }
@@ -55,13 +50,14 @@ public class MachinePortModelProvider implements DataProvider {
         }
 
         for (MachinePortType portType : MachinePortType.ALL) {
-            String modelName = portType.isKinetic() ? KINETIC_MODEL_NAME : "machine_port/" + portType.id();
-            if (!portType.isKinetic()) {
-                futures.add(DataProvider.saveStable(cache, machinePortModel(portType), blockModels.resolve(modelName + ".json")));
-            }
-
             for (MachineTier tier : MachineTier.ALL) {
                 String registryName = portType.registryName(tier);
+                String modelName = "machine_port/" + registryName;
+                JsonObject model = portType.isKinetic()
+                        ? kineticBoxModel(tier)
+                        : machinePortModel(portType, tier);
+
+                futures.add(DataProvider.saveStable(cache, model, blockModels.resolve(modelName + ".json")));
                 futures.add(DataProvider.saveStable(cache, facingBlockstate(modelName), blockstates.resolve(registryName + ".json")));
                 futures.add(DataProvider.saveStable(cache, itemModel(modelName), itemModels.resolve(registryName + ".json")));
             }
@@ -82,16 +78,17 @@ public class MachinePortModelProvider implements DataProvider {
         return "Industron Machine Port Models";
     }
 
-    private static JsonObject machinePortModel(MachinePortType portType) {
+    private static JsonObject machinePortModel(MachinePortType portType, MachineTier tier) {
         JsonObject json = new JsonObject();
         json.addProperty("parent", "minecraft:block/block");
         json.addProperty("render_type", "minecraft:cutout");
 
+        String casingTexture = tier.singleBlockMachineCasingSideTexture();
         JsonObject textures = new JsonObject();
-        textures.addProperty("casing", CASING_TEXTURE);
+        textures.addProperty("casing", casingTexture);
         textures.addProperty("overlay", Industron.MOD_ID + ":" + portType.texturePath());
         textures.addProperty("color_overlay", COLOR_OVERLAY_TEXTURE);
-        textures.addProperty("particle", CASING_TEXTURE);
+        textures.addProperty("particle", casingTexture);
         json.add("textures", textures);
 
         JsonArray elements = new JsonArray();
@@ -246,7 +243,7 @@ public class MachinePortModelProvider implements DataProvider {
         if (!active || activeOverlays.isEmpty()) {
             return idleOverlay;
         }
-        return activeOverlays.get(Math.floorMod(frame, activeOverlays.size()));
+        return activeOverlays.size() > 1 ? AnimatedMachineTextureProvider.texture(activeOverlays) : activeOverlays.get(0);
     }
 
     private static JsonObject controllerCasingElement(MultiblockControllerDefinition controller) {
@@ -491,17 +488,18 @@ public class MachinePortModelProvider implements DataProvider {
         return element;
     }
 
-    private static JsonObject kineticBoxModel() {
+    private static JsonObject kineticBoxModel(MachineTier tier) {
         JsonObject json = new JsonObject();
         json.addProperty("parent", "minecraft:block/block");
         json.addProperty("render_type", "minecraft:cutout");
 
+        String casingTexture = tier.singleBlockMachineCasingSideTexture();
         JsonObject textures = new JsonObject();
-        textures.addProperty("casing", KINETIC_CASING_TEXTURE);
+        textures.addProperty("casing", casingTexture);
         textures.addProperty("kinetic_casing_single", KINETIC_CASING_SINGLE_TEXTURE);
         textures.addProperty("kinetic_inside_frame", KINETIC_INSIDE_FRAME_TEXTURE);
         textures.addProperty("kinetic_hole", KINETIC_HOLE_TEXTURE);
-        textures.addProperty("particle", KINETIC_CASING_TEXTURE);
+        textures.addProperty("particle", casingTexture);
         json.add("textures", textures);
 
         JsonArray elements = new JsonArray();
@@ -662,7 +660,7 @@ public class MachinePortModelProvider implements DataProvider {
         JsonObject variants = new JsonObject();
         for (boolean formed : new boolean[]{false, true}) {
             for (boolean active : new boolean[]{false, true}) {
-                for (int frame = 0; frame <= 9; frame++) {
+                for (int frame = 0; frame < 1; frame++) {
                     addControllerVariants(variants, controller, formed, active, frame);
                 }
             }
@@ -696,7 +694,7 @@ public class MachinePortModelProvider implements DataProvider {
             int yRotation
     ) {
         boolean renderActive = formed && active;
-        String key = "facing=" + facing + ",formed=" + formed + ",active=" + active + ",overlay_frame=" + frame;
+        String key = "facing=" + facing + ",formed=" + formed + ",active=" + active;
         variants.add(key, variant(controllerModelName(controller, renderActive, frame), yRotation));
     }
 

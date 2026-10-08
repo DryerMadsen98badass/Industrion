@@ -124,14 +124,14 @@ public final class MaterialPropertyDebugProvider implements DataProvider {
         line(builder, "Magnetic", properties.magnetic());
         line(builder, "Crystalline", properties.crystalline());
         line(builder, "Gem Candidate", properties.gemCandidate());
-        line(builder, "Electrical Behavior", properties.electricalBehavior());
+        if (properties.hasProperty("electricalBehavior")) line(builder, "Electrical Behavior", properties.electricalBehavior());
         line(builder, "Heat Resistant", properties.heatResistant());
         line(builder, "Pressure Resistant", properties.pressureResistant());
         builder.append('\n');
 
         section(builder, "Mechanical");
-        line(builder, "Density", properties.density());
-        line(builder, "Hardness", properties.hardness());
+        if (properties.hasProperty("density")) line(builder, "Density", properties.density());
+        if (properties.hasProperty("hardness")) line(builder, "Hardness", properties.hardness());
         line(builder, "Elasticity", properties.elasticity());
         line(builder, "Tensile Strength", properties.tensileStrength());
         line(builder, "Yield Strength", properties.yieldStrength());
@@ -144,7 +144,7 @@ public final class MaterialPropertyDebugProvider implements DataProvider {
         builder.append('\n');
 
         section(builder, "Thermal");
-        line(builder, "Melting Point", properties.meltingPoint());
+        if (properties.hasProperty("meltingPoint")) line(builder, "Melting Point", properties.meltingPoint());
         line(builder, "Boiling Point", properties.boilingPoint());
         line(builder, "Thermal Conductivity", properties.thermalConductivity());
         line(builder, "Specific Heat Capacity", properties.specificHeatCapacity());
@@ -154,7 +154,7 @@ public final class MaterialPropertyDebugProvider implements DataProvider {
         builder.append('\n');
 
         section(builder, "Electrical");
-        line(builder, "Electrical Conductivity", properties.electricalConductivity());
+        if (properties.hasProperty("electricalConductivity")) line(builder, "Electrical Conductivity", properties.electricalConductivity());
         line(builder, "Insulation Strength", properties.insulationStrength());
         line(builder, "Electrochemical Potential", properties.electrochemicalPotential());
         line(builder, "Charge Storage Potential", properties.chargeStoragePotential());
@@ -162,9 +162,9 @@ public final class MaterialPropertyDebugProvider implements DataProvider {
         builder.append('\n');
 
         section(builder, "Chemical");
-        line(builder, "Corrosion Resistance", properties.corrosionResistance());
+        if (properties.hasProperty("corrosionResistance")) line(builder, "Corrosion Resistance", properties.corrosionResistance());
         line(builder, "Chemical Stability", properties.chemicalStability());
-        line(builder, "Reactivity", properties.reactivity());
+        if (properties.hasProperty("reactivity")) line(builder, "Reactivity", properties.reactivity());
         line(builder, "Oxidation Resistance", properties.oxidationResistance());
         line(builder, "Acidity", properties.acidity());
         builder.append('\n');

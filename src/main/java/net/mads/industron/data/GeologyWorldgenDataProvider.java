@@ -82,12 +82,36 @@ public final class GeologyWorldgenDataProvider implements DataProvider {
                 Industron.MOD_ID, "worldgen/configured_feature/geology_deposits.json")));
         futures.add(DataProvider.saveStable(output, placedFeature(), path(
                 Industron.MOD_ID, "worldgen/placed_feature/geology_deposits.json")));
+        futures.add(DataProvider.saveStable(output, clayReplacementConfiguredFeature(), path(
+                Industron.MOD_ID, "worldgen/configured_feature/geology_clay_replacement.json")));
+        futures.add(DataProvider.saveStable(output, clayReplacementPlacedFeature(), path(
+                Industron.MOD_ID, "worldgen/placed_feature/geology_clay_replacement.json")));
+        futures.add(DataProvider.saveStable(output, pebbleConfiguredFeature(), path(
+                Industron.MOD_ID, "worldgen/configured_feature/pebble_surface.json")));
+        futures.add(DataProvider.saveStable(output, pebblePlacedFeature(), path(
+                Industron.MOD_ID, "worldgen/placed_feature/pebble_surface.json")));
+        futures.add(DataProvider.saveStable(output, fallenStickConfiguredFeature(), path(
+                Industron.MOD_ID, "worldgen/configured_feature/fallen_sticks.json")));
+        futures.add(DataProvider.saveStable(output, fallenStickPlacedFeature(), path(
+                Industron.MOD_ID, "worldgen/placed_feature/fallen_sticks.json")));
         futures.add(DataProvider.saveStable(output, addBiomeModifier("#minecraft:is_overworld"), path(
                 Industron.MOD_ID, "neoforge/biome_modifier/geology_overworld.json")));
         futures.add(DataProvider.saveStable(output, addBiomeModifier("#minecraft:is_nether"), path(
                 Industron.MOD_ID, "neoforge/biome_modifier/geology_nether.json")));
         futures.add(DataProvider.saveStable(output, addBiomeModifier("#minecraft:is_end"), path(
                 Industron.MOD_ID, "neoforge/biome_modifier/geology_end.json")));
+        futures.add(DataProvider.saveStable(output, addClayReplacementBiomeModifier(), path(
+                Industron.MOD_ID, "neoforge/biome_modifier/geology_clay_replacement_overworld.json")));
+        futures.add(DataProvider.saveStable(output, addPebbleBiomeModifier("#minecraft:is_overworld"), path(
+                Industron.MOD_ID, "neoforge/biome_modifier/pebbles_overworld.json")));
+        futures.add(DataProvider.saveStable(output, addPebbleBiomeModifier("#minecraft:is_nether"), path(
+                Industron.MOD_ID, "neoforge/biome_modifier/pebbles_nether.json")));
+        futures.add(DataProvider.saveStable(output, addPebbleBiomeModifier("#minecraft:is_end"), path(
+                Industron.MOD_ID, "neoforge/biome_modifier/pebbles_end.json")));
+        futures.add(DataProvider.saveStable(output, addFallenStickBiomeModifier("#minecraft:is_overworld"), path(
+                Industron.MOD_ID, "neoforge/biome_modifier/fallen_sticks_overworld.json")));
+        futures.add(DataProvider.saveStable(output, addFallenStickBiomeModifier("#minecraft:is_nether"), path(
+                Industron.MOD_ID, "neoforge/biome_modifier/fallen_sticks_nether.json")));
 
         futures.add(DataProvider.saveStable(output, removeFeaturesBiomeModifier(
                 "#minecraft:is_overworld", OVERWORLD_REMOVED_FEATURES), path(
@@ -129,6 +153,119 @@ public final class GeologyWorldgenDataProvider implements DataProvider {
         placement.add(biome);
 
         json.add("placement", placement);
+        return json;
+    }
+
+    private static JsonObject clayReplacementConfiguredFeature() {
+        JsonObject json = new JsonObject();
+        json.addProperty("type", Industron.MOD_ID + ":geology_clay_replacement");
+        json.add("config", new JsonObject());
+        return json;
+    }
+
+    private static JsonObject clayReplacementPlacedFeature() {
+        JsonObject json = new JsonObject();
+        json.addProperty("feature", Industron.MOD_ID + ":geology_clay_replacement");
+        JsonArray placement = new JsonArray();
+
+        JsonObject count = new JsonObject();
+        count.addProperty("type", "minecraft:count");
+        count.addProperty("count", 1);
+        placement.add(count);
+
+        JsonObject biome = new JsonObject();
+        biome.addProperty("type", "minecraft:biome");
+        placement.add(biome);
+
+        json.add("placement", placement);
+        return json;
+    }
+
+
+    private static JsonObject pebbleConfiguredFeature() {
+        JsonObject json = new JsonObject();
+        json.addProperty("type", Industron.MOD_ID + ":pebble_surface");
+        json.add("config", new JsonObject());
+        return json;
+    }
+
+    private static JsonObject pebblePlacedFeature() {
+        JsonObject json = new JsonObject();
+        json.addProperty("feature", Industron.MOD_ID + ":pebble_surface");
+        JsonArray placement = new JsonArray();
+
+        JsonObject count = new JsonObject();
+        count.addProperty("type", "minecraft:count");
+        // PebbleSurfaceFeature performs its own per-chunk placement pass. Invoke it once per chunk.
+        count.addProperty("count", 1);
+        placement.add(count);
+
+        JsonObject inSquare = new JsonObject();
+        inSquare.addProperty("type", "minecraft:in_square");
+        placement.add(inSquare);
+
+        JsonObject biome = new JsonObject();
+        biome.addProperty("type", "minecraft:biome");
+        placement.add(biome);
+        json.add("placement", placement);
+        return json;
+    }
+
+    private static JsonObject fallenStickConfiguredFeature() {
+        JsonObject json = new JsonObject();
+        json.addProperty("type", Industron.MOD_ID + ":fallen_sticks");
+        json.add("config", new JsonObject());
+        return json;
+    }
+
+    private static JsonObject fallenStickPlacedFeature() {
+        JsonObject json = new JsonObject();
+        json.addProperty("feature", Industron.MOD_ID + ":fallen_sticks");
+        JsonArray placement = new JsonArray();
+
+        JsonObject count = new JsonObject();
+        count.addProperty("type", "minecraft:count");
+        // Several sparse samples per chunk; the feature only succeeds if the matching tree is local.
+        count.addProperty("count", 6);
+        placement.add(count);
+
+        JsonObject inSquare = new JsonObject();
+        inSquare.addProperty("type", "minecraft:in_square");
+        placement.add(inSquare);
+
+        JsonObject biome = new JsonObject();
+        biome.addProperty("type", "minecraft:biome");
+        placement.add(biome);
+        json.add("placement", placement);
+        return json;
+    }
+
+    private static JsonObject addFallenStickBiomeModifier(String biomes) {
+        JsonObject json = new JsonObject();
+        json.addProperty("type", "neoforge:add_features");
+        json.addProperty("biomes", biomes);
+        json.addProperty("features", Industron.MOD_ID + ":fallen_sticks");
+        json.addProperty("step", "top_layer_modification");
+        return json;
+    }
+
+    private static JsonObject addPebbleBiomeModifier(String biomes) {
+        JsonObject json = new JsonObject();
+        json.addProperty("type", "neoforge:add_features");
+        json.addProperty("biomes", biomes);
+        json.addProperty("features", Industron.MOD_ID + ":pebble_surface");
+        json.addProperty("step", "top_layer_modification");
+        return json;
+    }
+
+    private static JsonObject addClayReplacementBiomeModifier() {
+        JsonObject json = new JsonObject();
+        json.addProperty("type", "neoforge:add_features");
+        json.addProperty("biomes", "#minecraft:is_overworld");
+        json.addProperty("features", Industron.MOD_ID + ":geology_clay_replacement");
+        // This is the final vanilla decoration step, so normal disk clay and Lush Cave clay have
+        // both already been placed before we substitute the geology-selected clay block.
+        json.addProperty("step", "top_layer_modification");
         return json;
     }
 

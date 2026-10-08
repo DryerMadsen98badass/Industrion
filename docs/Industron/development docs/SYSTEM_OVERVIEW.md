@@ -99,19 +99,20 @@ structure_sets/metal/block/metal_5/
 
 Dette gjør at samme metall kan ha f.eks. `door = metal_2` og `trapdoor = metal_1`.
 
-## Nåværende anbefalte implementeringsrekkefølge
+## Nåværende implementeringsstatus og neste rekkefølge
 
-1. Få Wood/Stone-systemet til å kompilere på NeoForge 1.21.1 og verifiser `runData`.
-2. Verifiser genererte Test Wood/Test Stone assets, registry IDs, models, loot, tags og textures i klient.
-3. Fullfør `existing(...)`-oppførsel og composition references med tester.
-4. Koble alle registrerte `StoneMaterial`-hosts automatisk inn i ore-generatoren, normal + small.
-5. Stabiliser wire + fluid transport-formler og compatibility-regler.
-6. Fjern gjenværende legacy/hardkodede materialbroer.
-7. Bygg chemistry/composition flattening og reaction-system.
-8. Koble reactions til recipes og energy tiers.
-9. Utvid machines/casings/multiblocks/maintenance.
-10. Gjør kontrollert cleanup av virkelige metaller/materialer og alle avhengigheter.
-11. Lag TreeDefinition/tree-growth etter at wood-materialsystemet er stabilt.
+Dagens kode har common `MaterialPart`, komplette Minecraft/Create stone-/wood-definisjoner, dynamic ore hosts, runtime geology, mekanisk ore-processing, chemistry analysis, deterministic sammensatt-dust routes, automatic slurry/solution/reaction-mixture, recipe emission og første graph-/mass-validation.
+
+Neste anbefalte rekkefølge:
+
+1. Canonical dynamic composition payload/signatures og exact units.
+2. Exact defined-alloy indexes og generic unclassified mixture carriers.
+3. Stoichiometric graph validation som kan tillate bare eksakt balanserte reversible metallurgy cycles.
+4. Generell thermal item/fluid state og kompatibilitet med eksisterende hot forms/molds.
+5. Variable Foundry + full-footprint Heater contract og cached thermal runtime.
+6. Molten bath, mixing, casting, cooling og deterministic separation integration.
+7. UI/JEI/diagnostics og 20-component performance/dupe tests.
+8. Videre chemistry, casing, maintenance og TreeDefinition-hardening etter aktiv prioritet.
 
 ## Gjeldende Assembly-flyt
 
@@ -135,6 +136,15 @@ Metal.X
 En free Component-root uten `Metal.X` gir uavhengig materialvalg per material-leaf. En fixed root med `Metal.X` arver samme material gjennom normale nested branches. `inputAny(...)` kan bryte en fixed binding lokalt og parent-relative stat-krav kan hindre at erstatningsmaterialet går under/over parentens capability. Generated Frame/Casing recipes bruker den samme `AssemblyPlan`-resolusjonen som runtime for feasibility.
 
 
-## Active material/geology integration
+## Active Foundry integration
 
-Current canonical architecture/order: `CURRENT_TASK.md` and `to do/23-material-geology-autorecipe-integration.md`. Natural resources use composed ore-source materials, registered StoneMaterial hosts, tier-driven dimensions and deterministic deposit worldgen. Automatic composition processing is currently scoped to stone, wood and raw ore-source materials.
+Current canonical architecture/order: `CURRENT_TASK.md`, completed `to do/06-process-rules.md`, active `to do/07-foundry-and-heater-multiblocks.md`, then `to do/09-alloys.md` and `to do/14-automatic-process-recipe-generation.md`. Material/geology Phase 23 is historical implementation context, not the current baseline.
+
+```text
+declared/dynamic composition
+  -> canonical top-level signature + flattened ledger
+  -> structure/phase/property classification
+  -> compiled Foundry or chemistry process plan
+  -> graph/mass validation
+  -> indexed runtime operation
+```

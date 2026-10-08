@@ -39,13 +39,14 @@ public final class OreSourceAnalyzer {
         Map<String, List<String>> mineralCoverage = mineralCoverage(materials, minerals);
         Set<String> dedicatedOreMinerals = dedicatedOreMinerals(materials, minerals);
         Set<String> stoneTraceMinerals = GeologyMaterialRoles.stoneTraceMineralIds();
+        Map<String, Map<String, Integer>> traceAssociations = stoneTraceAssociations(materials, stoneTraceMinerals);
         List<OreSourceAnalysis> result = new ArrayList<>();
 
         materials.values().stream()
                 .filter(value -> isElement(value.source().backingMaterial()))
                 .sorted(Comparator.comparingInt(value -> ((IndustrialMaterial) value.source().backingMaterial()).atomicNumber()))
                 .forEach(analysis -> result.add(analyzeElement(
-                        analysis, materials, mineralCoverage, dedicatedOreMinerals, stoneTraceMinerals
+                        analysis, materials, mineralCoverage, dedicatedOreMinerals, stoneTraceMinerals, traceAssociations
                 )));
         return List.copyOf(result);
     }
@@ -55,7 +56,8 @@ public final class OreSourceAnalyzer {
             Map<String, MaterialAnalysis> materials,
             Map<String, List<String>> mineralCoverage,
             Set<String> dedicatedOreMinerals,
-            Set<String> stoneTraceMinerals
+            Set<String> stoneTraceMinerals,
+            Map<String, Map<String, Integer>> traceAssociations
     ) {
         IndustrialMaterial material = (IndustrialMaterial) analysis.source().backingMaterial();
         MaterialProperties properties = material.properties();
@@ -90,7 +92,7 @@ public final class OreSourceAnalyzer {
                     "Liquid behaviour indicates a natural fluid/reservoir source rather than a normal solid ore block.");
         }
 
-        MaterialAnalysis companion = bestCompanion(analysis, materials);
+        MaterialAnalysis companion = bestCompanion(analysis, materials, traceAssociations);
         if (companion == null || !(companion.source().backingMaterial() instanceof IndustrialMaterial companionMaterial)) {
             return new OreSourceAnalysis(
                     material.id(), material.displayName(), material.atomicNumber(), analysis.calculatedTierName(), dimension,
@@ -109,7 +111,7 @@ public final class OreSourceAnalyzer {
                 + companionConstant + ", " + ratio[1] + "))";
 
         OreSourceAnalysis.SuggestedGeology geology = suggestedGeology(
-                analysis, material, companion, companionMaterial, topology
+                analysis, material, companion, companionMaterial, topology, ratio[0], ratio[1]
         );
 
         return new OreSourceAnalysis(
@@ -172,23 +174,94 @@ public final class OreSourceAnalyzer {
         return Set.copyOf(result);
     }
 
+    private static Map<String, Map<String, Integer>> stoneTraceAssociations(
+            Map<String, MaterialAnalysis> materials,
+            Set<String> stoneTraceMinerals
+    ) {
+        Map<String, Map<String, Integer>> result = new LinkedHashMap<>();
+        for (String mineralId : stoneTraceMinerals) {
+            Set<String> elements = new LinkedHashSet<>();
+            collectCoveredElements(mineralId, materials, elements, new HashSet<>());
+            List<String> ids = elements.stream().sorted().toList();
+            for (String first : ids) {
+                for (String second : ids) {
+                    if (first.equals(second)) continue;
+                    result.computeIfAbsent(first, ignored -> new LinkedHashMap<>())
+                            .merge(second, 1, Integer::sum);
+                }
+            }
+        }
+        Map<String, Map<String, Integer>> immutable = new LinkedHashMap<>();
+        result.forEach((key, value) -> immutable.put(key, Map.copyOf(value)));
+        return Map.copyOf(immutable);
+    }
+
     private static MaterialAnalysis bestCompanion(
             MaterialAnalysis target,
-            Map<String, MaterialAnalysis> materials
+            Map<String, MaterialAnalysis> materials,
+            Map<String, Map<String, Integer>> traceAssociations
     ) {
+        IndustrialMaterial targetMaterial = (IndustrialMaterial) target.source().backingMaterial();
+        int targetTier = tierIndex(targetMaterial);
+        MaterialOrePolicy.DimensionBand targetDimension = MaterialOrePolicy.dimensionForTier(targetMaterial.tier());
+
         return materials.values().stream()
                 .filter(value -> isElement(value.source().backingMaterial()))
                 .filter(value -> !value.source().id().equals(target.source().id()))
+                .filter(value -> {
+                    IndustrialMaterial candidate = (IndustrialMaterial) value.source().backingMaterial();
+                    if (candidate.properties().electronicFamily() == MaterialProperties.ElectronicFamily.NOBLE_GAS_LIKE) {
+                        return false;
+                    }
+                    int strongestTier = Math.max(targetTier, tierIndex(candidate));
+                    MachineTier projectedTier = MachineTier.ALL.get(strongestTier);
+                    return MaterialOrePolicy.dimensionForTier(projectedTier) == targetDimension;
+                })
                 .max(Comparator
-                        .comparingDouble((MaterialAnalysis value) -> compatibilityScore(target, value))
+                        .comparingDouble((MaterialAnalysis value) -> companionScore(
+                                target, value, traceAssociations
+                        ))
+                        .thenComparingInt(value -> -Math.max(0, tierIndex((IndustrialMaterial) value.source().backingMaterial()) - targetTier))
+                        .thenComparingInt(value -> -Math.abs(
+                                ((IndustrialMaterial) value.source().backingMaterial()).atomicNumber() - targetMaterial.atomicNumber()
+                        ))
                         .thenComparing(value -> value.source().id()))
                 .orElse(null);
     }
 
+    private static double companionScore(
+            MaterialAnalysis target,
+            MaterialAnalysis candidate,
+            Map<String, Map<String, Integer>> traceAssociations
+    ) {
+        IndustrialMaterial a = (IndustrialMaterial) target.source().backingMaterial();
+        IndustrialMaterial b = (IndustrialMaterial) candidate.source().backingMaterial();
+        double score = compatibilityScore(target, candidate);
+
+        int associations = traceAssociations
+                .getOrDefault(a.id(), Map.of())
+                .getOrDefault(b.id(), 0);
+        if (associations > 0) {
+            // Existing StoneMaterial traces are real geology authored through .contains(...), so
+            // co-occurrence there is stronger evidence than a purely theoretical property match.
+            score += 130.0D + Math.min(60.0D, associations * 15.0D);
+        }
+
+        int tierDifference = tierIndex(b) - tierIndex(a);
+        if (tierDifference > 0) {
+            // Staying in the same dimension is mandatory above; additionally avoid needlessly
+            // turning an early material into a late-tier ore when an equally sound partner exists.
+            score -= tierDifference * 16.0D;
+        } else if (tierDifference < 0) {
+            score -= -tierDifference * 4.0D;
+        }
+        return score;
+    }
+
     /**
-     * General fictional-chemistry compatibility score. Opposite ion tendency, donor/acceptor
-     * complement and reasonable crystal-size compatibility are preferred. No named element pair
-     * is special-cased.
+     * General fictional-chemistry compatibility score. Every term is normalized or relative so a
+     * high-tier material cannot win globally merely because its raw scaled property numbers are
+     * larger. Opposite ion tendency and donor/acceptor complement are the strongest signals.
      */
     private static double compatibilityScore(MaterialAnalysis target, MaterialAnalysis candidate) {
         IndustrialMaterial a = (IndustrialMaterial) target.source().backingMaterial();
@@ -198,19 +271,50 @@ public final class OreSourceAnalyzer {
 
         int qa = pa.preferredIonCharge();
         int qb = pb.preferredIonCharge();
-        double oppositeCharge = qa != 0 && qb != 0 && Integer.signum(qa) != Integer.signum(qb)
-                ? 80.0 + Math.min(Math.abs(qa), Math.abs(qb)) * 10.0
-                : 0.0;
+        double chargeComplement;
+        if (qa != 0 && qb != 0 && Integer.signum(qa) != Integer.signum(qb)) {
+            chargeComplement = 65.0D + Math.min(Math.abs(qa), Math.abs(qb)) * 8.0D;
+        } else if (pa.metal() && pb.metal()) {
+            chargeComplement = 48.0D;
+        } else if (qa == 0 || qb == 0) {
+            chargeComplement = 20.0D;
+        } else {
+            chargeComplement = -28.0D;
+        }
+
         double donorAcceptance = Math.max(
-                pa.electronDonationTendency() * 0.75 + pb.electronAcceptanceTendency() * 0.75,
-                pb.electronDonationTendency() * 0.75 + pa.electronAcceptanceTendency() * 0.75
+                Math.sqrt(Math.max(0.0D, pa.electronDonationTendency() * (double) pb.electronAcceptanceTendency())),
+                Math.sqrt(Math.max(0.0D, pb.electronDonationTendency() * (double) pa.electronAcceptanceTendency()))
         );
-        double radius = 100.0 - Math.min(100.0, Math.abs(pa.atomicRadius() - pb.atomicRadius()) * 0.75);
-        double bond = (pa.bondStrength() + pb.bondStrength()) * 0.35;
-        double crystal = (pa.crystalStability() + pb.crystalStability()) * 0.20;
-        double stable = (pa.chemicalStability() + pb.chemicalStability()) * 0.12;
-        double sameMetalPenalty = pa.metal() && pb.metal() ? 8.0 : 0.0;
-        return oppositeCharge + donorAcceptance + radius * 0.35 + bond + crystal + stable - sameMetalPenalty;
+        donorAcceptance = Math.min(100.0D, donorAcceptance);
+
+        double radius = relativeSimilarity(pa.atomicRadius(), pb.atomicRadius());
+        double bond = relativeSimilarity(pa.bondStrength(), pb.bondStrength());
+        double crystal = relativeSimilarity(pa.crystalStability(), pb.crystalStability());
+        double stability = relativeSimilarity(
+                scaled(pa.chemicalStability(), pa),
+                scaled(pb.chemicalStability(), pb)
+        );
+
+        return chargeComplement
+                + donorAcceptance * 0.90D
+                + radius * 0.25D
+                + bond * 0.15D
+                + crystal * 0.12D
+                + stability * 0.12D;
+    }
+
+    private static double relativeSimilarity(double a, double b) {
+        double scale = Math.max(1.0D, Math.max(Math.abs(a), Math.abs(b)));
+        return Math.max(0.0D, 100.0D * (1.0D - Math.abs(a - b) / scale));
+    }
+
+    private static double scaled(double value, MaterialProperties properties) {
+        return value / Math.max(1.0D, properties.tierMultiplier());
+    }
+
+    private static int tierIndex(IndustrialMaterial material) {
+        return Math.max(0, MachineTier.ALL.indexOf(material.tier()));
     }
 
     private static ChemicalStructure.Topology suggestedTopology(MaterialProperties a, MaterialProperties b) {
@@ -253,20 +357,18 @@ public final class OreSourceAnalyzer {
             IndustrialMaterial targetMaterial,
             MaterialAnalysis companion,
             IndustrialMaterial companionMaterial,
-            ChemicalStructure.Topology topology
+            ChemicalStructure.Topology topology,
+            int targetAmount,
+            int companionAmount
     ) {
         int targetTier = MachineTier.ALL.indexOf(targetMaterial.tier());
         int companionTier = MachineTier.ALL.indexOf(companionMaterial.tier());
         int tierIndex = Math.max(0, Math.max(targetTier, companionTier));
         MachineTier tier = MachineTier.ALL.get(tierIndex);
         MaterialOrePolicy.DimensionBand dimension = MaterialOrePolicy.dimensionForTier(tier);
-        DepositGeometry geometry = switch (topology) {
-            case IONIC_LATTICE -> DepositGeometry.SKARN_LIKE;
-            case METALLIC_LATTICE -> DepositGeometry.MAGMATIC;
-            case DISCRETE_MOLECULE -> DepositGeometry.HYDROTHERMAL;
-            case NETWORK, POLYMER_NETWORK, POLYMER_CHAIN -> DepositGeometry.VEIN;
-            default -> DepositGeometry.VEIN;
-        };
+        DepositGeometry geometry = projectedGeometry(
+                targetMaterial.properties(), companionMaterial.properties(), topology, targetAmount, companionAmount
+        );
 
         int[] height = projectedHeight(dimension, tierIndex, geometry);
         List<String> biomes = projectedBiomes(dimension, geometry);
@@ -274,6 +376,61 @@ public final class OreSourceAnalyzer {
         return new OreSourceAnalysis.SuggestedGeology(
                 tier.displayName(), dimension, geometry, height[0], height[1], height[2], biomes, hosts
         );
+    }
+
+    private static DepositGeometry projectedGeometry(
+            MaterialProperties target,
+            MaterialProperties companion,
+            ChemicalStructure.Topology topology,
+            int targetAmount,
+            int companionAmount
+    ) {
+        int a = Math.max(1, targetAmount);
+        int b = Math.max(1, companionAmount);
+        double density = weightedScaled(target.density(), target, a, companion.density(), companion, b);
+        double stability = weightedScaled(target.chemicalStability(), target, a, companion.chemicalStability(), companion, b);
+        double reactivity = weighted(target.reactivity(), a, companion.reactivity(), b);
+        double crystal = weighted(target.crystalStability(), a, companion.crystalStability(), b);
+        double magnetic = weightedScaled(target.magneticStrength(), target, a, companion.magneticStrength(), companion, b);
+        double brittleness = weighted(target.brittleness(), a, companion.brittleness(), b);
+        double pressure = weightedScaled(target.pressureResistance(), target, a, companion.pressureResistance(), companion, b);
+        double volatility = weighted(projectedVolatility(target), a, projectedVolatility(companion), b);
+
+        if (magnetic >= 62.0D && crystal >= 52.0D) return DepositGeometry.BANDED;
+        if (density >= 78.0D && stability >= 68.0D) return DepositGeometry.MAGMATIC;
+        if (reactivity >= 66.0D && volatility >= 18.0D) return DepositGeometry.HYDROTHERMAL;
+        if (crystal >= 74.0D && brittleness >= 56.0D) return DepositGeometry.PEGMATITE_LIKE;
+        if (topology == ChemicalStructure.Topology.IONIC_LATTICE
+                && pressure >= 86.0D && reactivity >= 52.0D) return DepositGeometry.SKARN_LIKE;
+        if (stability >= 82.0D && density < 56.0D) return DepositGeometry.LENS;
+        if (topology == ChemicalStructure.Topology.METALLIC_LATTICE && density >= 62.0D) {
+            return DepositGeometry.MAGMATIC;
+        }
+        if (topology == ChemicalStructure.Topology.IONIC_LATTICE && reactivity >= 72.0D) {
+            return DepositGeometry.HYDROTHERMAL;
+        }
+        return DepositGeometry.VEIN;
+    }
+
+    private static double weighted(double a, int aWeight, double b, int bWeight) {
+        return (a * aWeight + b * bWeight) / Math.max(1.0D, aWeight + bWeight);
+    }
+
+    private static double weightedScaled(
+            double a, MaterialProperties aProperties, int aWeight,
+            double b, MaterialProperties bProperties, int bWeight
+    ) {
+        return weighted(scaled(a, aProperties), aWeight, scaled(b, bProperties), bWeight);
+    }
+
+    private static double projectedVolatility(MaterialProperties properties) {
+        if (properties.state() == MaterialProperties.PhysicalState.GAS) {
+            return Math.max(35.0D, 100.0D - properties.boilingPoint() * 0.04D);
+        }
+        if (properties.state() == MaterialProperties.PhysicalState.LIQUID) {
+            return Math.max(18.0D, 70.0D - properties.boilingPoint() * 0.025D);
+        }
+        return Math.max(0.0D, 45.0D - properties.boilingPoint() * 0.02D);
     }
 
     private static int[] projectedHeight(

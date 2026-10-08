@@ -1,6 +1,6 @@
 # START HERE - next developer/chat
 
-The active source of truth for current work is `CURRENT_TASK.md` and `to do/23-material-geology-autorecipe-integration.md`.
+The active source of truth for current work is `CURRENT_TASK.md` and `to do/07-foundry-and-heater-multiblocks.md`. Phase 05 and Phase 06 are complete. Phase 06 remains the canonical process-semantics contract that Phase 07 must consume. Phase 23 is retained as the historical material/geology execution plan; its old baseline/status statements are not current.
 
 ## First rules
 
@@ -12,20 +12,19 @@ The active source of truth for current work is `CURRENT_TASK.md` and `to do/23-m
 
 ## Active priority
 
-1. Common `MaterialPart` migration for stone/wood.
-2. Complete Minecraft/Create stone and wood definitions through `.existing(...)`.
-3. Data-driven stone dust loot and automatic stone hosts.
-4. Composed raw ore-source definitions and missing-source suggestions.
-5. Tier-driven geology/worldgen.
-6. Automatic processing from stone dust, wood pulp and raw ore-source dust.
+1. Canonical payload/signatures for defined and runtime metal mixtures.
+2. Exact alloy matching and generic unclassified mixture carriers.
+3. Dupe-safe stoichiometric graph validation for reversible metallurgy.
+4. Foundry/Heater multiblocks, thermal state, molds, casting and cooling.
+5. UI and performance validation for up to 20 constituents.
 
-Read the integrated plan for all locked details, especially the composition API, dimension policy and out-of-scope boundaries.
+Read Phase 07 for all locked boundaries, especially composite-dust chemistry, exact ratios, no closest-alloy UI and no profitable loops.
 
 ## Important existing system status
 
 Assembly Workbench, recursive `ComponentDefinition`, free/fixed material binding, generated Frame/Casing Assembly recipes, JEI Assembly Products/Components, timed tools and Create Deployer/FakePlayer tool progress exist in the current project. See `code/recipes/assembly-recipes.md` before changing Assembly.
 
-Do not refactor unrelated Assembly/Create systems while doing the material/geology integration.
+Do not refactor unrelated Assembly/Create/geology systems while implementing Foundry.
 
 ## API convention
 

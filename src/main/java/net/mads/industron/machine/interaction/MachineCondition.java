@@ -9,6 +9,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.Level;
 
 import java.util.List;
@@ -71,6 +72,7 @@ public record MachineCondition(
     public static MachineCondition biomeTag(String tagId) { return idCondition(Kind.BIOME_TAG, tagId); }
     public static MachineCondition dimension(String dimensionId) { return idCondition(Kind.DIMENSION, dimensionId); }
     public static MachineCondition canSeeSky() { return base(Kind.CAN_SEE_SKY, Optional.empty(), 0, 0); }
+    public static MachineCondition isWaterlogged() { return base(Kind.WATERLOGGED, Optional.empty(), 0, 0); }
 
     /** Requires daytime and an unobstructed view of the sky at the checked position(s). */
     public static MachineCondition daylight() { return base(Kind.DAYLIGHT, Optional.empty(), 0, 0); }
@@ -127,7 +129,14 @@ public record MachineCondition(
             case BIOME_TAG -> id.map(value -> level.getBiome(target).is(TagKey.create(Registries.BIOME, value))).orElse(false);
             case DIMENSION -> id.map(value -> level.dimension().location().equals(value)).orElse(false);
             case CAN_SEE_SKY -> level.canSeeSky(target);
-            case DAYLIGHT -> level.isDay() && level.canSeeSky(target);
+            case WATERLOGGED -> {
+                var state = level.getBlockState(target);
+                yield state.hasProperty(BlockStateProperties.WATERLOGGED)
+                        && state.getValue(BlockStateProperties.WATERLOGGED);
+            }
+            case DAYLIGHT -> level.dimensionType().hasSkyLight()
+                    && !level.dimensionType().hasCeiling()
+                    && level.isDay() && level.canSeeSky(target);
             case ALL -> children.stream().allMatch(child -> child.matches(level, origin, facing));
             case ANY -> children.stream().anyMatch(child -> child.matches(level, origin, facing));
             case NOT -> children.isEmpty() || !children.getFirst().matches(level, origin, facing);
@@ -198,7 +207,7 @@ public record MachineCondition(
         return id.contains(":") ? ResourceLocation.parse(id) : ResourceLocation.fromNamespaceAndPath(Industron.MOD_ID, id);
     }
 
-    public enum Kind { WEATHER, TIME, HEIGHT, REDSTONE, LIGHT, BIOME, BIOME_TAG, DIMENSION, CAN_SEE_SKY, DAYLIGHT, ALL, ANY, NOT }
+    public enum Kind { WEATHER, TIME, HEIGHT, REDSTONE, LIGHT, BIOME, BIOME_TAG, DIMENSION, CAN_SEE_SKY, WATERLOGGED, DAYLIGHT, ALL, ANY, NOT }
 
     /** Builder for conditions using numeric ranges. */
     public static final class RangeBuilder {

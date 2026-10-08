@@ -1,71 +1,37 @@
 package net.mads.industron.data;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
 import net.mads.industron.Industron;
-import net.mads.industron.machine.coil.CoilDefinition;
-import net.mads.industron.machine.coil.CoilDefinitions;
+import net.mads.industron.block.coils.CoilDefinition;
+import net.mads.industron.block.coils.CoilDefinitions;
 import net.minecraft.data.CachedOutput;
 import net.minecraft.data.DataProvider;
 import net.minecraft.data.PackOutput;
+import net.minecraft.resources.ResourceLocation;
 
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+/** Coils have no material recipe yet, so breaking them currently yields no recovered item. */
 public class CoilLootProvider implements DataProvider {
-    private final PackOutput output;
+    private final PackOutput.PathProvider lootTables;
 
     public CoilLootProvider(PackOutput output) {
-        this.output = output;
+        this.lootTables = output.createPathProvider(PackOutput.Target.DATA_PACK, "loot_table/blocks");
     }
 
     @Override
     public CompletableFuture<?> run(CachedOutput cache) {
         List<CompletableFuture<?>> futures = new ArrayList<>();
-        Path data = output.getOutputFolder(PackOutput.Target.DATA_PACK)
-                .resolve(Industron.MOD_ID)
-                .resolve("loot_table")
-                .resolve("blocks");
-
         for (CoilDefinition coil : CoilDefinitions.ALL) {
-            futures.add(DataProvider.saveStable(cache, lootTable(coil), data.resolve(coil.blockId() + ".json")));
+            ResourceLocation block = ResourceLocation.fromNamespaceAndPath(Industron.MOD_ID, coil.blockId());
+            futures.add(DataProvider.saveStable(cache, SalvageLootTable.empty(), lootTables.json(block)));
         }
-
         return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
     }
 
     @Override
     public String getName() {
-        return "Industron Coil Loot Tables";
-    }
-
-    private static JsonObject lootTable(CoilDefinition coil) {
-        JsonObject entry = new JsonObject();
-        entry.addProperty("type", "minecraft:item");
-        entry.addProperty("name", Industron.MOD_ID + ":" + coil.itemId());
-
-        JsonArray entries = new JsonArray();
-        entries.add(entry);
-
-        JsonObject condition = new JsonObject();
-        condition.addProperty("condition", "minecraft:survives_explosion");
-
-        JsonArray conditions = new JsonArray();
-        conditions.add(condition);
-
-        JsonObject pool = new JsonObject();
-        pool.addProperty("rolls", 1);
-        pool.add("entries", entries);
-        pool.add("conditions", conditions);
-
-        JsonArray pools = new JsonArray();
-        pools.add(pool);
-
-        JsonObject json = new JsonObject();
-        json.addProperty("type", "minecraft:block");
-        json.add("pools", pools);
-        return json;
+        return "Industron Coil Salvage Loot Tables";
     }
 }

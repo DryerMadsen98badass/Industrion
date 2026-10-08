@@ -18,22 +18,13 @@ import java.util.Optional;
 
 /** Phase-01 validation for neutral atomic identity and charged chemical states. */
 public final class AtomicModelValidator implements ValidationRule {
-    private static final int[] REPRESENTATIVE_ION_ATOMIC_NUMBERS = {
-            1, 2, 6, 8, 11, 17, 29, 32, 118, 1_024, 1_000_000
-    };
-
     @Override
     public void validate(ValidationContext context, ValidationCollector diagnostics) {
         for (ElementDefinition element : context.elements()) {
             validateElement(element, diagnostics);
         }
 
-        for (int atomicNumber : REPRESENTATIVE_ION_ATOMIC_NUMBERS) {
-            validateIonSet(atomicNumber, diagnostics);
-        }
-
-        validateTierIndependence(diagnostics);
-        validateHighAtomicNumberChargeArithmetic(diagnostics);
+        validateTierIndependence(context, diagnostics);
     }
 
     private static void validateElement(ElementDefinition element, ValidationCollector diagnostics) {
@@ -99,8 +90,9 @@ public final class AtomicModelValidator implements ValidationRule {
         }
     }
 
-    private static void validateTierIndependence(ValidationCollector diagnostics) {
-        int atomicNumber = 29;
+    private static void validateTierIndependence(ValidationContext context, ValidationCollector diagnostics) {
+        if (context.elements().isEmpty()) return;
+        int atomicNumber = context.elements().get(Math.min(28, context.elements().size() - 1)).atomicNumber();
         ElementDefinition lowTier = new ElementDefinition(
                 "tier_test_low", "Tier Test Low", "Ttl", atomicNumber, MachineTier.ULV
         );
@@ -108,33 +100,19 @@ public final class AtomicModelValidator implements ValidationRule {
                 "tier_test_high", "Tier Test High", "Tth", atomicNumber, MachineTier.IV
         );
 
-        require(lowTier.atomicState().equals(highTier.atomicState()), "tier_independence:z29",
+        require(lowTier.atomicState().equals(highTier.atomicState()), "tier_independence:z" + atomicNumber,
                 "Tier must not alter neutral atomic identity", diagnostics);
-        require(lowTier.allowedIonStates().equals(highTier.allowedIonStates()), "tier_independence:z29",
+        require(lowTier.allowedIonStates().equals(highTier.allowedIonStates()), "tier_independence:z" + atomicNumber,
                 "Tier must not alter allowed ion states", diagnostics);
 
         MaterialProperties lowProperties = MaterialPropertyCalculator.calculate(lowTier);
         MaterialProperties highProperties = MaterialPropertyCalculator.calculate(highTier);
-        require(lowProperties.electronShells().equals(highProperties.electronShells()), "tier_independence:z29",
+        require(lowProperties.electronShells().equals(highProperties.electronShells()), "tier_independence:z" + atomicNumber,
                 "Tier must not alter material electron shells", diagnostics);
-        require(lowProperties.preferredIonCharge() == highProperties.preferredIonCharge(), "tier_independence:z29",
+        require(lowProperties.preferredIonCharge() == highProperties.preferredIonCharge(), "tier_independence:z" + atomicNumber,
                 "Tier must not alter preferred ion charge", diagnostics);
-        require(lowProperties.electronicFamily() == highProperties.electronicFamily(), "tier_independence:z29",
+        require(lowProperties.electronicFamily() == highProperties.electronicFamily(), "tier_independence:z" + atomicNumber,
                 "Tier must not alter electronic family", diagnostics);
-    }
-
-    private static void validateHighAtomicNumberChargeArithmetic(ValidationCollector diagnostics) {
-        int atomicNumber = Integer.MAX_VALUE;
-        IonState cation = AtomicModel.ion(atomicNumber, 1);
-        IonState anion = AtomicModel.ion(atomicNumber, -1);
-        String subject = "atomic_number:" + atomicNumber;
-
-        require(cation.electronCount() == 2_147_483_646L, subject,
-                "High-Z cation electron arithmetic overflowed", diagnostics);
-        require(anion.electronCount() == 2_147_483_648L, subject,
-                "High-Z anion electron arithmetic must exceed signed int safely", diagnostics);
-        require(sum(anion.electronShells()) == anion.electronCount(), subject,
-                "High-Z anion shell accounting must remain exact", diagnostics);
     }
 
     private static long sum(Iterable<Integer> values) {

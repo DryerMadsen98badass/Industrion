@@ -12,23 +12,39 @@ import net.mads.industron.block.DirectionalSimpleBlock;
 import net.mads.industron.block.SimpleBlockDefinition;
 import net.mads.industron.block.SimpleBlocks;
 import net.mads.industron.block.SimpleBlockVariant;
+import net.mads.industron.block.PebbleWorldgenBlock;
+import net.mads.industron.block.FallenStickBlock;
 import net.mads.industron.energy.CreativeEnergyBlock;
 import net.mads.industron.energy.EnergyWireBlock;
 import net.mads.industron.energy.WireThickness;
 import net.mads.industron.machine.MachineCasingBlock;
 import net.mads.industron.machine.MaterialMachineCasingBlock;
+import net.mads.industron.block.coils.CoilBlock;
+import net.mads.industron.block.BlockStrength;
+import net.mads.industron.block.coils.CoilDefinition;
+import net.mads.industron.block.coils.CoilDefinitions;
 import net.mads.industron.machine.MachineDefinition;
 import net.mads.industron.machine.MachinePortBlock;
 import net.mads.industron.machine.MachinePortType;
 import net.mads.industron.machine.MachineTier;
 import net.mads.industron.machine.SingleBlockMachineBlock;
+import net.mads.industron.machine.WaterloggableSingleBlockMachineBlock;
 import net.mads.industron.machine.SingleBlockMachineInstance;
 import net.mads.industron.machine.StaticMachinePortType;
+import net.mads.industron.machine.foundry.FoundryPartBlock;
+import net.mads.industron.machine.foundry.FoundryPartType;
 import net.mads.industron.machine.machines.electric.multiblock.MultiblockControllerBlock;
 import net.mads.industron.machine.machines.electric.multiblock.MultiblockRegistrations;
 import net.mads.industron.material.IndustrialMaterial;
 import net.mads.industron.material.defenitions.IndustrialMaterials;
+import net.mads.industron.material.defenitions.StoneMaterials;
+import net.mads.industron.material.defenitions.WoodMaterials;
 import net.mads.industron.material.MaterialBlock;
+import net.mads.industron.material.IndustrialMaterialShaftBlock;
+import net.mads.industron.material.MaterialFireboxBlock;
+import net.mads.industron.material.MaterialSlabBlock;
+import net.mads.industron.material.MaterialStairBlock;
+import net.mads.industron.material.MaterialWallBlock;
 import net.mads.industron.material.MaterialOreHost;
 import net.mads.industron.material.MaterialPart;
 import net.mads.industron.material.recipes.MaterialCasingGenerator;
@@ -37,18 +53,26 @@ import net.mads.industron.material.structure.GemMaterial;
 import net.mads.industron.material.structure.StructureMaterial;
 import net.mads.industron.material.structure.StructureMaterialGenerator;
 import net.mads.industron.material.structure.StructureSlidingDoorBlock;
+import net.mads.industron.material.structure.StructureWoodChestBlock;
+import net.mads.industron.material.structure.StructureWoodBarrelBlock;
+import net.mads.industron.material.structure.StructureWoodChiseledBookshelfBlock;
+import net.mads.industron.material.structure.StructureWoodShaftBlock;
 import net.mads.industron.material.structure.MetalMaterial;
 import net.mads.industron.material.structure.StructureMaterials;
+import net.mads.industron.material.structure.StoneMaterial;
 import net.mads.industron.material.structure.WoodMaterial;
 import net.mads.industron.transport.FluidTransportRegistrations;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.util.ColorRGBA;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.CopperBulbBlock;
 import net.minecraft.world.level.block.IronBarsBlock;
+import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.ButtonBlock;
 import net.minecraft.world.level.block.FenceBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
+import net.minecraft.world.level.block.ColoredFallingBlock;
 import net.minecraft.world.level.block.PressurePlateBlock;
 import net.minecraft.world.level.block.RotatedPillarBlock;
 import net.minecraft.world.level.block.SlabBlock;
@@ -76,6 +100,7 @@ public final class BlockRegistry {
     public static final Map<String, DeferredHolder<Block, MaterialMachineCasingBlock>> MATERIAL_MACHINE_CASINGS = new LinkedHashMap<>();
     public static final Map<String, Map<MachinePortType, DeferredHolder<Block, MachinePortBlock>>> MACHINE_PORTS = new LinkedHashMap<>();
     public static final Map<StaticMachinePortType, DeferredHolder<Block, MachinePortBlock>> STATIC_MACHINE_PORTS = new LinkedHashMap<>();
+    public static final Map<FoundryPartType, DeferredHolder<Block, FoundryPartBlock>> FOUNDRY_PARTS = new LinkedHashMap<>();
     public static final Map<String, DeferredHolder<Block, MultiblockControllerBlock>> MULTIBLOCK_CONTROLLERS = new LinkedHashMap<>();
     public static final Map<String, DeferredHolder<Block, SingleBlockMachineBlock>> SINGLE_BLOCK_MACHINES = new LinkedHashMap<>();
     public static final Map<String, DeferredHolder<Block, Block>> SIMPLE_BLOCKS = new LinkedHashMap<>();
@@ -86,12 +111,26 @@ public final class BlockRegistry {
     public static final Map<String, Map<WireThickness, DeferredHolder<Block, EnergyWireBlock>>> ENERGY_WIRES = new LinkedHashMap<>();
     public static final Map<String, Map<WireThickness, DeferredHolder<Block, EnergyWireBlock>>> INSULATED_ENERGY_WIRES = new LinkedHashMap<>();
     public static final Map<String, DeferredHolder<Block, ? extends Block>> STRUCTURE_MATERIAL_BLOCKS = new LinkedHashMap<>();
+    public static final Map<String, DeferredHolder<Block, CoilBlock>> COILS = new LinkedHashMap<>();
+    public static final Map<String, DeferredHolder<Block, PebbleWorldgenBlock>> PEBBLE_WORLDGEN_BLOCKS = new LinkedHashMap<>();
+    public static final Map<String, DeferredHolder<Block, FallenStickBlock>> FALLEN_STICK_BLOCKS = new LinkedHashMap<>();
+    public static final Map<String, DeferredHolder<Block, net.mads.industron.material.plant.PlantStorageBlock>> PLANT_STORAGE_BLOCKS = new LinkedHashMap<>();
 
     public static final DeferredHolder<Block, CreativeEnergyBlock> CREATIVE_ENERGY_PROVIDER =
             BLOCKS.register("creative_energy_provider", () -> new CreativeEnergyBlock(true));
     public static final DeferredHolder<Block, CreativeEnergyBlock> CREATIVE_ENERGY_CONSUMER =
             BLOCKS.register("creative_energy_consumer", () -> new CreativeEnergyBlock(false));
+    /** New entry-level Assembly Workbench (Workbench Level 1). */
     public static final DeferredHolder<Block, AssemblyWorkbenchBlock> ASSEMBLY_WORKBENCH =
+            BLOCKS.register(
+                    "basic_assembly_workbench",
+                    () -> new AssemblyWorkbenchBlock(
+                            BlockBehaviour.Properties.ofFullCopy(Blocks.CRAFTING_TABLE)
+                                    .strength(2.0F)
+                    )
+            );
+    /** Existing smithing-table-based workbench, preserved at its old registry id and promoted to Level 2. */
+    public static final DeferredHolder<Block, AssemblyWorkbenchBlock> INDUSTRIAL_ASSEMBLY_WORKBENCH =
             BLOCKS.register(
                     "assembly_workbench",
                     () -> new AssemblyWorkbenchBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.SMITHING_TABLE))
@@ -99,14 +138,22 @@ public final class BlockRegistry {
 
     static {
         FluidTransportRegistrations.registerBlocks(BLOCKS);
+        net.mads.industron.machine.machines.kinetic.KineticMachines.registerBlocks(BLOCKS);
+        registerFoundryParts();
         registerMultiblockControllers();
         registerSingleBlockMachines();
+        registerCoils();
         registerTieredBlocks();
         registerStaticMachinePorts();
         registerMaterialBlocks();
         registerMaterialMachineCasings();
         registerMaterialEnergyWires();
         registerStructureMaterialBlocks();
+        registerPebbleWorldgenBlocks();
+        registerFallenStickBlocks();
+        for (var material : net.mads.industron.material.plant.PlantStorage.materials())
+            PLANT_STORAGE_BLOCKS.put(material.id(), BLOCKS.register(material.storageBlockId(),
+                () -> new net.mads.industron.material.plant.PlantStorageBlock(material)));
         registerSimpleBlocks();
     }
 
@@ -117,9 +164,27 @@ public final class BlockRegistry {
         MultiblockRegistrations.registerControllerBlocks(BLOCKS, MULTIBLOCK_CONTROLLERS);
     }
 
+    private static void registerFoundryParts() {
+        for (FoundryPartType type : FoundryPartType.ALL) {
+            FOUNDRY_PARTS.put(type, BLOCKS.register(type.id(), () -> new FoundryPartBlock(type)));
+        }
+    }
+
     private static void registerSingleBlockMachines() {
         for (SingleBlockMachineInstance instance : MachineDefinition.INSTANCES) {
-            SINGLE_BLOCK_MACHINES.put(instance.registryName(), BLOCKS.register(instance.registryName(), () -> new SingleBlockMachineBlock(instance)));
+            SINGLE_BLOCK_MACHINES.put(instance.registryName(), BLOCKS.register(instance.registryName(), () ->
+                    instance.definition().waterloggable()
+                            ? new WaterloggableSingleBlockMachineBlock(instance)
+                            : new SingleBlockMachineBlock(instance)));
+        }
+    }
+
+    private static void registerCoils() {
+        for (CoilDefinition definition : CoilDefinitions.ALL) {
+            COILS.put(
+                    definition.id(),
+                    BLOCKS.register(definition.blockId(), () -> new CoilBlock(definition))
+            );
         }
     }
 
@@ -146,7 +211,17 @@ public final class BlockRegistry {
             Map<String, DeferredHolder<Block, Block>> stoneBlocks = new LinkedHashMap<>();
             for (var stoneSource : material.stoneSources()) {
                 if (!stoneSource.isExisting()) {
-                    stoneBlocks.put(stoneSource.id(), BLOCKS.register(stoneSource.registryName(material), () -> new Block(BlockBehaviour.Properties.of())));
+                    stoneBlocks.put(stoneSource.id(), BLOCKS.register(
+                            stoneSource.registryName(material),
+                            () -> {
+                                BlockStrength strength = stoneSource.strength()
+                                        .orElse(BlockStrength.of(1.5F, 6.0F));
+                                return new Block(BlockBehaviour.Properties.of()
+                                        .strength(strength.hardness(), strength.resistance())
+                                        .requiresCorrectToolForDrops()
+                                        .sound(SoundType.STONE));
+                            }
+                    ));
                 }
             }
             MATERIAL_STONE_BLOCKS.put(material.id(), stoneBlocks);
@@ -175,11 +250,22 @@ public final class BlockRegistry {
                     continue;
                 }
                 if (!material.hasExistingPart(part) && part.isBlock()) {
-                    blocks.put(part, BLOCKS.register(part.registryName(material), () -> new MaterialBlock(material, part)));
+                    blocks.put(part, BLOCKS.register(part.registryName(material), () -> createMaterialPartBlock(material, part)));
                 }
             }
             MATERIAL_BLOCKS.put(material.id(), blocks);
         }
+    }
+
+    private static Block createMaterialPartBlock(IndustrialMaterial material, MaterialPart part) {
+        return switch (part) {
+            case SHAFT -> new IndustrialMaterialShaftBlock(material);
+            case FIREBOX -> new MaterialFireboxBlock(material);
+            case BRICK_SLAB -> new MaterialSlabBlock(material, part);
+            case BRICK_STAIRS -> new MaterialStairBlock(material, part);
+            case BRICK_WALL -> new MaterialWallBlock(material, part);
+            default -> new MaterialBlock(material, part);
+        };
     }
 
     private static void registerMaterialMachineCasings() {
@@ -242,6 +328,10 @@ public final class BlockRegistry {
             case CUBE -> definition.modelKind() == StructureBlockDefinition.ModelKind.CUTOUT_CUBE
                     ? new Block(properties.noOcclusion())
                     : new Block(properties);
+            case FALLING -> new ColoredFallingBlock(
+                    new ColorRGBA((definition.material().color() << 8) | 0xFF),
+                    properties
+            );
             case PILLAR -> new RotatedPillarBlock(properties);
             case SLAB -> new SlabBlock(properties);
             case STAIRS -> new StairBlock(resolveStructureBaseBlock(definition).defaultBlockState(), properties);
@@ -273,38 +363,88 @@ public final class BlockRegistry {
                     ? TrainTrapdoorBlock.metal(properties.noOcclusion())
                     : new TrapDoorBlock(blockSetType(definition), properties.noOcclusion());
             case LEAVES -> new Block(properties.noOcclusion());
-            case SAPLING -> new Block(properties.noCollission().instabreak().noOcclusion());
+            case SAPLING -> new Block(saplingProperties(definition, properties));
             case WINDOW -> new WindowBlock(
                     properties.noOcclusion(),
                     definition.texture("end_1").isPresent()
             );
+            case BOOKSHELF -> new Block(properties);
+            case BARREL -> new StructureWoodBarrelBlock(requireWood(definition), properties);
+            case CHISELED_BOOKSHELF -> new StructureWoodChiseledBookshelfBlock(requireWood(definition), properties);
+            case CHEST -> new StructureWoodChestBlock(requireWood(definition), properties.noOcclusion());
             case BARS -> new IronBarsBlock(properties.noOcclusion());
             case WINDOW_PANE -> new ConnectedGlassPaneBlock(properties.noOcclusion());
             case BRACKET -> new BracketBlock(properties.noOcclusion());
             case BULB -> new CopperBulbBlock(properties
                     .lightLevel(state -> state.getValue(BlockStateProperties.LIT) ? 15 : 0));
-            case LADDER -> new MetalLadderBlock(properties.noOcclusion());
+            case LADDER -> definition.material() instanceof WoodMaterial
+                    ? new LadderBlock(properties.noOcclusion())
+                    : new MetalLadderBlock(properties.noOcclusion());
             case SCAFFOLD -> new MetalScaffoldingBlock(properties.noOcclusion());
+            case SHAFT -> new StructureWoodShaftBlock(requireWood(definition), properties);
         };
     }
 
+
+    private static BlockBehaviour.Properties saplingProperties(
+            StructureBlockDefinition definition,
+            BlockBehaviour.Properties properties
+    ) {
+        if (structureStrength(definition) == null) {
+            properties.instabreak();
+        }
+        return properties.noCollission().noOcclusion();
+    }
+
     private static BlockBehaviour.Properties structureProperties(StructureBlockDefinition definition) {
+        BlockStrength explicitStrength = structureStrength(definition);
+
         if (definition.material() instanceof WoodMaterial) {
-            return BlockBehaviour.Properties.of().strength(2.0F, 3.0F).sound(SoundType.WOOD);
+            BlockStrength strength = explicitStrength != null
+                    ? explicitStrength
+                    : BlockStrength.of(2.0F, 3.0F);
+            return BlockBehaviour.Properties.of()
+                    .strength(strength.hardness(), strength.resistance())
+                    .sound(SoundType.WOOD);
         }
         if (definition.material() instanceof MetalMaterial) {
+            BlockStrength strength = explicitStrength != null
+                    ? explicitStrength
+                    : BlockStrength.of(5.0F, 6.0F);
             SoundType sound = isConnectedRoof(definition) ? SoundType.COPPER : SoundType.METAL;
             return BlockBehaviour.Properties.of()
-                    .strength(5.0F, 6.0F)
+                    .strength(strength.hardness(), strength.resistance())
                     .requiresCorrectToolForDrops()
                     .sound(sound);
         }
+        if (definition.shape() == StructureBlockDefinition.Shape.FALLING) {
+            BlockStrength strength = explicitStrength != null
+                    ? explicitStrength
+                    : BlockStrength.of(0.6F, 0.6F);
+            return BlockBehaviour.Properties.of()
+                    .strength(strength.hardness(), strength.resistance())
+                    .sound(SoundType.GRAVEL);
+        }
+
+        BlockStrength strength = explicitStrength != null
+                ? explicitStrength
+                : BlockStrength.of(1.5F, 6.0F);
         return BlockBehaviour.Properties.of()
-                .strength(1.5F, 6.0F)
+                .strength(strength.hardness(), strength.resistance())
                 .requiresCorrectToolForDrops()
                 .sound(SoundType.STONE);
     }
 
+    private static BlockStrength structureStrength(StructureBlockDefinition definition) {
+        MaterialPart part = definition.part().orElse(null);
+        if (definition.material() instanceof StoneMaterial stone) {
+            return stone.strengthFor(part).orElse(null);
+        }
+        if (definition.material() instanceof WoodMaterial wood) {
+            return wood.strengthFor(part).orElse(null);
+        }
+        return null;
+    }
 
     private static boolean isConnectedRoof(StructureBlockDefinition definition) {
         if (definition.texture("connected").isEmpty()) {
@@ -369,6 +509,23 @@ public final class BlockRegistry {
         return holder.get();
     }
 
+
+    private static void registerPebbleWorldgenBlocks() {
+        for (StoneMaterial stone : StoneMaterials.ALL) {
+            if (!stone.generatedForms().contains(MaterialPart.PEBBLE)) continue;
+            String id = stone.id() + "_loose_pebble";
+            PEBBLE_WORLDGEN_BLOCKS.put(stone.id(), BLOCKS.register(id, () -> new PebbleWorldgenBlock(stone)));
+        }
+    }
+
+    private static void registerFallenStickBlocks() {
+        for (WoodMaterial wood : WoodMaterials.ALL) {
+            if (!wood.generatedForms().contains(MaterialPart.STICK) && !wood.hasExistingPart(MaterialPart.STICK)) continue;
+            String id = wood.id() + "_fallen_stick";
+            FALLEN_STICK_BLOCKS.put(wood.id(), BLOCKS.register(id, () -> new FallenStickBlock(wood)));
+        }
+    }
+
     private static void registerSimpleBlocks() {
         for (SimpleBlockDefinition definition : SimpleBlocks.ALL) {
             DeferredHolder<Block, Block> baseBlock = BLOCKS.register(definition.id(), () -> createSimpleBlock(definition));
@@ -420,6 +577,10 @@ public final class BlockRegistry {
     public static DeferredHolder<Block, ? extends Block> getSimpleBlockVariant(String baseId, SimpleBlockVariant variant) { return SIMPLE_BLOCK_VARIANTS.get(baseId).get(variant); }
     public static DeferredHolder<Block, SingleBlockMachineBlock> getSingleBlockMachine(String id) { return SINGLE_BLOCK_MACHINES.get(id); }
     public static DeferredHolder<Block, ? extends Block> getStructureMaterialBlock(String id) { return STRUCTURE_MATERIAL_BLOCKS.get(id); }
+    public static DeferredHolder<Block, PebbleWorldgenBlock> getPebbleWorldgenBlock(StoneMaterial stone) { return PEBBLE_WORLDGEN_BLOCKS.get(stone.id()); }
+    public static DeferredHolder<Block, FallenStickBlock> getFallenStickBlock(WoodMaterial wood) { return FALLEN_STICK_BLOCKS.get(wood.id()); }
+    public static DeferredHolder<Block, CoilBlock> getCoil(String id) { return COILS.get(id); }
+    public static DeferredHolder<Block, FoundryPartBlock> getFoundryPart(FoundryPartType type) { return FOUNDRY_PARTS.get(type); }
 
     public static Collection<DeferredHolder<Block, ? extends Block>> getAllStructureSlidingDoorBlocks() {
         Collection<DeferredHolder<Block, ? extends Block>> blocks = new java.util.ArrayList<>();
@@ -437,6 +598,7 @@ public final class BlockRegistry {
         return blocks;
     }
 
+    public static Collection<DeferredHolder<Block, CoilBlock>> getAllCoils() { return COILS.values(); }
     public static Collection<DeferredHolder<Block, Block>> getAllSimpleBlocks() { return SIMPLE_BLOCKS.values(); }
     public static Collection<DeferredHolder<Block, ? extends Block>> getAllSimpleBlockVariants() { return SIMPLE_BLOCK_VARIANTS.values().stream().flatMap(variants -> variants.values().stream()).toList(); }
     public static Collection<DeferredHolder<Block, Block>> getAllMaterialStoneBlocks() { return MATERIAL_STONE_BLOCKS.values().stream().flatMap(blocks -> blocks.values().stream()).toList(); }
@@ -454,6 +616,7 @@ public final class BlockRegistry {
     }
     public static Collection<DeferredHolder<Block, MachinePortBlock>> getAllMachinePorts() { return MACHINE_PORTS.values().stream().flatMap(ports -> ports.values().stream()).toList(); }
     public static Collection<DeferredHolder<Block, MachinePortBlock>> getAllStaticMachinePorts() { return STATIC_MACHINE_PORTS.values(); }
+    public static Collection<DeferredHolder<Block, FoundryPartBlock>> getAllFoundryParts() { return FOUNDRY_PARTS.values(); }
     public static Collection<DeferredHolder<Block, MultiblockControllerBlock>> getAllMultiblockControllers() { return MULTIBLOCK_CONTROLLERS.values(); }
     public static Collection<DeferredHolder<Block, SingleBlockMachineBlock>> getAllSingleBlockMachines() { return SINGLE_BLOCK_MACHINES.values(); }
     public static Collection<DeferredHolder<Block, EnergyWireBlock>> getAllEnergyWires() { return ENERGY_WIRES.values().stream().flatMap(wires -> wires.values().stream()).toList(); }

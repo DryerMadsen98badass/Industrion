@@ -15,6 +15,17 @@ import java.util.Set;
 
 /** One ore host derived from a registered {@link StoneMaterial}. */
 public record MaterialOreHost(StoneMaterial stone) {
+    private static final Set<String> CREATE_NATURAL_STONES = Set.of(
+            "asurine",
+            "crimsite",
+            "ochrum",
+            "veridium"
+    );
+    private static final double ORE_HOST_THRESHOLD = 0.55D;
+    private static final double GEOLOGY_HOST_THRESHOLD = 0.45D;
+    private static final int MAX_ORE_HOSTS = 4;
+    private static final int MAX_GEOLOGY_HOSTS = 4;
+
     public MaterialOreHost {
         if (stone == null) throw new IllegalArgumentException("Ore host stone cannot be null");
     }
@@ -28,16 +39,33 @@ public record MaterialOreHost(StoneMaterial stone) {
     }
 
     /**
-     * Returns every StoneMaterial that fits this ore. More than one host is expected.
-     *
-     * <p>The StoneMaterial .contains(...) graph is the source of truth. Direct mineral occurrence
-     * and shared fictional elemental leaves score highest; calculated bulk compatibility of the
-     * trace minerals supplies the secondary score. No stone id is hard-coded here.</p>
+     * Physical hosts used inside the deposit body. The result is deliberately capped to the best
+     * few stones so a chemically broad StoneMaterial list cannot make every ore occur everywhere.
      */
     public static List<MaterialOreHost> compatibleHosts(IndustrialMaterial material) {
+        return rankedHosts(material, false, ORE_HOST_THRESHOLD, MAX_ORE_HOSTS);
+    }
+
+    /**
+     * Non-base stones used as the visible regional geology/prospecting signal around a deposit.
+     * Stone, Deepslate, Netherrack and End Stone remain background rock and are never emitted as
+     * this signal, even though they remain valid replaceable terrain and may host ore in the body.
+     */
+    public static List<MaterialOreHost> geologyHosts(IndustrialMaterial material) {
+        return rankedHosts(material, true, GEOLOGY_HOST_THRESHOLD, MAX_GEOLOGY_HOSTS);
+    }
+
+    private static List<MaterialOreHost> rankedHosts(
+            IndustrialMaterial material,
+            boolean excludeBaseRock,
+            double relativeThreshold,
+            int limit
+    ) {
         if (material == null || !hasNaturalOre(material)) return List.of();
         MaterialOrePolicy.DimensionBand dimension = MaterialTierResolver.geologyDimension(material);
-        List<MaterialOreHost> candidates = forDimension(dimension);
+        List<MaterialOreHost> candidates = forDimension(dimension).stream()
+                .filter(host -> !excludeBaseRock || !host.isBaseRock())
+                .toList();
         if (candidates.isEmpty()) return List.of();
 
         Map<MaterialOreHost, Integer> scores = new LinkedHashMap<>();
@@ -49,51 +77,106 @@ public record MaterialOreHost(StoneMaterial stone) {
         }
         if (maximum <= 0) return List.of();
 
-        int threshold = Math.max(1, (int) Math.ceil(maximum * 0.55D));
+        int threshold = Math.max(1, (int) Math.ceil(maximum * relativeThreshold));
         return scores.entrySet().stream()
                 .filter(entry -> entry.getValue() >= threshold)
                 .sorted(Map.Entry.<MaterialOreHost, Integer>comparingByValue().reversed()
                         .thenComparing(entry -> entry.getKey().id()))
+                .limit(Math.max(1, limit))
                 .map(Map.Entry::getKey)
                 .toList();
     }
 
-    /** Higher means the stone's declared trace-mineral chemistry fits the ore better. */
+    /**
+     * Normalized 0..10000 affinity derived from StoneMaterial .contains(...).
+     *
+     * <p>The component amount keeps its original meaning as a relative selection weight.
+     * Geology reads that same number as signal strength. The score is normalized by
+     * the stone's total declared trace amount, so adding unrelated .contains entries cannot give a
+     * stone a free affinity bonus.</p>
+     */
     public int affinity(IndustrialMaterial ore) {
         if (ore == null || stone.components().isEmpty()) return 0;
+
         Set<String> oreLeaves = leafIds(ore);
-        int score = 0;
+        if (oreLeaves.isEmpty()) return 0;
+
+        double weightedMatch = 0.0D;
+        double totalAmount = 0.0D;
+        double strongestAssociation = 0.0D;
+        Set<String> allTraceLeaves = new HashSet<>();
+
         for (MaterialComponent component : stone.components()) {
             IndustrialSubstance trace = component.substance();
             int amount = Math.max(1, component.amount());
-            if (trace.id().equals(ore.id())) score += amount * 240;
-
             Set<String> traceLeaves = leafIds(trace);
-            int shared = 0;
-            for (String leaf : oreLeaves) if (traceLeaves.contains(leaf)) shared++;
-            score += amount * shared * 48;
+            allTraceLeaves.addAll(traceLeaves);
 
-            if (trace instanceof IndustrialMaterial traceMaterial) {
-                score += amount * chemistryAffinity(ore.properties(), traceMaterial.properties());
+            double structuralMatch;
+            if (trace.id().equals(ore.id())) {
+                structuralMatch = 1.0D;
+            } else {
+                double overlap = jaccard(oreLeaves, traceLeaves);
+                structuralMatch = overlap > 0.0D ? 0.70D + overlap * 0.30D : 0.0D;
             }
+
+            double chemicalMatch = trace instanceof IndustrialMaterial traceMaterial
+                    ? chemistryAffinity(ore.properties(), traceMaterial.properties())
+                    : 0.0D;
+
+            // Exact/shared chemistry dominates. Bulk-property similarity is a weaker fallback so
+            // completely unrelated trace lists cannot beat a stone that shares actual leaves.
+            double match = Math.max(structuralMatch, chemicalMatch * 0.35D);
+            weightedMatch += amount * match;
+            totalAmount += amount;
+
+            // Absolute trace weight still matters: weight 2 is a stronger signal
+            // than 1, but it saturates instead of growing without bound.
+            double amountStrength = 1.0D - Math.exp(-amount / 2.0D);
+            strongestAssociation = Math.max(strongestAssociation, amountStrength * match);
         }
-        return score;
+
+        double profileMatch = totalAmount <= 0.0D ? 0.0D : weightedMatch / totalAmount;
+        double leafCoverage = coverage(oreLeaves, allTraceLeaves);
+        double normalized = profileMatch * 0.60D
+                + strongestAssociation * 0.25D
+                + leafCoverage * 0.15D;
+        return Math.max(0, Math.min(10_000, (int) Math.round(normalized * 10_000.0D)));
     }
 
-    private static int chemistryAffinity(MaterialProperties ore, MaterialProperties trace) {
+    private static double chemistryAffinity(MaterialProperties ore, MaterialProperties trace) {
         double crystal = similarity(ore.crystalStability(), trace.crystalStability());
         double chemical = similarity(ore.chemicalStability(), trace.chemicalStability());
         double bond = similarity(ore.bondStrength(), trace.bondStrength());
         double pressure = similarity(ore.pressureResistance(), trace.pressureResistance());
         double reactivity = similarity(ore.reactivity(), trace.reactivity());
         double density = similarity(ore.density(), trace.density());
-        double score = crystal * 0.24D + chemical * 0.20D + bond * 0.18D
-                + pressure * 0.14D + reactivity * 0.12D + density * 0.12D;
-        return Math.max(0, (int) Math.round(score / 5.0D));
+        return clamp01(crystal * 0.24D + chemical * 0.20D + bond * 0.18D
+                + pressure * 0.14D + reactivity * 0.12D + density * 0.12D);
     }
 
     private static double similarity(double a, double b) {
-        return Math.max(0.0D, 100.0D - Math.min(100.0D, Math.abs(a - b)));
+        return clamp01(1.0D - Math.min(100.0D, Math.abs(a - b)) / 100.0D);
+    }
+
+    private static double jaccard(Set<String> a, Set<String> b) {
+        if (a.isEmpty() || b.isEmpty()) return 0.0D;
+        Set<String> intersection = new HashSet<>(a);
+        intersection.retainAll(b);
+        Set<String> union = new HashSet<>(a);
+        union.addAll(b);
+        return union.isEmpty() ? 0.0D : (double) intersection.size() / union.size();
+    }
+
+    private static double coverage(Set<String> expected, Set<String> present) {
+        if (expected.isEmpty()) return 0.0D;
+        int matches = 0;
+        for (String id : expected) if (present.contains(id)) matches++;
+        return (double) matches / expected.size();
+    }
+
+    private static double clamp01(double value) {
+        return Math.max(0.0D, Math.min(1.0D, value));
     }
 
     private static Set<String> leafIds(IndustrialSubstance substance) {
@@ -125,6 +208,10 @@ public record MaterialOreHost(StoneMaterial stone) {
         return stone.dimension();
     }
 
+    public boolean isBaseRock() {
+        return stone.isBaseRock();
+    }
+
     public ResourceLocation hostBlock() {
         // Resolve the natural/base block from the StoneMaterial id. StoneModel only describes the
         // model family and is deliberately not used as host identity.
@@ -154,8 +241,20 @@ public record MaterialOreHost(StoneMaterial stone) {
                 .orElse(null);
     }
 
-    public ResourceLocation blockModel() {
+    public ResourceLocation blockModel(IndustrialMaterial material) {
         ResourceLocation block = hostBlock();
+
+        // Create's natural stone blocks do not have models named block/<block id>. Their
+        // blockstates randomly select block/<stone>_natural_0..3 instead. Ore-host composite
+        // models cannot inherit a blockstate, so select one of those real models directly.
+        if (block.getNamespace().equals("create") && CREATE_NATURAL_STONES.contains(block.getPath())) {
+            int variant = Math.floorMod(31 * material.atomicNumber() + id().hashCode(), 4);
+            return ResourceLocation.fromNamespaceAndPath(
+                    block.getNamespace(),
+                    "block/" + block.getPath() + "_natural_" + variant
+            );
+        }
+
         return ResourceLocation.fromNamespaceAndPath(block.getNamespace(), "block/" + block.getPath());
     }
 

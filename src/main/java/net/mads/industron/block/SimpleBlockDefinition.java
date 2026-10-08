@@ -1,9 +1,18 @@
 package net.mads.industron.block;
 
+import net.mads.industron.machine.MachineTier;
+import net.mads.industron.material.IndustrialSubstance;
+import net.mads.industron.material.MaterialComponent;
+import net.mads.industron.machine.MachineTierStats;
+import net.mads.industron.recipe.recipes.assembly.Tool;
+import net.mads.industron.recipe.recipetypes.assembly.ToolDefinition;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 public final class SimpleBlockDefinition {
@@ -16,9 +25,11 @@ public final class SimpleBlockDefinition {
     private final FaceTextures faceTextures;
     private final Integer color;
     private final double furnaceFuelItems;
-    private final MiningTier miningTier;
-    private final EnumSet<MiningTool> miningTools;
+    private final MachineTier breakingTier;
+    private final BlockStrength strength;
+    private final Set<ToolDefinition> miningTools;
     private final EnumSet<SimpleBlockVariant> variants;
+    private final List<MaterialComponent> components;
 
     public SimpleBlockDefinition(
             String id,
@@ -31,9 +42,11 @@ public final class SimpleBlockDefinition {
                 null,
                 null,
                 0,
-                MiningTier.STONE,
-                EnumSet.of(MiningTool.PICKAXE),
-                EnumSet.noneOf(SimpleBlockVariant.class)
+                MachineTier.LV,
+                null,
+                Set.of(Tool.PICKAXE),
+                EnumSet.noneOf(SimpleBlockVariant.class),
+                List.of()
         );
     }
 
@@ -50,9 +63,11 @@ public final class SimpleBlockDefinition {
                 null,
                 normalizeColor(color),
                 0,
-                MiningTier.STONE,
-                EnumSet.of(MiningTool.PICKAXE),
-                EnumSet.noneOf(SimpleBlockVariant.class)
+                MachineTier.LV,
+                null,
+                Set.of(Tool.PICKAXE),
+                EnumSet.noneOf(SimpleBlockVariant.class),
+                List.of()
         );
     }
 
@@ -80,9 +95,11 @@ public final class SimpleBlockDefinition {
                 ),
                 null,
                 0,
-                MiningTier.STONE,
-                EnumSet.of(MiningTool.PICKAXE),
-                EnumSet.noneOf(SimpleBlockVariant.class)
+                MachineTier.LV,
+                null,
+                Set.of(Tool.PICKAXE),
+                EnumSet.noneOf(SimpleBlockVariant.class),
+                List.of()
         );
     }
 
@@ -93,16 +110,18 @@ public final class SimpleBlockDefinition {
             FaceTextures faceTextures,
             Integer color,
             double furnaceFuelItems,
-            MiningTier miningTier,
-            EnumSet<MiningTool> miningTools,
-            EnumSet<SimpleBlockVariant> variants
+            MachineTier breakingTier,
+            BlockStrength strength,
+            Set<ToolDefinition> miningTools,
+            EnumSet<SimpleBlockVariant> variants,
+            List<MaterialComponent> components
     ) {
         validateId(id);
         validateDisplayName(id, displayName);
         validateTexture(id, texture);
         validateFaceTextures(id, faceTextures);
         validateFuel(id, furnaceFuelItems);
-        validateMiningTier(id, miningTier);
+        validateBreakingTier(id, breakingTier);
 
         this.id = id;
         this.displayName = displayName;
@@ -114,12 +133,14 @@ public final class SimpleBlockDefinition {
                 : null;
 
         this.furnaceFuelItems = furnaceFuelItems;
-        this.miningTier = miningTier;
+        this.breakingTier = breakingTier;
+        this.strength = strength;
         this.miningTools = validateMiningTools(
                 id,
                 miningTools
         );
         this.variants = variants.clone();
+        this.components = List.copyOf(components == null ? List.of() : components);
     }
 
     public SimpleBlockDefinition furnaceFuel(
@@ -128,7 +149,8 @@ public final class SimpleBlockDefinition {
         return copy(
                 color,
                 items,
-                miningTier,
+                breakingTier,
+                strength,
                 miningTools,
                 variants
         );
@@ -140,59 +162,47 @@ public final class SimpleBlockDefinition {
         return copy(
                 normalizeColor(color),
                 furnaceFuelItems,
-                miningTier,
+                breakingTier,
+                strength,
                 miningTools,
                 variants
         );
     }
 
-    public SimpleBlockDefinition wood() {
-        return miningTier(
-                MiningTier.WOOD
-        );
-    }
-
-    public SimpleBlockDefinition stone() {
-        return miningTier(
-                MiningTier.STONE
-        );
-    }
-
-    public SimpleBlockDefinition iron() {
-        return miningTier(
-                MiningTier.IRON
-        );
-    }
-
-    public SimpleBlockDefinition diamond() {
-        return miningTier(
-                MiningTier.DIAMOND
-        );
-    }
-
-    public SimpleBlockDefinition netherite() {
-        return miningTier(
-                MiningTier.NETHERITE
-        );
-    }
-
-    public SimpleBlockDefinition miningTier(
-            MiningTier tier
+    public SimpleBlockDefinition breakingTier(
+            MachineTier tier
     ) {
-        validateMiningTier(id, tier);
+        validateBreakingTier(id, tier);
 
         return copy(
                 color,
                 furnaceFuelItems,
                 tier,
+                strength,
+                miningTools,
+                variants
+        );
+    }
+
+    public SimpleBlockDefinition strength(float hardness) {
+        return strength(hardness, hardness);
+    }
+
+    public SimpleBlockDefinition strength(float hardness, float resistance) {
+        BlockStrength updated = BlockStrength.of(hardness, resistance);
+        return copy(
+                color,
+                furnaceFuelItems,
+                breakingTier,
+                updated,
                 miningTools,
                 variants
         );
     }
 
     public SimpleBlockDefinition mineableWith(
-            MiningTool tool,
-            MiningTool... moreTools
+            ToolDefinition tool,
+            ToolDefinition... moreTools
     ) {
         if (tool == null) {
             throw new IllegalArgumentException(
@@ -201,11 +211,11 @@ public final class SimpleBlockDefinition {
             );
         }
 
-        EnumSet<MiningTool> updated =
-                EnumSet.of(tool);
+        Set<ToolDefinition> updated = new LinkedHashSet<>();
+        updated.add(tool);
 
         if (moreTools != null) {
-            for (MiningTool moreTool : moreTools) {
+            for (ToolDefinition moreTool : moreTools) {
                 if (moreTool == null) {
                     throw new IllegalArgumentException(
                             "Simple block mining tool cannot be null: "
@@ -220,10 +230,33 @@ public final class SimpleBlockDefinition {
         return copy(
                 color,
                 furnaceFuelItems,
-                miningTier,
+                breakingTier,
+                strength,
                 updated,
                 variants
         );
+    }
+
+    /** Adds exact material-unit composition carried by one block item. */
+    public SimpleBlockDefinition contains(MaterialComponent... additions) {
+        List<MaterialComponent> updated = new ArrayList<>(components);
+        if (additions != null) {
+            for (MaterialComponent component : additions) {
+                if (component == null) {
+                    throw new IllegalArgumentException("Simple block material component cannot be null: " + id);
+                }
+                updated.add(component);
+            }
+        }
+        return new SimpleBlockDefinition(
+                id, displayName, texture, faceTextures, color, furnaceFuelItems,
+                breakingTier, strength, miningTools, variants, updated
+        );
+    }
+
+    /** Convenience overload for one contained substance. */
+    public SimpleBlockDefinition contains(IndustrialSubstance substance, int amount) {
+        return contains(new MaterialComponent(substance, amount));
     }
 
     public SimpleBlockDefinition slab() {
@@ -276,11 +309,13 @@ public final class SimpleBlockDefinition {
                 faceTextures,
                 color,
                 furnaceFuelItems,
-                miningTier,
+                breakingTier,
+                strength,
                 miningTools,
                 EnumSet.allOf(
                         SimpleBlockVariant.class
-                )
+                ),
+                components
         );
     }
 
@@ -299,17 +334,20 @@ public final class SimpleBlockDefinition {
                 faceTextures,
                 color,
                 furnaceFuelItems,
-                miningTier,
+                breakingTier,
+                strength,
                 miningTools,
-                updated
+                updated,
+                components
         );
     }
 
     private SimpleBlockDefinition copy(
             Integer newColor,
             double newFuelItems,
-            MiningTier newMiningTier,
-            EnumSet<MiningTool> newMiningTools,
+            MachineTier newBreakingTier,
+            BlockStrength newStrength,
+            Set<ToolDefinition> newMiningTools,
             EnumSet<SimpleBlockVariant> newVariants
     ) {
         return new SimpleBlockDefinition(
@@ -319,9 +357,11 @@ public final class SimpleBlockDefinition {
                 faceTextures,
                 newColor,
                 newFuelItems,
-                newMiningTier,
+                newBreakingTier,
+                newStrength,
                 newMiningTools,
-                newVariants
+                newVariants,
+                components
         );
     }
 
@@ -360,16 +400,26 @@ public final class SimpleBlockDefinition {
         return furnaceFuelItems;
     }
 
-    public MiningTier miningTier() {
-        return miningTier;
+
+    public MachineTier breakingTier() {
+        return breakingTier;
     }
 
     public float hardness() {
-        return miningTier.hardness();
+        return strength != null ? strength.hardness() : MachineTierStats.blockHardness(breakingTier);
     }
 
     public float resistance() {
-        return miningTier.resistance();
+        return strength != null ? strength.resistance() : MachineTierStats.blockResistance(breakingTier);
+    }
+
+    public boolean hasExplicitStrength() {
+        return strength != null;
+    }
+
+    /** Exact material units represented by one block. */
+    public List<MaterialComponent> components() {
+        return components;
     }
 
     public Set<SimpleBlockVariant> variants() {
@@ -378,7 +428,7 @@ public final class SimpleBlockDefinition {
         );
     }
 
-    public Set<MiningTool> miningTools() {
+    public Set<ToolDefinition> miningTools() {
         return Collections.unmodifiableSet(
                 miningTools
         );
@@ -538,21 +588,21 @@ public final class SimpleBlockDefinition {
         }
     }
 
-    private static void validateMiningTier(
+    private static void validateBreakingTier(
             String id,
-            MiningTier miningTier
+            MachineTier breakingTier
     ) {
-        if (miningTier == null) {
+        if (breakingTier == null || breakingTier == MachineTier.NONE) {
             throw new IllegalArgumentException(
-                    "Simple block mining tier cannot be null: "
+                    "Simple block breaking tier must be a real machine tier: "
                             + id
             );
         }
     }
 
-    private static EnumSet<MiningTool> validateMiningTools(
+    private static Set<ToolDefinition> validateMiningTools(
             String id,
-            EnumSet<MiningTool> miningTools
+            Set<ToolDefinition> miningTools
     ) {
         if (miningTools == null
                 || miningTools.isEmpty()) {
@@ -562,7 +612,7 @@ public final class SimpleBlockDefinition {
             );
         }
 
-        return miningTools.clone();
+        return Collections.unmodifiableSet(new LinkedHashSet<>(miningTools));
     }
 
     public record FaceTextures(

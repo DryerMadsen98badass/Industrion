@@ -17,20 +17,13 @@ import net.mads.industron.validation.ValidationSubsystem;
  * test invariants instead of freezing balance numbers that are expected to evolve.
  */
 public final class DomainInvariantValidator implements ValidationRule {
-    private static final int[] REPRESENTATIVE_ATOMIC_NUMBERS = {
-            1, 2, 11, 29, 32, 118, 1_024, 1_000_000, Integer.MAX_VALUE
-    };
-
     @Override
     public void validate(ValidationContext context, ValidationCollector diagnostics) {
-        for (int atomicNumber : REPRESENTATIVE_ATOMIC_NUMBERS) {
-            ElementDefinition element = new ElementDefinition(
-                    "validation_z" + atomicNumber,
-                    "Validation Z" + atomicNumber,
-                    "V" + atomicNumber,
-                    atomicNumber,
-                    MachineTier.ULV
-            );
+        // Validate the actual registered atomic domain only. IndustrialMaterials currently
+        // defines a continuous 1..N set, so startup work scales with real content rather
+        // than synthetic stress-test atomic numbers.
+        for (ElementDefinition element : context.elements()) {
+            int atomicNumber = element.atomicNumber();
             MaterialProperties properties = MaterialPropertyCalculator.calculate(element);
             String subject = "atomic_number:" + atomicNumber;
 

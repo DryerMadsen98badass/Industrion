@@ -83,6 +83,14 @@ public final class MultiblockScheduleBuilder {
                         continue;
                     }
 
+                    // Dynamic predicates (air, tags, OR-combinations, etc.) may already be satisfied
+                    // even when they do not have one fixed visualization/build item. Never replace a
+                    // valid world block just because the visualization candidate list is narrower.
+                    MultiblockPredicate predicate = definition.predicate(symbol);
+                    if (predicate != null && predicate.match(level, worldPos, existing).matches()) {
+                        continue;
+                    }
+
                     List<ItemStack> candidates = creative
                             ? definition.visualization().validStacks(symbol, tier, definition.controller(), definition.controllerSymbol())
                             : survivalCandidates(definition, symbol, tier);

@@ -4,13 +4,23 @@ import com.simibubi.create.AllTags.AllItemTags;
 import net.mads.industron.Industron;
 import net.mads.industron.material.IndustrialMaterial;
 import net.mads.industron.material.defenitions.IndustrialMaterials;
+import net.mads.industron.material.defenitions.PlantMaterials;
 import net.mads.industron.material.MaterialPart;
 import net.mads.industron.material.MaterialOreHost;
+import net.mads.industron.material.plant.PlantMaterialGenerator;
+import net.mads.industron.material.plant.PlantPart;
+import net.mads.industron.material.plant.PlantProcessingPlanner;
+import net.mads.industron.material.plant.PlantStringCatalog;
+import net.mads.industron.material.recipes.MaterialCasingGenerator;
 import net.mads.industron.material.structure.StructureBlockDefinition;
 import net.mads.industron.material.structure.StructureMaterial;
 import net.mads.industron.material.structure.StructureMaterialGenerator;
 import net.mads.industron.material.structure.StructureMaterials;
 import net.mads.industron.registry.ItemRegistry;
+import net.mads.industron.recipe.recipes.assembly.ToolDefinitions;
+import net.mads.industron.recipe.recipetypes.assembly.ToolDefinition;
+import net.mads.industron.tool.ToolMaterialLookup;
+import net.mads.industron.tool.ToolMaterialRules;
 import net.mads.industron.transport.color.ColoredFluidPipeRegistrations;
 import net.mads.industron.transport.color.PipeColorDefinitions;
 import net.minecraft.core.HolderLookup;
@@ -22,6 +32,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.level.block.Block;
 import net.neoforged.neoforge.common.data.ExistingFileHelper;
@@ -29,10 +41,24 @@ import net.neoforged.neoforge.common.data.ExistingFileHelper;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
+import static net.mads.industron.material.plant.PlantTags.FERTILIZERS;
+
 public class MaterialItemTagProvider extends ItemTagsProvider {
     private static final TagKey<Item> MOLDS = createExpansionTag("molds");
     private static final TagKey<Item> COLD_MOLDS = createExpansionTag("cold_molds");
     private static final TagKey<Item> HOT_MOLDS = createExpansionTag("hot_molds");
+    private static final TagKey<Item> C_CASINGS = cTag("casings");
+    private static final TagKey<Item> C_MACHINE_CASINGS = cTag("machine_casings");
+    private static final TagKey<Item> MATERIAL_MACHINE_CASINGS = createExpansionTag("material_machine_casings");
+    private static final TagKey<Item> FINISHED_TOOLS = createExpansionTag("tools");
+    private static final TagKey<Item> STRINGS = TagKey.create(Registries.ITEM, PlantStringCatalog.TAG_ID);
+    private static final TagKey<Item> PLANT_FIBERS = TagKey.create(
+            Registries.ITEM,
+            ResourceLocation.fromNamespaceAndPath(Industron.MOD_ID, "plant_fibers")
+    );
+    private static final TagKey<Item> DURABILITY_ENCHANTABLE = minecraftTag("enchantable/durability");
+    private static final TagKey<Item> MINING_ENCHANTABLE = minecraftTag("enchantable/mining");
+    private static final TagKey<Item> MINING_LOOT_ENCHANTABLE = minecraftTag("enchantable/mining_loot");
 
     private static final Map<MaterialPart, TagKey<Item>> COMMON_MATERIAL_TAGS = Map.ofEntries(
             Map.entry(MaterialPart.ORE, cTag("ores")),
@@ -55,6 +81,11 @@ public class MaterialItemTagProvider extends ItemTagsProvider {
             Map.entry(MaterialPart.DUST, cTag("dusts")),
             Map.entry(MaterialPart.TINY_DUST, cTag("tiny_dusts")),
             Map.entry(MaterialPart.SMALL_DUST, cTag("small_dusts")),
+            Map.entry(MaterialPart.CLAY, cTag("clays")),
+            Map.entry(MaterialPart.CLAY_BLOCK, cTag("clay_blocks")),
+            Map.entry(MaterialPart.UNFIRED_BRICK, cTag("unfired_bricks")),
+            Map.entry(MaterialPart.BRICK, cTag("bricks")),
+            Map.entry(MaterialPart.BRICKS, cTag("brick_blocks")),
             Map.entry(MaterialPart.IMPURE_DUST, cTag("impure_dusts")),
             Map.entry(MaterialPart.PURIFIED_DUST, cTag("purified_dusts")),
             Map.entry(MaterialPart.CRUSHED_ORE, cTag("crushed_ores")),
@@ -127,6 +158,148 @@ public class MaterialItemTagProvider extends ItemTagsProvider {
 
         addColoredPipeVariantTags();
         addStructureMaterialTags();
+        addMaterialMachineCasingTags();
+        addPlantStringTags();
+        addPlantFertilizerTags();
+        addFinishedToolTags();
+        addToolEnchantmentTags();
+    }
+
+
+    /** Generated plant fibre gets its own tag; all usable string variants share one string tag. */
+    private void addPlantStringTags() {
+        tag(STRINGS).add(Items.STRING);
+        for (var material : PlantMaterials.ALL) {
+            if (PlantMaterialGenerator.generates(material, PlantPart.FIBER)) {
+                var fiber = ItemRegistry.getPlantMaterialItem(material, PlantPart.FIBER);
+                if (fiber == null) {
+                    throw new IllegalStateException(
+                            "Missing generated plant fibre item for tag " + PlantPart.FIBER.registryName(material)
+                    );
+                }
+                tag(PLANT_FIBERS).add(fiber.get());
+            }
+
+            if (!PlantMaterialGenerator.generates(material, PlantPart.STRING)) continue;
+            var string = ItemRegistry.getPlantMaterialItem(material, PlantPart.STRING);
+            if (string == null) {
+                throw new IllegalStateException(
+                        "Missing generated plant string item for tag " + PlantPart.STRING.registryName(material)
+                );
+            }
+            tag(STRINGS).add(string.get());
+        }
+    }
+
+    private void addPlantFertilizerTags() {
+        for (var material : PlantMaterials.ALL) {
+            if (!PlantMaterialGenerator.hasProcessSource(material)) continue;
+            var fertilizer = PlantProcessingPlanner.requireIntermediate(
+                    material, PlantProcessingPlanner.FERTILIZER
+            );
+            var item = ItemRegistry.getPlantProcessIntermediateItem(fertilizer.id());
+            if (item == null) {
+                throw new IllegalStateException("Missing plant fertilizer item for tag " + fertilizer.id());
+            }
+            tag(FERTILIZERS).add(item.get());
+        }
+    }
+
+    /**
+     * Finished dynamic tools are real items outside Assembly too. Give every family an
+     * Industron item tag, plus the normal vanilla mining-tool tags where Minecraft has one.
+     * This makes tag-based recipes/integrations see the registered finished tool item rather
+     * than only the Assembly-specific ToolDefinition.
+     */
+    private void addFinishedToolTags() {
+        for (var definition : ToolDefinitions.ALL) {
+            if (!definition.isFinishedToolEnabled()) continue;
+            TagKey<Item> familyTag = createExpansionTag("tools/" + definition.id());
+
+            if (definition.isAssembledTool()) {
+                var holder = ItemRegistry.getComposedTool(definition.id());
+                if (holder == null) continue;
+                Item item = holder.get();
+                tag(FINISHED_TOOLS).add(item);
+                tag(familyTag).add(item);
+                switch (definition.id()) {
+                    case "bow" -> tag(minecraftTag("enchantable/bow")).add(item);
+                    case "crossbow" -> tag(minecraftTag("enchantable/crossbow")).add(item);
+                    case "fishing_rod" -> tag(minecraftTag("enchantable/fishing")).add(item);
+                    case "helmet", "chestplate", "leggings", "boots" -> {
+                        tag(minecraftTag("enchantable/armor")).add(item);
+                        String slot = switch(definition.id()) {case "helmet" -> "head";case "chestplate" -> "chest";case "leggings" -> "leg";default -> "foot";};
+                        tag(minecraftTag("enchantable/"+slot+"_armor")).add(item);
+                        tag(minecraftTag(definition.id().equals("helmet")?"head_armor":definition.id().equals("chestplate")?"chest_armor":definition.id().equals("leggings")?"leg_armor":"foot_armor")).add(item);
+                    }
+                    default -> {}
+                }
+                continue;
+            }
+
+            // Direct-part tools (currently Wrench) have one registered item per material.
+            ToolDefinition.PartSlot slot = definition.parts().getFirst();
+            for (var material : ToolMaterialRules.candidates(slot.part())) {
+                ItemStack stack = ToolMaterialLookup.stackFor(material, slot.part());
+                if (stack.isEmpty()) continue;
+                tag(FINISHED_TOOLS).add(stack.getItem());
+                tag(familyTag).add(stack.getItem());
+            }
+        }
+
+        addVanillaToolTag(ToolDefinitions.PICKAXE, ItemTags.PICKAXES);
+        addVanillaToolTag(ToolDefinitions.AXE, ItemTags.AXES);
+        addVanillaToolTag(ToolDefinitions.SHOVEL, ItemTags.SHOVELS);
+        addVanillaToolTag(ToolDefinitions.HOE, ItemTags.HOES);
+        // Vanilla weapon enchantment tags inherit from minecraft:swords.
+        addVanillaToolTag(ToolDefinitions.SWORD, ItemTags.SWORDS);
+    }
+
+    private void addVanillaToolTag(ToolDefinition definition, TagKey<Item> vanillaTag) {
+        var holder = ItemRegistry.getComposedTool(definition.id());
+        if (holder != null) tag(vanillaTag).add(holder.get());
+    }
+
+    private void addToolEnchantmentTags() {
+        // Every finished dynamic tool uses vanilla durability, so Unbreaking/Mending remain valid.
+        for (var holder : ItemRegistry.getAllComposedTools()) {
+            tag(DURABILITY_ENCHANTABLE).add(holder.get());
+        }
+
+        // Only the normal mining families receive the mining-specific enchantment pools.
+        for (var definition : java.util.List.of(
+                ToolDefinitions.PICKAXE,
+                ToolDefinitions.AXE,
+                ToolDefinitions.SHOVEL,
+                ToolDefinitions.HOE
+        )) {
+            var holder = ItemRegistry.getComposedTool(definition.id());
+            if (holder == null) continue;
+            tag(MINING_ENCHANTABLE).add(holder.get());
+            tag(MINING_LOOT_ENCHANTABLE).add(holder.get());
+        }
+
+        // Wrench is a direct cast MaterialPart rather than a composed item, but it is still
+        // a finished damageable tool and therefore belongs in the durability enchantment pool.
+        for (var material : ToolMaterialRules.candidates(MaterialPart.WRENCH)) {
+            var stack = ToolMaterialLookup.stackFor(material, MaterialPart.WRENCH);
+            if (!stack.isEmpty()) tag(DURABILITY_ENCHANTABLE).add(stack.getItem());
+        }
+    }
+
+    private void addMaterialMachineCasingTags() {
+        for (MaterialCasingGenerator.GeneratedCasing generated : MaterialCasingGenerator.ALL) {
+            var holder = ItemRegistry.MATERIAL_MACHINE_CASINGS.get(generated.registryName());
+            if (holder == null) {
+                throw new IllegalStateException("Missing registered material casing item: " + generated.registryName());
+            }
+            Item item = holder.get();
+            tag(C_CASINGS).add(item);
+            tag(C_MACHINE_CASINGS).add(item);
+            tag(MATERIAL_MACHINE_CASINGS).add(item);
+            tag(createExpansionTag("material_machine_casings/" + generated.definition().id())).add(item);
+            tag(createExpansionTag("material_machine_casings/material/" + generated.material().id())).add(item);
+        }
     }
 
 
@@ -215,6 +388,10 @@ public class MaterialItemTagProvider extends ItemTagsProvider {
             id = id.substring(0, id.length() - "_mold".length());
         }
         return id;
+    }
+
+    private static TagKey<Item> minecraftTag(String path) {
+        return TagKey.create(Registries.ITEM, ResourceLocation.withDefaultNamespace(path));
     }
 
     private static TagKey<Item> cTag(String path) {

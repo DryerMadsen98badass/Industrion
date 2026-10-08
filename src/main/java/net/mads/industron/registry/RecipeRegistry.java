@@ -3,6 +3,10 @@ package net.mads.industron.registry;
 import net.mads.industron.Industron;
 import net.mads.industron.recipe.CERecipe;
 import net.mads.industron.recipe.CERecipeSerializer;
+import net.mads.industron.recipe.chiseling.ChiselingRecipe;
+import net.mads.industron.recipe.chiseling.ChiselingRecipeSerializer;
+import net.mads.industron.recipe.stone_shaping.StoneShapingRecipe;
+import net.mads.industron.recipe.stone_shaping.StoneShapingRecipeSerializer;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.crafting.RecipeSerializer;
 import net.minecraft.world.item.crafting.RecipeType;
@@ -21,6 +25,26 @@ public class RecipeRegistry {
                 @Override
                 public String toString() {
                     return Industron.MOD_ID + ":machine";
+                }
+            });
+
+    public static final DeferredHolder<RecipeSerializer<?>, StoneShapingRecipeSerializer> STONE_SHAPING_RECIPE_SERIALIZER =
+            RECIPE_SERIALIZERS.register("stone_shaping", StoneShapingRecipeSerializer::new);
+    public static final DeferredHolder<RecipeType<?>, RecipeType<StoneShapingRecipe>> STONE_SHAPING_RECIPE_TYPE =
+            RECIPE_TYPES.register("stone_shaping", () -> new RecipeType<>() {
+                @Override
+                public String toString() {
+                    return Industron.MOD_ID + ":stone_shaping";
+                }
+            });
+
+    public static final DeferredHolder<RecipeSerializer<?>, ChiselingRecipeSerializer> CHISELING_RECIPE_SERIALIZER =
+            RECIPE_SERIALIZERS.register("chiseling", ChiselingRecipeSerializer::new);
+    public static final DeferredHolder<RecipeType<?>, RecipeType<ChiselingRecipe>> CHISELING_RECIPE_TYPE =
+            RECIPE_TYPES.register("chiseling", () -> new RecipeType<>() {
+                @Override
+                public String toString() {
+                    return Industron.MOD_ID + ":chiseling";
                 }
             });
 

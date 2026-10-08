@@ -5,11 +5,14 @@ import net.mads.industron.machine.MachineCasingBlock;
 import net.mads.industron.machine.MachinePortBlockEntity;
 import net.mads.industron.machine.MachineTier;
 import net.mads.industron.machine.MachineTierStats;
-import net.mads.industron.machine.coil.CoilBlock;
-import net.mads.industron.machine.coil.CoilDefinitions;
+import net.mads.industron.machine.MaterialMachineCasingBlock;
+import net.mads.industron.material.recipes.CasingDefinition;
+import net.mads.industron.block.coils.CoilBlock;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -49,6 +52,12 @@ public final class MultiblockPredicates {
         return new PredicateBuilder(MultiblockRegistry.id(blockId));
     }
 
+    /** Matches any block in a vanilla/modded block tag. */
+    public static MultiblockPredicate tag(String tagId) {
+        ResourceLocation id = MultiblockRegistry.id(tagId);
+        return new TagPredicate(TagKey.create(Registries.BLOCK, id));
+    }
+
     public static MultiblockPredicate or(MultiblockPredicate first, MultiblockPredicate second) {
         return (first instanceof RecipeTypeAwarePredicate || second instanceof RecipeTypeAwarePredicate)
                 ? new RecipeAwareOrPredicate(first, second)
@@ -57,6 +66,15 @@ public final class MultiblockPredicates {
 
     public static MultiblockPredicate overlay(MultiblockPredicate predicate, String model) {
         return new OverlayPredicate(predicate, MultiblockRegistry.id(model));
+    }
+
+    public static MultiblockPredicate model(MultiblockPredicate predicate, MultiblockModelSource source) {
+        return new ModelSourcePredicate(Objects.requireNonNull(predicate), Objects.requireNonNull(source));
+    }
+
+    /** Shorthand used by definitions such as {@code ability(...).model(casing())}. */
+    public static MultiblockModelSource casing() {
+        return MultiblockModelSource.CASING;
     }
 
     public static MultiblockPredicate min(MultiblockPredicate predicate, int minimum) {
@@ -121,6 +139,16 @@ public final class MultiblockPredicates {
         return new AnyMachineCasingPredicate();
     }
 
+    /** Matches generated material casings belonging to one casing definition. */
+    public static MachineCasingPredicateBuilder machineCasing(String definitionId) {
+        return new MachineCasingPredicateBuilder(definitionId);
+    }
+
+    /** Type-safe overload for an existing generated casing definition. */
+    public static MachineCasingPredicateBuilder machineCasing(CasingDefinition definition) {
+        return machineCasing(Objects.requireNonNull(definition, "machine casing definition").id());
+    }
+
     public static MultiblockPredicate coils() {
         return new CoilPredicate();
     }
@@ -132,12 +160,97 @@ public final class MultiblockPredicates {
         }
     }
 
+    private record TagPredicate(TagKey<Block> tag) implements MultiblockPredicate {
+        @Override
+        public Match match(Level level, BlockPos pos, BlockState state) {
+            return state.is(tag) ? Match.success() : Match.failed();
+        }
+    }
+
     private enum ControllerPredicate implements MultiblockPredicate {
         INSTANCE;
 
         @Override
         public MultiblockPredicate.Match match(Level level, BlockPos pos, BlockState state) {
             return MultiblockPredicate.Match.failed();
+        }
+    }
+
+    public static final class MachineCasingPredicateBuilder implements MultiblockPredicate {
+        private final String definitionId;
+        private MachineTier minimumTier;
+        private MachineTier maximumTier;
+
+        private MachineCasingPredicateBuilder(String definitionId) {
+            if (definitionId == null || definitionId.isBlank()) {
+                throw new IllegalArgumentException("Machine casing definition id cannot be blank");
+            }
+            this.definitionId = definitionId;
+        }
+
+        public MachineCasingPredicateBuilder minTier(MachineTier tier) {
+            this.minimumTier = requireElectricTier(tier);
+            validateRange();
+            return this;
+        }
+
+        public MachineCasingPredicateBuilder maxTier(MachineTier tier) {
+            this.maximumTier = requireElectricTier(tier);
+            validateRange();
+            return this;
+        }
+
+        public MachineCasingPredicateBuilder exactTier(MachineTier tier) {
+            MachineTier exact = requireElectricTier(tier);
+            this.minimumTier = exact;
+            this.maximumTier = exact;
+            return this;
+        }
+
+        @Override
+        public Match match(Level level, BlockPos pos, BlockState state) {
+            if (!(state.getBlock() instanceof MaterialMachineCasingBlock casing)) {
+                return Match.failed();
+            }
+            if (!casing.definition().id().equals(definitionId) || !matchesTierRange(casing.tier())) {
+                return Match.failed();
+            }
+            return Match.tiered(casing.tier());
+        }
+
+        @Override
+        public boolean allowsBuildTier(MachineTier candidateTier) {
+            return candidateTier != null && MachineTier.ALL.contains(candidateTier) && matchesTierRange(candidateTier);
+        }
+
+        @Override
+        public MultiblockVisualization.SymbolInfo visualizationInfo() {
+            return MultiblockVisualization.SymbolInfo.materialMachineCasings(definitionId);
+        }
+
+        private boolean matchesTierRange(MachineTier actual) {
+            if (minimumTier != null && !MachineTierStats.isAtLeast(actual, minimumTier)) {
+                return false;
+            }
+            return maximumTier == null || MachineTierStats.isAtMost(actual, maximumTier);
+        }
+
+        private void validateRange() {
+            if (minimumTier != null && maximumTier != null
+                    && MachineTierStats.tierIndex(minimumTier) > MachineTierStats.tierIndex(maximumTier)) {
+                throw new IllegalArgumentException(
+                        "Machine casing minimum tier " + minimumTier.id()
+                                + " cannot be above maximum tier " + maximumTier.id()
+                );
+            }
+        }
+
+        private static MachineTier requireElectricTier(MachineTier tier) {
+            Objects.requireNonNull(tier, "machine casing tier");
+            if (!MachineTier.ALL.contains(tier)) {
+                throw new IllegalArgumentException("Machine casing tier must be an electric MachineTier: " + tier.id());
+            }
+            return tier;
         }
     }
 
@@ -663,12 +776,67 @@ public final class MultiblockPredicates {
     private static final class CoilPredicate implements MultiblockPredicate {
         @Override
         public Match match(Level level, BlockPos pos, BlockState state) {
-            return state.getBlock() instanceof CoilBlock ? Match.success() : Match.failed();
+            return state.getBlock() instanceof CoilBlock
+                    ? Match.success()
+                    : Match.failed();
         }
 
         @Override
         public MultiblockVisualization.SymbolInfo visualizationInfo() {
-            return MultiblockVisualization.SymbolInfo.block(ResourceLocation.fromNamespaceAndPath(Industron.MOD_ID, CoilDefinitions.PLACEHOLDER.blockId()));
+            return MultiblockVisualization.SymbolInfo.coils();
+        }
+    }
+
+    private record ModelSourcePredicate(
+            MultiblockPredicate predicate,
+            MultiblockModelSource source
+    ) implements MultiblockPredicate, RecipeTypeAwarePredicate {
+        @Override
+        public Match match(Level level, BlockPos pos, BlockState state) {
+            return predicate.match(level, pos, state).withModelSource(source);
+        }
+
+        @Override
+        public boolean allowsBuildTier(MachineTier tier) {
+            return predicate.allowsBuildTier(tier);
+        }
+
+        @Override
+        public MultiblockVisualization.SymbolInfo visualizationInfo() {
+            return predicate.visualizationInfo();
+        }
+
+        @Override
+        public List<MultiblockPredicate.DisplayOption> displayOptions(MachineTier tier) {
+            return predicate.displayOptions(tier);
+        }
+
+        @Override
+        public List<MultiblockPredicate.CountRequirement> countRequirements() {
+            return predicate.countRequirements();
+        }
+
+        @Override
+        public int sequentialInputIndex() {
+            return predicate.sequentialInputIndex();
+        }
+
+        @Override
+        public int sequentialOutputIndex() {
+            return predicate.sequentialOutputIndex();
+        }
+
+        @Override
+        public MultiblockPredicate bindRecipeAbilities(Set<MultiblockAbility> abilities) {
+            MultiblockPredicate bound = predicate instanceof RecipeTypeAwarePredicate recipeAware
+                    ? recipeAware.bindRecipeAbilities(abilities)
+                    : predicate;
+            return bound == predicate ? this : new ModelSourcePredicate(bound, source);
+        }
+
+        @Override
+        public boolean requiresRecipeAbilities() {
+            return predicate instanceof RecipeTypeAwarePredicate recipeAware && recipeAware.requiresRecipeAbilities();
         }
     }
 
@@ -740,7 +908,14 @@ public final class MultiblockPredicates {
             if (!match.matches()) {
                 return match;
             }
-            return new Match(true, match.tier(), match.abilities(), mergeCount(match.counts(), countKey()), match.overlayModel());
+            return new Match(
+                    true,
+                    match.tier(),
+                    match.abilities(),
+                    mergeCount(match.counts(), countKey()),
+                    match.overlayModel(),
+                    match.modelSource()
+            );
         }
 
         @Override

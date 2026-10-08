@@ -2,11 +2,13 @@ package net.mads.industron.recipe;
 
 import net.mads.industron.Industron;
 import net.mads.industron.gui.ProgressBar;
+import net.mads.industron.recipe.recipetypes.assembly.ToolDefinition;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Declarative definition of one CE process type.
@@ -23,11 +25,18 @@ public record RecipeTypeDefinition(
         int maxFluidOutputs,
         List<ResourceLocation> supportedLogic,
         ProgressBar progressBar,
-        int baseBlockItemInputIndex
+        int baseBlockItemInputIndex,
+        boolean requiresCoilTemperature,
+        boolean ignoresTier,
+        Optional<ResourceLocation> generatedRecipeType,
+        Optional<String> jeiToolIcon,
+        boolean dedicatedToolSlot
 ) {
     public RecipeTypeDefinition {
         supportedLogic = List.copyOf(supportedLogic);
         progressBar = Objects.requireNonNullElse(progressBar, ProgressBar.ARROW);
+        generatedRecipeType = generatedRecipeType == null ? Optional.empty() : generatedRecipeType;
+        jeiToolIcon = jeiToolIcon == null ? Optional.empty() : jeiToolIcon;
     }
 
     public boolean supportsLogic(ResourceLocation logicId) {
@@ -88,6 +97,39 @@ public record RecipeTypeDefinition(
         static Option baseBlockInput() {
             return builder -> builder.baseBlockItemInputIndex = 0;
         }
+
+        /**
+         * Requires every recipe of this type to declare a positive coil temperature and
+         * the coil-temperature runtime logic. Used only by processes that actually melt solids.
+         */
+        static Option requiresCoilTemperature() {
+            return builder -> builder.requiresCoilTemperature = true;
+        }
+
+        /**
+         * Marks a manual/passive recipe type as tierless. Any tier declared by a recipe
+         * is accepted for compatibility but discarded before runtime and serialization.
+         */
+        static Option ignoreTier() {
+            return builder -> builder.ignoresTier = true;
+        }
+
+        /** Uses a registered dynamic tool family as the JEI category icon and catalyst. */
+        static Option jeiToolIcon(ToolDefinition tool) {
+            return builder -> builder.jeiToolIcon = Optional.of(Objects.requireNonNull(tool).id());
+        }
+
+        /** Shows the recipe's declared tool in a dedicated JEI catalyst slot. */
+        static Option dedicatedToolSlot() {
+            return builder -> builder.dedicatedToolSlot = true;
+        }
+
+        /** Also emits every recipe into an automated parent process, without manual tool actions. */
+        static Option generateFor(RecipeTypeDefinition automatedType) {
+            return builder -> builder.generatedRecipeType = Optional.of(
+                    Objects.requireNonNull(automatedType).id()
+            );
+        }
     }
 
     public static final class Builder {
@@ -100,6 +142,11 @@ public record RecipeTypeDefinition(
         private final List<ResourceLocation> supportedLogic = new ArrayList<>();
         private ProgressBar progressBar = ProgressBar.ARROW;
         private int baseBlockItemInputIndex = -1;
+        private boolean requiresCoilTemperature;
+        private boolean ignoresTier;
+        private Optional<ResourceLocation> generatedRecipeType = Optional.empty();
+        private Optional<String> jeiToolIcon = Optional.empty();
+        private boolean dedicatedToolSlot;
 
         private Builder() {
         }
@@ -119,6 +166,12 @@ public record RecipeTypeDefinition(
             if (maxItemInputs < 0 || maxItemOutputs < 0 || maxFluidInputs < 0 || maxFluidOutputs < 0) {
                 throw new IllegalStateException("Recipe type " + id + " cannot have negative IO limits");
             }
+            if (requiresCoilTemperature && !supportedLogic.contains(CERecipeLogics.COIL_TEMP.id())) {
+                throw new IllegalStateException(
+                        "Recipe type " + id + " requires coil temperature but does not support "
+                                + CERecipeLogics.COIL_TEMP.id()
+                );
+            }
             return new RecipeTypeDefinition(
                     id,
                     displayName,
@@ -128,7 +181,12 @@ public record RecipeTypeDefinition(
                     maxFluidOutputs,
                     supportedLogic,
                     progressBar,
-                    baseBlockItemInputIndex
+                    baseBlockItemInputIndex,
+                    requiresCoilTemperature,
+                    ignoresTier,
+                    generatedRecipeType,
+                    jeiToolIcon,
+                    dedicatedToolSlot
             );
         }
     }

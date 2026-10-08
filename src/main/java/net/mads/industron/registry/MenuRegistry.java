@@ -5,6 +5,7 @@ import net.mads.industron.menu.MachineControlScheduleMenu;
 import net.mads.industron.menu.MachinePortMenu;
 import net.mads.industron.menu.MultiblockControllerMenu;
 import net.mads.industron.menu.SingleBlockMachineMenu;
+import net.mads.industron.menu.StoneShapingMenu;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.inventory.MenuType;
 import net.neoforged.bus.api.IEventBus;
@@ -23,6 +24,11 @@ public class MenuRegistry {
             MENUS.register("single_block_machine", () -> IMenuTypeExtension.create(SingleBlockMachineMenu::new));
     public static final DeferredHolder<MenuType<?>, MenuType<MachineControlScheduleMenu>> MACHINE_CONTROL_SCHEDULE =
             MENUS.register("machine_control_schedule", () -> IMenuTypeExtension.create(MachineControlScheduleMenu::new));
+    public static final DeferredHolder<MenuType<?>, MenuType<StoneShapingMenu>> STONE_SHAPING =
+            MENUS.register("stone_shaping", () -> IMenuTypeExtension.create(StoneShapingMenu::new));
+
+    public static final DeferredHolder<MenuType<?>, MenuType<net.mads.industron.menu.FoundryMenu>> FOUNDRY =
+            MENUS.register("foundry", () -> IMenuTypeExtension.create(net.mads.industron.menu.FoundryMenu::new));
 
     public static void register(IEventBus modEventBus) { MENUS.register(modEventBus); }
 }

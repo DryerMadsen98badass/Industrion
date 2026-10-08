@@ -11,12 +11,31 @@ public final class MachineTierStats {
     }
 
     public static int tierIndex(MachineTier tier) {
-        int index = MachineTier.ALL.indexOf(tier);
+        int index = MachineTier.ALL.indexOf(tier == null ? MachineTier.ULV : tier.recipeTier());
         return Math.max(index, 0);
+    }
+
+
+    /** Default block hardness for a breaking tier. Matches the former ULV-EV progression directly. */
+    public static float blockHardness(MachineTier tier) {
+        int index = tierIndex(tier == null ? MachineTier.ULV : tier.recipeTier());
+        float hardness = (index + 1) * (8.0F / 3.0F);
+        hardness = Math.min(12.0F, hardness);
+        return Math.round(hardness * 100.0F) / 100.0F;
+    }
+
+    /** Default explosion resistance for a breaking tier. */
+    public static float blockResistance(MachineTier tier) {
+        int index = tierIndex(tier == null ? MachineTier.ULV : tier.recipeTier());
+        return 4.0F * (index + 1);
     }
 
     public static boolean isAtLeast(MachineTier actual, MachineTier required) {
         return tierIndex(actual) >= tierIndex(required);
+    }
+
+    public static boolean isAtMost(MachineTier actual, MachineTier maximum) {
+        return tierIndex(actual) <= tierIndex(maximum);
     }
 
     public static MachineTier max(MachineTier first, MachineTier second) {
@@ -67,8 +86,16 @@ public final class MachineTierStats {
     }
 
     public static long ceTier(MachineTier tier) {
-        int index = Math.min(tierIndex(tier), CE_VOLTAGES.length - 1);
-        return CE_VOLTAGES[index];
+        int index = tierIndex(tier);
+        if (index < CE_VOLTAGES.length) {
+            return CE_VOLTAGES[index];
+        }
+
+        long voltage = CE_VOLTAGES[CE_VOLTAGES.length - 1];
+        for (int current = CE_VOLTAGES.length; current <= index; current++) {
+            voltage = saturatedMultiply(voltage, 4L);
+        }
+        return voltage;
     }
 
     /**

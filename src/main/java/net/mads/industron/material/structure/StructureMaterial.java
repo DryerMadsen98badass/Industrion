@@ -1,5 +1,6 @@
 package net.mads.industron.material.structure;
 
+import net.mads.industron.machine.MachineTier;
 import net.mads.industron.material.MaterialPart;
 import net.mads.industron.material.MaterialFormulaFormatter;
 
@@ -12,6 +13,8 @@ import java.util.Map;
 import java.util.Set;
 
 public interface StructureMaterial extends IndustrialSubstance {
+    MachineTier tier();
+
     StructureModel model();
 
     List<MaterialComponent> components();

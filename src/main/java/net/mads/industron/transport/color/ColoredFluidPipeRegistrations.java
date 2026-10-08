@@ -24,6 +24,8 @@ import java.util.Map;
 public final class ColoredFluidPipeRegistrations {
     private static final Map<String, EnumMap<DyeColor, RegisteredBlocks>> BLOCKS = new LinkedHashMap<>();
     private static final Map<String, EnumMap<DyeColor, RegisteredItems>> ITEMS = new LinkedHashMap<>();
+    private static List<RegisteredBlocks> blockSnapshot = List.of();
+    private static List<RegisteredItems> itemSnapshot = List.of();
 
     private static DeferredHolder<BlockEntityType<?>, BlockEntityType<ColoredCreateFluidPipeBlockEntity>> createPipeBlockEntity;
     private static DeferredHolder<BlockEntityType<?>, BlockEntityType<ColoredCreateGlassFluidPipeBlockEntity>> createGlassPipeBlockEntity;
@@ -82,6 +84,7 @@ public final class ColoredFluidPipeRegistrations {
             }
             BLOCKS.put(family.id(), colors);
         }
+        blockSnapshot = BLOCKS.values().stream().flatMap(colors -> colors.values().stream()).toList();
     }
 
     public static void registerItems(DeferredRegister<Item> registry) {
@@ -102,6 +105,7 @@ public final class ColoredFluidPipeRegistrations {
             }
             ITEMS.put(family.id(), colors);
         }
+        itemSnapshot = ITEMS.values().stream().flatMap(colors -> colors.values().stream()).toList();
     }
 
     public static void registerCreateBlockEntities(DeferredRegister<BlockEntityType<?>> registry) {
@@ -164,18 +168,14 @@ public final class ColoredFluidPipeRegistrations {
 
     public static Collection<RegisteredBlocks> allBlocks() {
         requireBlocks();
-        List<RegisteredBlocks> registrations = new ArrayList<>();
-        BLOCKS.values().forEach(colors -> registrations.addAll(colors.values()));
-        return List.copyOf(registrations);
+        return blockSnapshot;
     }
 
     public static Collection<RegisteredItems> allItems() {
         if (ITEMS.isEmpty()) {
             throw new IllegalStateException("Colored fluid pipe items have not been registered yet");
         }
-        List<RegisteredItems> registrations = new ArrayList<>();
-        ITEMS.values().forEach(colors -> registrations.addAll(colors.values()));
-        return List.copyOf(registrations);
+        return itemSnapshot;
     }
 
     public static List<Block> pipeBlocksForTier(FluidTransportTier tier) {

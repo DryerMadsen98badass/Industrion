@@ -7,7 +7,7 @@ public final class SiftingRecipeType {
     public static final RecipeTypeDefinition DEFINITION = RecipeTypeDefinition.recipeType()
             .recipeTypeDefinition(RecipeTypeDefinition.Option.id("sifting"))
             .recipeTypeDefinition(RecipeTypeDefinition.Option.displayName("Sifting"))
-            .recipeTypeDefinition(RecipeTypeDefinition.Option.maxIO(1, 6, 0, 0))
+            .recipeTypeDefinition(RecipeTypeDefinition.Option.maxIO(1, 7, 0, 0))
             .recipeTypeDefinition(RecipeTypeDefinition.Option.progressBar(ProgressBar.ARROW))
             .build();
 

@@ -5,6 +5,7 @@ import net.mads.industron.material.chemistry.MaterialClassification;
 import net.mads.industron.material.chemistry.MaterialSource;
 
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 
 /** Content-form eligibility for compound definitions. Chemistry and content ownership are separate. */
@@ -39,18 +40,48 @@ public final class CompoundMaterialFormGenerator {
             ChemistryPhase phase,
             Set<MaterialClassification> classifications,
             Set<MaterialSource> sources,
-            Set<MaterialPart> explicitParts
+            Set<MaterialPart> explicitParts,
+            List<MaterialComponent> components
     ) {
+        if (profile == MaterialContentProfile.BIOLOGICAL) {
+            if (explicitParts.isEmpty()) throw new IllegalArgumentException("Biological feed requires an owned form");
+            return Set.copyOf(explicitParts);
+        }
         if (profile == MaterialContentProfile.MINERAL_DUST) {
-            // Deliberately strict. Trace minerals are real chemistry, but own exactly one game form.
-            return Set.of(MaterialPart.DUST);
+            // Trace minerals own no ore/mechanical forms. A molten form is still required when the
+            // calculated chemistry selects melting as the first post-DUST separation step.
+            return properties.state() == MaterialProperties.PhysicalState.SOLID
+                    ? Set.of(MaterialPart.DUST, MaterialPart.MOLTEN_FLUID)
+                    : Set.of(MaterialPart.DUST);
         }
         if (profile == MaterialContentProfile.ORE) {
             // OreMaterials owns ore/pre-processing forms. It never turns into ingots/plates merely
             // because the calculated chemistry is metallic.
             EnumSet<MaterialPart> result = EnumSet.copyOf(ORE_PROCESSING);
+            if (!GemMaterialRules.isGemBearing(components)) {
+                result.remove(MaterialPart.REFINED_ORE);
+            } else {
+                result.add(MaterialPart.REFINED_ORE);
+                result.addAll(GemMaterialRules.oreGemForms());
+            }
+            if (properties.state() == MaterialProperties.PhysicalState.SOLID) {
+                result.add(MaterialPart.MOLTEN_FLUID);
+            }
             result.addAll(explicitParts);
             return Set.copyOf(result);
+        }
+        if (profile == MaterialContentProfile.CLAY) {
+            EnumSet<MaterialPart> forms = EnumSet.copyOf(ClayMaterialRules.FORMS);
+            forms.addAll(explicitParts);
+            return Set.copyOf(forms);
+        }
+        if (profile == MaterialContentProfile.CERAMIC_BRICK) {
+            EnumSet<MaterialPart> forms = EnumSet.of(
+                    MaterialPart.BRICK,
+                    MaterialPart.CRACKED_BRICK
+            );
+            forms.addAll(explicitParts);
+            return Set.copyOf(forms);
         }
 
         EnumSet<MaterialPart> parts = EnumSet.noneOf(MaterialPart.class);

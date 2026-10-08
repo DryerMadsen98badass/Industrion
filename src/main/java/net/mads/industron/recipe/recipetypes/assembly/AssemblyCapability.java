@@ -216,6 +216,19 @@ public enum AssemblyCapability {
         return practicalKind != PracticalKind.NONE;
     }
 
+    public boolean isAvailable(MaterialProperties properties) {
+        if (properties == null) return false;
+        return switch (this) {
+            case DENSITY -> properties.hasProperty("density");
+            case HARDNESS -> properties.hasProperty("hardness");
+            case MELTING_POINT -> properties.hasProperty("meltingPoint");
+            case ELECTRICAL_CONDUCTIVITY, ELECTRICAL_CAPACITY -> properties.hasProperty("electricalConductivity");
+            case CORROSION_RESISTANCE -> properties.hasProperty("corrosionResistance");
+            case REACTIVITY -> properties.hasProperty("reactivity");
+            default -> true;
+        };
+    }
+
     double rawScalar(MaterialProperties properties) {
         if (scalar == null) {
             throw new IllegalStateException(displayName + " is not a scalar capability");
@@ -261,21 +274,24 @@ public enum AssemblyCapability {
     }
 
     boolean matchesAtLeast(MaterialProperties properties, double required) {
+        if (!isAvailable(properties)) return false;
         if (isRangeStat()) return rangeMax.applyAsDouble(properties) >= required;
         return scalar.applyAsDouble(properties) >= required;
     }
 
     boolean matchesAtMost(MaterialProperties properties, double required) {
+        if (!isAvailable(properties)) return false;
         if (isRangeStat()) return rangeMin.applyAsDouble(properties) <= required;
         return scalar.applyAsDouble(properties) <= required;
     }
 
     boolean matchesExactly(MaterialProperties properties, double required) {
-        if (isRangeStat()) return false;
+        if (!isAvailable(properties) || isRangeStat()) return false;
         return Double.compare(scalar.applyAsDouble(properties), required) == 0;
     }
 
     boolean matchesRange(MaterialProperties properties, double min, double max) {
+        if (!isAvailable(properties)) return false;
         if (isRangeStat()) {
             return rangeMin.applyAsDouble(properties) <= min
                     && rangeMax.applyAsDouble(properties) >= max;

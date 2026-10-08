@@ -7,39 +7,96 @@ import com.simibubi.create.content.fluids.pipes.GlassFluidPipeBlock;
 import com.simibubi.create.content.fluids.pump.PumpBlock;
 import net.mads.industron.Industron;
 import net.mads.industron.energy.EnergyWireBlock;
+import net.mads.industron.item.CreativeGogglesItem;
 import net.mads.industron.fluid.IndustrialFluid;
+import net.mads.industron.machine.MachineTier;
 import net.mads.industron.machine.MachineTierStats;
 import net.mads.industron.machine.MaterialMachineCasingBlock;
+import net.mads.industron.machine.foundry.CastingBlock;
+import net.mads.industron.machine.foundry.CastingMoldItem;
+import net.mads.industron.material.CompoundMaterialPropertyCalculator;
 import net.mads.industron.material.IndustrialMaterial;
 import net.mads.industron.material.IndustrialSubstance;
 import net.mads.industron.material.MaterialComponent;
+import net.mads.industron.material.MaterialComponentWeights;
 import net.mads.industron.material.MaterialLookup;
 import net.mads.industron.material.MaterialPart;
 import net.mads.industron.material.MaterialProperties;
+import net.mads.industron.material.MaterialVariantResolver;
+import net.mads.industron.material.structure.StoneMaterial;
+import net.mads.industron.material.structure.WoodMaterial;
+import net.mads.industron.material.structure.StructureMaterialItem;
+import net.mads.industron.recipe.CEChancedItemOutput;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyTools;
+import net.mads.industron.recipe.recipetypes.primitive.PrimitiveSiftingRules;
 import net.mads.industron.transport.FluidTransportRates;
 import net.mads.industron.transport.TieredFluidTank;
+import net.mads.industron.tool.ToolMaterialLookup;
+import net.mads.industron.tool.ToolMaterialRules;
+import net.mads.industron.tool.ToolMaterialStatCalculator;
+import net.mads.industron.tool.ToolPartStats;
+import net.mads.industron.tool.EquipmentStats;
+import net.mads.industron.tool.EquipmentTooltip;
+import net.mads.industron.tool.ToolStatPresentation;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.ItemTooltipEvent;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 
 @EventBusSubscriber(modid = Industron.MOD_ID, value = Dist.CLIENT)
 public final class ClientMaterialTooltip {
+    private static final Map<WoodMaterial, MaterialProperties> WOOD_PROPERTIES =
+            Collections.synchronizedMap(new IdentityHashMap<>());
+
     private ClientMaterialTooltip() {
     }
 
     @SubscribeEvent
     public static void addMaterialTooltip(ItemTooltipEvent event) {
+        if (event.getItemStack().is(Items.CAMPFIRE)) {
+            event.getToolTip().add(Component.literal("Requires fuel.").withStyle(ChatFormatting.GRAY));
+            event.getToolTip().add(Component.literal("Light with Flint and Steel or Flint and Pebble.")
+                    .withStyle(ChatFormatting.DARK_GRAY));
+        }
+
         Player player = event.getEntity();
+        if (CreativeGogglesItem.isWearing(player)) {
+            addCreativeForgingDebug(event);
+        }
+
+        ToolMaterialLookup.Target toolPart = ToolMaterialLookup.find(event.getItemStack());
+        if (toolPart != null && ToolMaterialRules.isToolPartForm(toolPart.part())) {
+            MaterialPart statsPart = MaterialVariantResolver.coldTexturePart(toolPart.part());
+            if (!ToolMaterialRules.isDirectFinishedToolPart(toolPart.part())
+                    && ToolMaterialRules.allows(toolPart.material(), statsPart)) {
+                if (EquipmentStats.isEquipmentPart(statsPart)) {
+                    EquipmentTooltip.appendPart(event.getToolTip(), toolPart.material(), statsPart);
+                } else {
+                    addToolPartTooltipLines(event.getToolTip(), statsPart,
+                            ToolMaterialStatCalculator.calculate(toolPart.material(), statsPart));
+                }
+                if (ToolMaterialRules.isHotToolPart(toolPart.part())) {
+                    event.getToolTip().add(Component.literal("Cool before assembly.").withStyle(ChatFormatting.RED));
+                }
+            }
+            // Tool-shaped parts never inherit the generic material-property tooltip. Direct
+            // finished tools append their live durability/tool stats from their own Item class.
+            return;
+        }
+
         if (player == null || !GogglesItem.isWearingGoggles(player)) {
             return;
         }
@@ -50,10 +107,34 @@ public final class ClientMaterialTooltip {
             return;
         }
 
+        if (event.getItemStack().getItem() instanceof CastingMoldItem mold) {
+            addCeramicOperatingTooltipLines(event.getToolTip(), mold.clay());
+            return;
+        }
+
+        if (event.getItemStack().getItem() instanceof BlockItem blockItem
+                && blockItem.getBlock() instanceof CastingBlock castingBlock) {
+            addCeramicOperatingTooltipLines(event.getToolTip(), castingBlock.clay());
+            return;
+        }
+
         if (event.getItemStack().getItem() instanceof BlockItem blockItem
                 && blockItem.getBlock() instanceof EnergyWireBlock wire) {
             addWireTooltipLines(event.getToolTip(), wire);
             return;
+        }
+
+        if (event.getItemStack().getItem() instanceof StructureMaterialItem structureItem) {
+            if (structureItem.material() instanceof StoneMaterial stone
+                    && isStoneDust(structureItem.part())) {
+                addStoneContentsTooltip(event.getToolTip(), stone);
+                return;
+            }
+            if (structureItem.material() instanceof WoodMaterial wood
+                    && isWoodPulp(structureItem.part())) {
+                addWoodMaterialTooltipLines(event.getToolTip(), wood);
+                return;
+            }
         }
 
         MaterialLookup.MaterialTarget target = MaterialLookup.find(event.getItemStack());
@@ -66,6 +147,28 @@ public final class ClientMaterialTooltip {
         }
     }
 
+
+    private static void addCreativeForgingDebug(ItemTooltipEvent event) {
+        var stack = event.getItemStack();
+        var tool = AssemblyTools.findAny(stack);
+        if (tool != null) {
+            var definition = AssemblyTools.definition(tool.type());
+            if (definition != null && definition.canForgeOnAnvil()) {
+                event.getToolTip().add(colored("Forge formula: ", 0x55AAFF)
+                        .append(colored(definition.forgeFormula(), 0xFFFFFF)));
+            }
+        }
+
+        MaterialLookup.MaterialTarget target = MaterialLookup.find(stack);
+        if (target != null) {
+            MaterialPart part = target.part().coldForgePart();
+            if (part.hasForgeValue()) {
+                event.getToolTip().add(colored("Forge value: ", 0x55AAFF)
+                        .append(colored(Integer.toString(part.forgeValue()), 0xFFFFFF)));
+            }
+        }
+    }
+
     private static void tooltipTier(List<Component> tooltip, MaterialMachineCasingBlock casing) {
         tooltip.add(colored("Tier: ", 0xB0B0B0)
                 .append(colored(casing.tier().displayName(), casing.tier().color())));
@@ -75,6 +178,118 @@ public final class ClientMaterialTooltip {
         tooltip.add(colored("Tier: ", 0xB0B0B0).append(colored(wire.tier().displayName(), wire.tier().color())));
         tooltip.add(colored("CE: ", 0x4E8FDC).append(colored(Long.toString(MachineTierStats.ceTier(wire.tier())), 0xFFFFFF)));
         tooltip.add(colored("Amps: ", 0xE0A83A).append(colored(Integer.toString(wire.maxAmps()), 0xFFFFFF)));
+    }
+
+    private static void addToolPartTooltipLines(List<Component> tooltip, MaterialPart part, ToolPartStats stats) {
+        tooltip.add(colored("Tier: ", 0xB0B0B0)
+                .append(colored(stats.tier().displayName(), stats.tier().color())));
+        tooltip.add(colored("Durability: ", 0x55FF55)
+                .append(colored(Integer.toString(stats.durability()), 0x55FF55)));
+        if (ToolStatPresentation.showsEfficiency(part)) tooltip.add(colored("Efficiency: ", 0x55FFFF)
+                .append(colored(formatDecimal(stats.efficiencySeconds()), 0x55FFFF)));
+        if (ToolStatPresentation.showsDamage(part)) tooltip.add(colored("Damage: ", 0xFF5555)
+                .append(colored(formatDecimal(stats.damage()), 0xFF5555)));
+    }
+
+    private static boolean isStoneDust(MaterialPart part) {
+        return part == MaterialPart.DUST
+                || part == MaterialPart.SMALL_DUST
+                || part == MaterialPart.TINY_DUST;
+    }
+
+    private static boolean isWoodPulp(MaterialPart part) {
+        return part == MaterialPart.WOOD_PULP
+                || part == MaterialPart.SMALL_WOOD_PULP
+                || part == MaterialPart.TINY_WOOD_PULP;
+    }
+
+    private static void addStoneContentsTooltip(List<Component> tooltip, StoneMaterial stone) {
+        if (stone.components().isEmpty()) {
+            return;
+        }
+
+        MutableComponent contents = colored("Contains (on find): ", 0xB0B0B0);
+        for (int i = 0; i < stone.components().size(); i++) {
+            IndustrialSubstance substance = stone.components().get(i).substance();
+            if (i > 0) {
+                contents.append(colored(", ", 0x808080));
+            }
+            MaterialComponent component = stone.components().get(i);
+            contents.append(colored(substance.displayName(), substance.color() & 0x00FFFFFF));
+            contents.append(colored(" x" + component.amount(), substance.color() & 0x00FFFFFF));
+            contents.append(colored(
+                    " (" + formatDecimal(MaterialComponentWeights.percentage(component, stone.components())) + "% of finds)",
+                    0xB0B0B0
+            ));
+        }
+        tooltip.add(contents);
+        tooltip.add(colored("Primitive sieve find chance: ", 0xB0B0B0)
+                .append(colored(
+                        formatDecimal(PrimitiveSiftingRules.FIND_CHANCE * 100.0D
+                                / CEChancedItemOutput.MAX_CHANCE) + "%",
+                        0xFFFFFF
+                )));
+    }
+
+    private static void addWoodContentsTooltip(List<Component> tooltip, WoodMaterial wood) {
+        if (wood.components().isEmpty()) {
+            return;
+        }
+
+        MutableComponent contents = colored("Contains: ", 0xB0B0B0);
+        for (int i = 0; i < wood.components().size(); i++) {
+            MaterialComponent component = wood.components().get(i);
+            IndustrialSubstance substance = component.substance();
+            if (i > 0) {
+                contents.append(colored(", ", 0x808080));
+            }
+            contents.append(colored(substance.displayName(), substance.color() & 0x00FFFFFF));
+            contents.append(colored(" x" + component.amount(), substance.color() & 0x00FFFFFF));
+            contents.append(colored(
+                    " (" + formatDecimal(MaterialComponentWeights.percentage(component, wood.components())) + "%)",
+                    0xB0B0B0
+            ));
+        }
+        tooltip.add(contents);
+    }
+
+    private static void addWoodMaterialTooltipLines(
+            List<Component> tooltip,
+            WoodMaterial wood
+    ) {
+        Component formula = formulaLine(wood);
+        if (formula != null) tooltip.add(formula);
+
+        MaterialProperties properties = WOOD_PROPERTIES.computeIfAbsent(wood, CompoundMaterialPropertyCalculator::propertiesFor);
+        int tierIndex = Math.max(0, Math.min(MachineTier.ALL.size() - 1, properties.tierMultiplier() - 1));
+        MachineTier tier = MachineTier.ALL.get(tierIndex);
+        tooltip.add(colored("Tier: ", 0xB0B0B0).append(colored(tier.displayName(), tier.color())));
+        tooltip.add(colored("State: ", 0xFF66CC).append(colored("Solid", 0xFF66CC)));
+        if (properties.hasProperty("density")) {
+            tooltip.add(colored("Density: ", 0x9FD3FF).append(colored(Integer.toString(properties.density()), 0xFFFFFF)));
+        }
+        if (properties.hasProperty("hardness")) {
+            tooltip.add(colored("Hardness: ", 0x2ECC40).append(colored(Integer.toString(properties.hardness()), 0xFFFFFF)));
+        }
+        if (properties.hasProperty("meltingPoint")) {
+            tooltip.add(colored("Melting Point: ", 0xFFD800).append(colored(properties.meltingPoint() + " C", 0xFF3333)));
+        }
+        if (properties.hasProperty("electricalBehavior")) {
+            tooltip.add(colored("Electrical Behavior: ", 0x66D9EF)
+                    .append(colored(displayName(properties.electricalBehavior().name()), 0xFFFFFF)));
+            if (properties.electricallyConductive() && properties.hasProperty("electricalConductivity")) {
+                tooltip.add(colored("Electrical Conductivity: ", 0x66D9EF)
+                        .append(colored(Integer.toString(properties.electricalConductivity()), 0xFFFFFF)));
+            } else {
+                tooltip.add(colored("Insulation Strength: ", 0x66D9EF)
+                        .append(colored(Integer.toString(properties.insulationStrength()), 0xFFFFFF)));
+            }
+        }
+        if (properties.hasProperty("corrosionResistance")) {
+            tooltip.add(colored("Corrosion Resistance: ", 0x9BE564)
+                    .append(colored(Integer.toString(properties.corrosionResistance()), 0xFFFFFF)));
+        }
+        addWoodContentsTooltip(tooltip, wood);
     }
 
     private static void addFluidTransportTooltipLines(List<Component> tooltip, Block block) {
@@ -130,32 +345,57 @@ public final class ClientMaterialTooltip {
 
     public static void addMaterialTooltipLines(List<Component> tooltip, MaterialLookup.MaterialTarget target) {
         IndustrialMaterial material = target.material();
-        Component formula = formulaLine(material);
-        if (formula != null) {
-            tooltip.add(formula);
-        }
         MaterialProperties properties = material.properties();
+
+        if (material.isClayMaterial()) {
+            if (target.part() == MaterialPart.BRICK || target.part() == MaterialPart.BRICKS) {
+                addCeramicOperatingTooltipLines(tooltip, material);
+            }
+            return;
+        }
+
+        Component formula = formulaLine(material);
+        if (formula != null) tooltip.add(formula);
         tooltip.add(colored("Tier: ", 0xB0B0B0).append(colored(material.tier().displayName(), material.tier().color())));
         if (material.atomicNumber() > 0) {
             tooltip.add(colored("Atomic Number: ", 0xB0B0B0).append(colored(Integer.toString(material.atomicNumber()), 0xFFFFFF)));
         }
         tooltip.add(colored("State: ", 0xFF66CC).append(colored(materialState(material, target.part()), 0xFF66CC)));
-        tooltip.add(colored("Density: ", 0x9FD3FF).append(colored(Integer.toString(properties.density()), 0xFFFFFF)));
-        tooltip.add(colored("Hardness: ", 0x2ECC40).append(colored(Integer.toString(properties.hardness()), 0xFFFFFF)));
-        tooltip.add(colored("Melting Point: ", 0xFFD800).append(colored(properties.meltingPoint() + " C", 0xFF3333)));
-        tooltip.add(colored("Electrical Behavior: ", 0x66D9EF).append(colored(displayName(properties.electricalBehavior().name()), 0xFFFFFF)));
-        if (properties.electricallyConductive()) {
-            tooltip.add(colored("Electrical Conductivity: ", 0x66D9EF).append(colored(Integer.toString(properties.electricalConductivity()), 0xFFFFFF)));
-        } else {
-            tooltip.add(colored("Insulation Strength: ", 0x66D9EF).append(colored(Integer.toString(properties.insulationStrength()), 0xFFFFFF)));
+        if (properties.hasProperty("density")) {
+            tooltip.add(colored("Density: ", 0x9FD3FF).append(colored(Integer.toString(properties.density()), 0xFFFFFF)));
         }
-        tooltip.add(colored("Corrosion Resistance: ", 0x9BE564).append(colored(Integer.toString(properties.corrosionResistance()), 0xFFFFFF)));
+        if (properties.hasProperty("hardness")) {
+            tooltip.add(colored("Hardness: ", 0x2ECC40).append(colored(Integer.toString(properties.hardness()), 0xFFFFFF)));
+        }
+        if (properties.hasProperty("meltingPoint")) {
+            tooltip.add(colored("Melting Point: ", 0xFFD800).append(colored(properties.meltingPoint() + " C", 0xFF3333)));
+        }
+        if (properties.hasProperty("electricalBehavior")) {
+            tooltip.add(colored("Electrical Behavior: ", 0x66D9EF).append(colored(displayName(properties.electricalBehavior().name()), 0xFFFFFF)));
+            if (properties.electricallyConductive() && properties.hasProperty("electricalConductivity")) {
+                tooltip.add(colored("Electrical Conductivity: ", 0x66D9EF).append(colored(Integer.toString(properties.electricalConductivity()), 0xFFFFFF)));
+            } else {
+                tooltip.add(colored("Insulation Strength: ", 0x66D9EF).append(colored(Integer.toString(properties.insulationStrength()), 0xFFFFFF)));
+            }
+        }
+        if (properties.hasProperty("corrosionResistance")) {
+            tooltip.add(colored("Corrosion Resistance: ", 0x9BE564).append(colored(Integer.toString(properties.corrosionResistance()), 0xFFFFFF)));
+        }
         if (material.radioactivity() > 0) {
             tooltip.add(colored("Radioactivity: ", 0xBFFF00).append(colored(Integer.toString(material.radioactivity()), 0xBFFF00)));
         }
         if (showsTemperature(target.part())) {
             tooltip.add(colored("Temperature: ", 0xFF3333).append(colored(material.temperatureFor(target.part()) + " C", 0xFF3333)));
         }
+    }
+
+    private static void addCeramicOperatingTooltipLines(List<Component> tooltip, IndustrialMaterial material) {
+        Component formula = formulaLine(material);
+        if (formula != null) tooltip.add(formula);
+        tooltip.add(colored("Tier: ", 0xB0B0B0).append(colored(material.tier().displayName(), material.tier().color())));
+        tooltip.add(colored("State: ", 0xFF66CC).append(colored("Fired Solid", 0xFF66CC)));
+        tooltip.add(colored("Maximum Operating Temperature: ", 0xFF9F43)
+                .append(colored(material.properties().maxOperatingTemperature() + " C", 0xFFFFFF)));
     }
 
     private static void addAdvancedMaterialTooltipLines(List<Component> tooltip, MaterialProperties properties) {
@@ -198,13 +438,13 @@ public final class ClientMaterialTooltip {
         addPropertyLine(tooltip, "Thermal Expansion", properties.thermalExpansion(), 0xFFD800);
         addPropertyLine(tooltip, "Max Operating Temperature", properties.maxOperatingTemperature() + " C", 0xFFD800);
         addPropertyLine(tooltip, "Thermal Shock Resistance", properties.thermalShockResistance(), 0xFFD800);
-        addPropertyLine(tooltip, "Electrical Behavior", displayName(properties.electricalBehavior().name()), 0x66D9EF);
-        addPropertyLine(tooltip, "Electrical Conductivity", properties.electricalConductivity(), 0x66D9EF);
+        if (properties.hasProperty("electricalBehavior")) addPropertyLine(tooltip, "Electrical Behavior", displayName(properties.electricalBehavior().name()), 0x66D9EF);
+        if (properties.hasProperty("electricalConductivity")) addPropertyLine(tooltip, "Electrical Conductivity", properties.electricalConductivity(), 0x66D9EF);
         addPropertyLine(tooltip, "Insulation Strength", properties.insulationStrength(), 0x66D9EF);
 
         tooltip.add(colored("Chemical / Structural", 0xAAAAAA));
         addPropertyLine(tooltip, "Chemical Stability", properties.chemicalStability(), 0x9BE564);
-        addPropertyLine(tooltip, "Reactivity", properties.reactivity(), 0x9BE564);
+        if (properties.hasProperty("reactivity")) addPropertyLine(tooltip, "Reactivity", properties.reactivity(), 0x9BE564);
         addPropertyLine(tooltip, "Oxidation Resistance", properties.oxidationResistance(), 0x9BE564);
         addPropertyLine(tooltip, "Acidity", properties.acidity(), 0x9BE564);
         addPropertyLine(tooltip, "Pressure Resistance", properties.pressureResistance(), 0x9FD3FF);
@@ -254,7 +494,7 @@ public final class ClientMaterialTooltip {
         addPropertyLine(tooltip, "Magnetic", yesNo(properties.magnetic()), 0xFFFFFF);
         addPropertyLine(tooltip, "Crystalline", yesNo(properties.crystalline()), 0xFFFFFF);
         addPropertyLine(tooltip, "Gem Candidate", yesNo(properties.gemCandidate()), 0xFFFFFF);
-        addPropertyLine(tooltip, "Electrical Behavior", displayName(properties.electricalBehavior().name()), 0xFFFFFF);
+        if (properties.hasProperty("electricalBehavior")) addPropertyLine(tooltip, "Electrical Behavior", displayName(properties.electricalBehavior().name()), 0xFFFFFF);
         addPropertyLine(tooltip, "Heat Resistant", yesNo(properties.heatResistant()), 0xFFFFFF);
         addPropertyLine(tooltip, "Pressure Resistant", yesNo(properties.pressureResistant()), 0xFFFFFF);
     }
@@ -267,7 +507,7 @@ public final class ClientMaterialTooltip {
         tooltip.add(colored(label + ": ", 0x808080).append(colored(value, color)));
     }
 
-    private static Component formulaLine(IndustrialMaterial material) {
+    private static Component formulaLine(IndustrialSubstance material) {
         MutableComponent formula = formulaComponent(material, false);
         return formula == null ? null : Component.literal("Formula: ").withStyle(ChatFormatting.BLUE).append(formula);
     }
@@ -326,6 +566,17 @@ public final class ClientMaterialTooltip {
         if (part == MaterialPart.MOLTEN_FLUID) {
             return material.properties().state() == MaterialProperties.PhysicalState.GAS ? "Gas" : "Fluid";
         }
+        if (material.isClayMaterial()) {
+            return switch (part) {
+                case CLAY, CLAY_BLOCK -> "Wet Clay";
+                case UNFIRED_BRICK -> "Wet Unfired Solid";
+                case DRIED_UNFIRED_BRICK -> "Dried Unfired Solid";
+                case BRICK, BRICKS, FIREBOX, BRICK_SLAB, BRICK_STAIRS, BRICK_WALL -> "Fired Solid";
+                case CRACKED_BRICK -> "Overfired Solid";
+                case TINY_DUST, SMALL_DUST, DUST -> "Dust";
+                default -> "Solid";
+            };
+        }
         return switch (material.properties().state()) {
             case GAS -> "Gas";
             case LIQUID -> "Fluid";
@@ -334,13 +585,14 @@ public final class ClientMaterialTooltip {
     }
 
     private static boolean showsTemperature(MaterialPart part) {
-        return part == MaterialPart.MOLTEN_FLUID
+        return part.isHotForgePart()
+                || part == MaterialPart.MOLTEN_FLUID
                 || (part.name().startsWith("CAST_") && !part.name().endsWith("_MOLD"))
                 || part.name().startsWith("HOT_CAST_");
     }
 
     private static MutableComponent colored(String text, int color) {
-        return Component.literal(text).withStyle(style -> style.withColor(TextColor.fromRgb(color)));
+        return Component.literal(text).withStyle(style -> style.withColor(TextColor.fromRgb(color & 0x00FFFFFF)));
     }
 
     private static String yesNo(boolean value) {

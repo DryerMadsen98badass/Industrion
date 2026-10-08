@@ -2,11 +2,11 @@
 
 Generated from this docs package. Update it whenever files are added or removed.
 
+- `FILE_INDEX.md`
 - `API_CONVENTIONS.md`
 - `CURRENT_TASK.md`
 - `DECISIONS.md`
 - `DOCS_PACKAGE_VALIDATION.md`
-- `FILE_INDEX.md`
 - `README.md`
 - `START_HERE.md`
 - `SYSTEM_OVERVIEW.md`
@@ -36,6 +36,8 @@ Generated from this docs package. Update it whenever files are added or removed.
 - `code/materials/stone-wood-ore-model.md`
 - `code/materials/tools-ores-cables.md`
 - `code/multiblocks/README.md`
+- `code/organic/README.md`
+- `code/organic/plants.md`
 - `code/recipes/README.md`
 - `code/recipes/assembly-recipes.md`
 - `code/recipes/generation-pipeline.md`
@@ -77,5 +79,12 @@ Generated from this docs package. Update it whenever files are added or removed.
 - `to do/23-material-geology-autorecipe-integration.md`
 - `to do/Industron Checklist.xlsx`
 - `to do/README.md`
+- `to do/TODO_MachineTier_MachineGrade.md`
 - `to do/open-decisions.md`
+- `to do/plants/00-plant-material-foundation.md`
+- `to do/plants/01-growth-placement-propagation.md`
+- `to do/plants/02-environment-world-interactions.md`
+- `to do/plants/03-crop-genetics.md`
+- `to do/plants/04-organic-soil-processing.md`
+- `to do/plants/README.md`
 - `to do/technical-debt.md`

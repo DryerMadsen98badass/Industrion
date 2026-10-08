@@ -16,14 +16,18 @@ import net.mads.industron.client.gui.CEMachineGuiTextures;
 import net.mads.industron.gui.MachineGuiLayout;
 import net.mads.industron.machine.MachineDrive;
 import net.mads.industron.machine.MachineTier;
+import net.mads.industron.material.fuel.FuelValueCalculator;
 import net.mads.industron.machine.MachineTierStats;
 import net.mads.industron.recipe.CEChancedItemInput;
 import net.mads.industron.recipe.CEChancedFluidInput;
 import net.mads.industron.recipe.CEChancedFluidOutput;
 import net.mads.industron.recipe.CEChancedItemOutput;
 import net.mads.industron.recipe.CERecipe;
+import net.mads.industron.recipe.CERecipeTypes;
+import net.mads.industron.recipe.CEToolRequirement;
 import net.mads.industron.recipe.ChemicalBalanceRange;
 import net.mads.industron.recipe.RecipeTypeDefinition;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyTools;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
@@ -99,7 +103,7 @@ public class CERecipeCategory implements IRecipeCategory<RecipeHolder<CERecipe>>
     @Override
     public int getHeight() {
         int infoHeight = INFO_ROWS_RESERVED * INFO_ROW_HEIGHT;
-        return Math.max(104, layout.machineTop() + layout.contentHeight() + 12 + infoHeight + 6);
+        return Math.max(104, contentBottomY() + 12 + infoHeight + 6);
     }
 
     @Override
@@ -124,6 +128,7 @@ public class CERecipeCategory implements IRecipeCategory<RecipeHolder<CERecipe>>
         addFluidInputs(builder, itemInputSlots, fluidInputSlots, fluidInputs, recipe);
         addItemOutputs(builder, itemOutputSlots, itemOutputs, recipe);
         addFluidOutputs(builder, itemOutputSlots, fluidOutputSlots, fluidOutputs, recipe);
+        addDedicatedToolSlot(builder, recipe);
     }
 
     @Override
@@ -155,18 +160,22 @@ public class CERecipeCategory implements IRecipeCategory<RecipeHolder<CERecipe>>
 
         drawSlots(guiGraphics, itemInputSlots, fluidInputSlots, itemOutputSlots, fluidOutputSlots);
         drawBaseBlockInput(guiGraphics, font, itemInputSlots);
-        int contentHeight = layout.contentHeight();
-        int runtimeDuration = Math.max(1, recipe.runtimeDuration(selectedTier, MachineDrive.NONE, 0));
+        drawDedicatedToolSlot(guiGraphics, font, recipe);
+        int runtimeDuration = isFuel()
+                ? 20
+                : isHandProcessing()
+                ? Math.max(1, recipe.manualUses().orElse(1)) * 5
+                : Math.max(1, recipe.runtimeDuration(selectedTier, MachineDrive.NONE, 0));
         long cycle = runtimeDuration * 50L;
         float progress = (System.currentTimeMillis() % cycle) / (float) cycle;
         drawProgressBar(guiGraphics, progress);
-        drawInfo(guiGraphics, font, recipe, selectedTier, layout.machineTop() + contentHeight + 12);
+        drawInfo(guiGraphics, font, recipe, selectedTier, contentBottomY() + 12);
     }
 
     @Override
     public void getTooltip(ITooltipBuilder tooltip, RecipeHolder<CERecipe> holder, IRecipeSlotsView recipeSlotsView, double mouseX, double mouseY) {
         CERecipe recipe = holder.value();
-        int infoY = layout.machineTop() + layout.contentHeight() + 12;
+        int infoY = contentBottomY() + 12;
         MachineTier selectedTier = selectedTier(recipe);
 
         if (hasTierButton(recipe) && inside(mouseX, mouseY, tierButtonX(), tierButtonY(getHeight()), TIER_BUTTON_WIDTH, TIER_BUTTON_HEIGHT)) {
@@ -177,11 +186,29 @@ public class CERecipeCategory implements IRecipeCategory<RecipeHolder<CERecipe>>
         }
 
         if (mouseX >= 8 && mouseX <= getWidth() - 8 && mouseY >= infoY && mouseY <= getHeight() - 6) {
-            tooltip.add(Component.literal("Duration: " + durationText(recipe, selectedTier) + " ticks"));
+            if (!usesDedicatedToolSlot()) {
+                recipe.tools().forEach(tool -> toolUseLines(tool)
+                        .forEach(line -> tooltip.add(Component.literal(line))));
+            }
+            if (isFuel()) {
+                recipe.fuelUnits().ifPresent(units -> tooltip.add(Component.literal("Fuel Energy: " + FuelValueCalculator.displayFuelUnits(units) + " FU")));
+                tooltip.add(Component.literal("Burn time/heat is chosen by the consuming machine"));
+            } else if (isHandProcessing()) {
+                recipe.manualUses().ifPresent(uses -> tooltip.add(Component.literal("Right-clicks: " + uses)));
+                tooltip.add(Component.literal("Hold Ctrl + right-click to start"));
+            } else if (!usesDedicatedToolSlot() && recipe.duration().isPresent()) {
+                tooltip.add(Component.literal("Duration: " + durationText(recipe, selectedTier) + " ticks"));
+            }
             recipe.minRpm().ifPresent(min -> tooltip.add(Component.literal("Minimum RPM: " + min)));
             recipe.effectiveMaxRpm().ifPresent(max -> tooltip.add(Component.literal("Maximum RPM: " + max)));
             recipe.circuit().ifPresent(circuit -> tooltip.add(Component.literal("Circuit: " + circuit)));
             recipe.minimumRuntimeTier().ifPresent(tier -> tooltip.add(Component.literal("Required Tier: " + tier.displayName() + "+")));
+            if (recipeType.requiresCoilTemperature()) recipe.requiredTemp().ifPresent(temperature -> {
+                tooltip.add(Component.literal("Required Coil Temperature: " + temperature + " \u00b0C"));
+                tooltip.add(Component.literal("Requires formed heating coils"));
+            });
+            if (!recipeType.requiresCoilTemperature()) recipe.requiredTemp().ifPresent(temperature ->
+                    tooltip.add(Component.literal("Required Temperature: " + temperature + " \u00b0C")));
             recipe.chemicalBalanceRange().ifPresent(range -> tooltip.add(Component.literal(
                     "Required CB: " + cbRangeText(range)
             )));
@@ -196,6 +223,16 @@ public class CERecipeCategory implements IRecipeCategory<RecipeHolder<CERecipe>>
 
             if (i < inputs.size()) {
                 slot.addItemStacks(stacksWithCount(inputs.get(i)));
+            }
+
+            if (isPrimitiveSifting() && i == 0 && i < inputs.size()) {
+                slot.addTooltipCallback((slotView, tooltip) ->
+                        tooltip.add(Component.literal("Hold this input in your offhand")));
+            }
+
+            if (isHandProcessing() && i == 0 && i < inputs.size()) {
+                slot.addTooltipCallback((slotView, tooltip) ->
+                        tooltip.add(Component.literal("Hold this input in your main hand")));
             }
 
             if (i == recipeType.baseBlockItemInputIndex()) {
@@ -382,24 +419,94 @@ public class CERecipeCategory implements IRecipeCategory<RecipeHolder<CERecipe>>
         graphics.drawString(font, label, labelX, labelY, highlight, false);
     }
 
+    private void addDedicatedToolSlot(IRecipeLayoutBuilder builder, CERecipe recipe) {
+        if (!usesDedicatedToolSlot() || recipe.tools().isEmpty()) {
+            return;
+        }
+        CEToolRequirement requirement = recipe.tools().getFirst();
+        ItemStack example = requirement.registeredType()
+                .map(AssemblyTools::exampleStack)
+                .orElse(ItemStack.EMPTY);
+        IRecipeSlotBuilder slot = builder.addSlot(RecipeIngredientRole.CATALYST, toolSlotX(), toolSlotY());
+        if (!example.isEmpty()) {
+            slot.addItemStack(example);
+        }
+        slot.addTooltipCallback((view, tooltip) -> {
+            toolUseLines(requirement).forEach(line -> tooltip.add(Component.literal(line)));
+            recipe.requiredTier().ifPresent(tier ->
+                    tooltip.add(Component.literal("Minimum tool tier: " + tier.displayName() + "+")));
+        });
+    }
+
+    private void drawDedicatedToolSlot(GuiGraphics graphics, net.minecraft.client.gui.Font font, CERecipe recipe) {
+        if (!usesDedicatedToolSlot() || recipe.tools().isEmpty()) {
+            return;
+        }
+        drawJeiSlot(graphics, toolSlotX(), toolSlotY(), false, false);
+        String label = "Tool";
+        int x = toolSlotX() + 8 - font.width(label) / 2;
+        graphics.drawString(font, label, x, Math.max(3, toolSlotY() - 10), 0xFF404040, false);
+    }
+
+    private boolean usesDedicatedToolSlot() {
+        return recipeType.dedicatedToolSlot();
+    }
+
+    private int toolSlotX() {
+        return (getWidth() - 16) / 2;
+    }
+
+    private int toolSlotY() {
+        return layout.machineTop();
+    }
+
+    private int progressY() {
+        if (!usesDedicatedToolSlot()) {
+            return layout.progressY();
+        }
+        return Math.max(layout.progressY(), toolSlotY() + SLOT + 4);
+    }
+
+    private int contentBottomY() {
+        int normalBottom = layout.machineTop() + layout.contentHeight();
+        int progressBottom = progressY() + recipeType.progressBar().height();
+        return Math.max(normalBottom, progressBottom);
+    }
+
     private void drawProgressBar(GuiGraphics guiGraphics, float progress) {
         CEMachineGuiTextures.drawProgressBar(
                 guiGraphics,
                 recipeType.progressBar(),
                 layout.progressX(),
-                layout.progressY(),
+                progressY(),
                 progress
         );
     }
 
     private void drawInfo(GuiGraphics guiGraphics, net.minecraft.client.gui.Font font, CERecipe recipe, MachineTier selectedTier, int startY) {
         List<String> lines = new ArrayList<>();
-        lines.add("Duration: " + durationText(recipe, selectedTier) + " t");
+        if (isFuel()) {
+            recipe.fuelUnits().ifPresent(units -> lines.add("Fuel: " + FuelValueCalculator.displayFuelUnits(units) + " FU"));
+            lines.add("Machine determines burn rate");
+        } else if (isHandProcessing()) {
+            recipe.manualUses().ifPresent(uses -> lines.add("Right-clicks: " + uses));
+            lines.add("Hold Ctrl + right-click to start");
+        } else if (!usesDedicatedToolSlot() && recipe.duration().isPresent()) {
+            lines.add("Duration: " + durationText(recipe, selectedTier) + " t");
+        }
+        if (!usesDedicatedToolSlot()) {
+            recipe.tools().forEach(tool -> lines.addAll(toolUseLines(tool)));
+        }
         if (recipe.minRpm().isPresent() || recipe.maxRpm().isPresent()) {
             lines.add("RPM: " + rpmText(recipe));
         }
         recipe.circuit().ifPresent(circuit -> lines.add("Circuit: " + circuit));
         recipe.minimumRuntimeTier().ifPresent(tier -> lines.add("Tier: " + tier.displayName() + "+"));
+        recipe.requiredTemp().ifPresent(temperature -> lines.add(
+                recipeType.requiresCoilTemperature()
+                        ? "Coil: " + temperature + " \u00b0C minimum"
+                        : "Temperature: " + temperature + " \u00b0C"
+        ));
         recipe.chemicalBalanceRange().ifPresent(range -> lines.add(
                 "CB: " + cbRangeText(range)
         ));
@@ -420,6 +527,28 @@ public class CERecipeCategory implements IRecipeCategory<RecipeHolder<CERecipe>>
 
     private static String durationText(CERecipe recipe, MachineTier selectedTier) {
         return Integer.toString(recipe.runtimeDuration(selectedTier, MachineDrive.NONE, 0));
+    }
+
+    private List<String> toolUseLines(CEToolRequirement tool) {
+        if (isPrimitiveSifting()) {
+            return List.of(
+                    "Hold input in offhand",
+                    "Hold " + tool.displayName() + " in main hand and right-click"
+            );
+        }
+        return List.of("Right-clicks: " + tool.amount() + "x with " + tool.displayName());
+    }
+
+    private boolean isPrimitiveSifting() {
+        return recipeType.id().equals(CERecipeTypes.PRIMITIVE_SIFTING.id());
+    }
+
+    private boolean isHandProcessing() {
+        return recipeType.id().equals(CERecipeTypes.HAND_PROCESSING.id());
+    }
+
+    private boolean isFuel() {
+        return recipeType.id().equals(CERecipeTypes.FUEL.id());
     }
 
     private static String rpmText(CERecipe recipe) {

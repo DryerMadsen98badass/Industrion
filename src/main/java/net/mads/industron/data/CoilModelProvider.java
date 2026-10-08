@@ -3,8 +3,8 @@ package net.mads.industron.data;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.mads.industron.Industron;
-import net.mads.industron.machine.coil.CoilDefinition;
-import net.mads.industron.machine.coil.CoilDefinitions;
+import net.mads.industron.block.coils.CoilDefinition;
+import net.mads.industron.block.coils.CoilDefinitions;
 import net.minecraft.data.CachedOutput;
 import net.minecraft.data.DataProvider;
 import net.minecraft.data.PackOutput;
@@ -27,7 +27,7 @@ public class CoilModelProvider implements DataProvider {
         Path assets = output.getOutputFolder(PackOutput.Target.RESOURCE_PACK)
                 .resolve(Industron.MOD_ID);
         Path blockstates = assets.resolve("blockstates");
-        Path blockModels = assets.resolve("models").resolve("block").resolve("casings").resolve("coils");
+        Path blockModels = assets.resolve("models").resolve("block").resolve("coils");
         Path itemModels = assets.resolve("models").resolve("item");
 
         for (CoilDefinition coil : CoilDefinitions.ALL) {
@@ -57,12 +57,14 @@ public class CoilModelProvider implements DataProvider {
 
     private static JsonObject variant(CoilDefinition coil, boolean active) {
         JsonObject variant = new JsonObject();
-        variant.addProperty("model", Industron.MOD_ID + ":block/casings/coils/" + coil.blockId() + (active ? "_on" : "_off"));
+        variant.addProperty("model", Industron.MOD_ID + ":block/coils/" + coil.blockId() + (active ? "_on" : "_off"));
         return variant;
     }
 
     private static JsonObject blockModel(CoilDefinition coil, boolean active) {
-        String baseTexture = (active ? coil.onTexture() : coil.offTexture()).toString();
+        CoilDefinition.TextureLayer baseLayer = active ? coil.on() : coil.off();
+        String baseTexture = baseLayer.texture().toString();
+
         JsonObject json = new JsonObject();
         json.addProperty("parent", "minecraft:block/block");
         json.addProperty("render_type", "minecraft:cutout");
@@ -74,38 +76,70 @@ public class CoilModelProvider implements DataProvider {
         json.add("textures", textures);
 
         JsonArray elements = new JsonArray();
-        elements.add(cubeElement(0, 0, 0, 16, 16, 16, "#base"));
-        elements.add(cubeElement(-0.01, -0.01, -0.01, 16.01, 16.01, 16.01, "#frame"));
+        elements.add(cubeElement(
+                0, 0, 0,
+                16, 16, 16,
+                "#base",
+                baseLayer.hasColor() ? 0 : null,
+                active ? 12 : null
+        ));
+        elements.add(cubeElement(
+                -0.01, -0.01, -0.01,
+                16.01, 16.01, 16.01,
+                "#frame",
+                coil.frame().hasColor() ? 1 : null,
+                null
+        ));
         json.add("elements", elements);
         return json;
     }
 
     private static JsonObject itemModel(CoilDefinition coil) {
         JsonObject json = new JsonObject();
-        json.addProperty("parent", Industron.MOD_ID + ":block/casings/coils/" + coil.blockId() + "_off");
+        json.addProperty("parent", Industron.MOD_ID + ":block/coils/" + coil.blockId() + "_off");
         return json;
     }
 
-    private static JsonObject cubeElement(double fromX, double fromY, double fromZ, double toX, double toY, double toZ, String texture) {
+    private static JsonObject cubeElement(
+            double fromX,
+            double fromY,
+            double fromZ,
+            double toX,
+            double toY,
+            double toZ,
+            String texture,
+            Integer tintIndex,
+            Integer emissiveLight
+    ) {
         JsonObject element = new JsonObject();
         element.add("from", vec(fromX, fromY, fromZ));
         element.add("to", vec(toX, toY, toZ));
 
+        if (emissiveLight != null) {
+            JsonObject neoForgeData = new JsonObject();
+            neoForgeData.addProperty("block_light", emissiveLight);
+            neoForgeData.addProperty("sky_light", emissiveLight);
+            element.add("neoforge_data", neoForgeData);
+        }
+
         JsonObject faces = new JsonObject();
-        addFace(faces, "down", texture);
-        addFace(faces, "up", texture);
-        addFace(faces, "north", texture);
-        addFace(faces, "south", texture);
-        addFace(faces, "west", texture);
-        addFace(faces, "east", texture);
+        addFace(faces, "down", texture, tintIndex);
+        addFace(faces, "up", texture, tintIndex);
+        addFace(faces, "north", texture, tintIndex);
+        addFace(faces, "south", texture, tintIndex);
+        addFace(faces, "west", texture, tintIndex);
+        addFace(faces, "east", texture, tintIndex);
         element.add("faces", faces);
         return element;
     }
 
-    private static void addFace(JsonObject faces, String direction, String texture) {
+    private static void addFace(JsonObject faces, String direction, String texture, Integer tintIndex) {
         JsonObject face = new JsonObject();
         face.addProperty("texture", texture);
         face.addProperty("cullface", direction);
+        if (tintIndex != null) {
+            face.addProperty("tintindex", tintIndex);
+        }
         faces.add(direction, face);
     }
 

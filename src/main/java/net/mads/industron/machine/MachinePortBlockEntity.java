@@ -33,6 +33,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.FluidUtil;
@@ -100,6 +101,25 @@ public class MachinePortBlockEntity extends GeneratingKineticBlockEntity impleme
 
     public List<FluidTank> fluidTanks() {
         return fluidTanks;
+    }
+
+    /** Drops stored item contents and deliberately discards all stored fluids before block removal. */
+    public void dropStoredItemsAndDiscardFluids() {
+        if (level == null || level.isClientSide()) {
+            return;
+        }
+
+        for (int slot = 0; slot < items.getSlots(); slot++) {
+            ItemStack stack = items.getStackInSlot(slot);
+            if (!stack.isEmpty()) {
+                Block.popResource(level, worldPosition, stack.copy());
+                items.setStackInSlot(slot, ItemStack.EMPTY);
+            }
+        }
+        for (FluidTank tank : fluidTanks) {
+            tank.setFluid(FluidStack.EMPTY);
+        }
+        stateChanged();
     }
 
     @Nullable

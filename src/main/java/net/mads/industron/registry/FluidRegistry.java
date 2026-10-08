@@ -11,6 +11,8 @@ import net.mads.industron.item.FiredBucketItem;
 import net.mads.industron.material.IndustrialMaterial;
 import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.MaterialPart;
+import net.mads.industron.material.plant.PlantProcessIntermediate;
+import net.mads.industron.material.plant.PlantProcessingPlanner;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
@@ -45,6 +47,7 @@ public final class FluidRegistry {
 
     public static final Map<String, RegisteredFluid> MATERIAL_FLUIDS = new LinkedHashMap<>();
     public static final Map<String, RegisteredFluid> CHEMICAL_FLUIDS = new LinkedHashMap<>();
+    public static final Map<String, RegisteredFluid> PLANT_PROCESS_FLUIDS = new LinkedHashMap<>();
 
     public static final Map<Item, Item> FIRED_BUCKET_BY_NORMAL_BUCKET = new LinkedHashMap<>();
     public static final Map<Item, Item> NORMAL_BUCKET_BY_FIRED_BUCKET = new LinkedHashMap<>();
@@ -88,7 +91,20 @@ public final class FluidRegistry {
 
             CHEMICAL_FLUIDS.put(fluid.registryName(), registerFluid(fluid));
         }
+
+        for (PlantProcessIntermediate intermediate : PlantProcessingPlanner.allRequiredIntermediates()) {
+            if (intermediate.isSolid()) continue;
+            IndustrialFluid fluid = plantIntermediateFluid(intermediate);
+            PLANT_PROCESS_FLUIDS.put(fluid.registryName(), registerFluid(fluid));
+        }
     }
+
+    public static final RegisteredFluid MOLTEN_MIXTURE = registerFluid(new IndustrialFluid(
+            "mixture", "Unidentified Mixture", 0xBBAA88, IndustrialFluid.Kind.MOLTEN,
+            1000, 7000, 6000, 8, java.util.Optional.empty(), 0, java.util.List.of(), java.util.Optional.empty()));
+    public static final RegisteredFluid MOLTEN_SLAG = registerFluid(new IndustrialFluid(
+            "slag", "Slag", 0x68645C, IndustrialFluid.Kind.MOLTEN,
+            1000, 2500, 8000, 3, java.util.Optional.empty(), 0, java.util.List.of(), java.util.Optional.empty()));
 
     private FluidRegistry() {
     }
@@ -102,19 +118,19 @@ public final class FluidRegistry {
     public static void registerCapabilities(RegisterCapabilitiesEvent event) {
         event.registerItem(
                 Capabilities.FluidHandler.ITEM,
-                (stack, context) -> new FluidBucketWrapper(stack),
+                (stack, context) -> new net.mads.industron.fluid.FoundryBucketWrapper(stack),
                 Items.BUCKET
         );
 
         event.registerItem(
                 Capabilities.FluidHandler.ITEM,
-                (stack, context) -> new FluidBucketWrapper(stack),
+                (stack, context) -> new net.mads.industron.fluid.FoundryBucketWrapper(stack),
                 Items.WATER_BUCKET
         );
 
         event.registerItem(
                 Capabilities.FluidHandler.ITEM,
-                (stack, context) -> new FluidBucketWrapper(stack),
+                (stack, context) -> new net.mads.industron.fluid.FoundryBucketWrapper(stack),
                 Items.LAVA_BUCKET
         );
 
@@ -139,7 +155,7 @@ public final class FluidRegistry {
         for (RegisteredFluid fluid : allFluids()) {
             event.registerItem(
                     Capabilities.FluidHandler.ITEM,
-                    (stack, context) -> new FluidBucketWrapper(stack),
+                    (stack, context) -> new net.mads.industron.fluid.FoundryBucketWrapper(stack),
                     fluid.bucket().get()
             );
 
@@ -152,10 +168,13 @@ public final class FluidRegistry {
     }
 
     public static Collection<RegisteredFluid> allFluids() {
-        return java.util.stream.Stream.concat(
-                MATERIAL_FLUIDS.values().stream(),
-                CHEMICAL_FLUIDS.values().stream()
-        ).toList();
+        return java.util.stream.Stream.of(
+                        MATERIAL_FLUIDS.values().stream(),
+                        CHEMICAL_FLUIDS.values().stream(),
+                        PLANT_PROCESS_FLUIDS.values().stream(),
+                        java.util.stream.Stream.of(MOLTEN_MIXTURE, MOLTEN_SLAG)
+                )
+                .flatMap(java.util.function.Function.identity()).toList();
     }
 
     public static Collection<DeferredHolder<Item, ? extends Item>> getAllBucketItems() {
@@ -170,6 +189,26 @@ public final class FluidRegistry {
         }
 
         return buckets;
+    }
+
+    private static IndustrialFluid plantIntermediateFluid(PlantProcessIntermediate intermediate) {
+        IndustrialFluid.Kind kind = intermediate.isGas()
+                ? IndustrialFluid.Kind.GAS
+                : IndustrialFluid.Kind.LIQUID;
+        return new IndustrialFluid(
+                intermediate.id(),
+                intermediate.displayName(),
+                intermediate.color(),
+                kind,
+                intermediate.componentTemperature(),
+                intermediate.isGas() ? -100 : 1000,
+                intermediate.isGas() ? 100 : 1000,
+                0,
+                java.util.Optional.empty(),
+                0,
+                intermediate.components(),
+                java.util.Optional.empty()
+        );
     }
 
     private static RegisteredFluid registerFluid(IndustrialFluid fluid) {

@@ -71,9 +71,12 @@ public class SingleBlockMachineScreen extends AbstractContainerScreen<SingleBloc
         for (int index = 0; index < menu.slots.size(); index++) {
             Slot slot = menu.slots.get(index);
             CEMachineGuiTextures.drawItemSlot(graphics, x + slot.x - 1, y + slot.y - 1);
-            if (index < menu.itemInputSlots()) {
+            boolean kilnSlot = menu.blockEntity() != null
+                    && menu.blockEntity().isKiln()
+                    && index < menu.itemInputSlots();
+            if (!kilnSlot && index < menu.itemInputSlots()) {
                 CEMachineGuiTextures.drawInputOverlay(graphics, x + slot.x - 1, y + slot.y - 1);
-            } else if (index < menu.itemInputSlots() + menu.itemOutputSlots()) {
+            } else if (!kilnSlot && index < menu.itemInputSlots() + menu.itemOutputSlots()) {
                 CEMachineGuiTextures.drawOutputOverlay(graphics, x + slot.x - 1, y + slot.y - 1);
             }
         }
@@ -280,6 +283,7 @@ public class SingleBlockMachineScreen extends AbstractContainerScreen<SingleBloc
     }
 
     private HoveredFluid hoveredFluid(int mouseX, int mouseY) {
+        if (menu.blockEntity() == null) return null;
         List<FluidTank> inputTanks = menu.blockEntity().inputFluidTanks();
         for (int i = 0; i < menu.fluidInputSlots(); i++) {
             int x = leftPos + menu.inputFluidSlotX(i) - 1;

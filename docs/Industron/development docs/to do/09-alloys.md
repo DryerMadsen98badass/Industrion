@@ -1,25 +1,75 @@
-# Phase 09 – Alloy-system
+# Phase 09 – Definerte alloys og uklassifiserte blandinger
 
-Målet er at kombinasjon av materialer kan skape nye materials med egne egenskaper, inkludert alloys som blir sterkere, svakere, mer sprø, mer ledende eller mer varmebestandige enn en enkel weighted average skulle tilsi. Recipe/process-reglene fra Phase 05–06 og Foundry/heat-grunnlaget fra Phase 07 finnes før denne fasen, men automatic recipes bygges først i Phase 14.
+**Status:** Dagens chemistry kan klassifisere `ALLOY`, generere `ALLOYING`-syntese for passende deklarerte materialer og velge molten electrorefining for metallic lattice-separasjon. Det mangler fortsatt runtime alloy-resolution i Foundry, dynamiske udefinerte blandinger og full alloy-propertymodell.
 
-## Gjenstår
+## Definert alloy
 
-- [ ] Definer typed `AlloyDefinition`/generated alloy substance med 2+ components og ratios.
-- [ ] Skill fysisk powder/molten mixture fra ferdig alloy/metallic phase.
-- [ ] Deriver alloy-properties fra components uten ren naiv weighted average.
-- [ ] Bruk weighted baseline + deterministiske synergy/penalty-termer fra f.eks. atomic-size mismatch, bonding/cohesion, crystal compatibility og composition ratio.
-- [ ] Sørg for diminishing returns slik at en liten mengde av ett ekstremt material ikke gjør hele alloyen ekstrem.
-- [ ] Deriver material classes/capabilities på nytt fra resultatet; ikke arve `metal`, `insulator` osv. blindt fra parent materials.
-- [ ] Tillat at en alloy kan være bedre enn begge parents i én property og dårligere i en annen.
-- [ ] Definer state/phase/melting behavior fra composition + interaction model.
-- [ ] En ferdig alloy skal ikke automatisk kunne «centrifugeres tilbake» til parents; separation må følge Phase 06 process rules.
-- [ ] Lag tests der noen alloys blir sterkere enn begge parents, noen blir svakere/brittle, og tradeoffs oppstår deterministisk.
-- [ ] Koble generated alloy tilbake til Phase 03 capability-systemet, slik at en ny alloy automatisk kan kvalifisere som wire, plate, casing, pipe osv.; casing qualification skal gå gjennom Phase 04-generatoren.
+- [ ] En definert alloy bruker den eksisterende `.contains(component(...), ...)`-compositionen med 2+ komponenter.
+- [ ] Ratio normaliseres med GCD og sorterte stabile substance-ID-er.
+- [ ] `1 A + 2 B` og `2 A + 4 B` er samme ratio; `2 A + 2 B` er ikke match.
+- [ ] `.contains(...)` kan referere til elementer, metaller, alloys og andre composite substances.
+- [ ] Match direct top-level signature før flattened elemental signature.
+- [ ] Flattened signature brukes til massebalanse; den alene beviser ikke samme structure.
+- [ ] Ambiguous definitions med samme flattened composition, men forskjellig topology, skal avvises/rapporteres.
+- [ ] Exact alloy index bygges én gang ved load/reload; ingen scan av alle materials ved hver tank tick.
 
-## Senere utvidelse
+## Uklassifisert mixture
 
-- [ ] Vurder processing state som cast/annealed/hardened uten å gjøre dette nødvendig for første fungerende alloy-system.
+- [ ] En ikke-matchende ratio forblir en virkelig `UNCLASSIFIED_MOLTEN_MIXTURE`; systemet skal ikke finne «closest alloy».
+- [ ] UI viser bare faktisk innhold, mengder, temperatur, structure/state og eventuell validert separation route.
+- [ ] UI skal ikke vise manglende mengde til en mulig alloy.
+- [ ] Bruk generic registry carriers med data components i stedet for ett nytt registry item/fluid per tilfeldig blanding.
+- [ ] Støtt minst 20 constituents med bounded payload og canonical serialization.
+- [ ] Uklassifisert mixture kan støpes til hot generic form, kjøles, males til dust og separeres igjen uten å miste composition.
+- [ ] Stack/tank merging krever identisk canonical payload og kompatibel thermal/state.
+
+## To composition-ledgers
+
+1. **Top-level constituent ledger** bevarer hva spilleren faktisk blandet og er foretrukket recovery target.
+2. **Flattened elemental ledger** er autoritativ for conservation, dupe validation og nested `.contains(...)`.
+
+Ingen transformation får endre flattened ledger uten ekstra balanserte material-inputs/outputs.
+
+## Alloy formation og properties
+
+- [ ] Skill powder mixture, molten mixture, homogeneous metallic phase og solidified alloy.
+- [ ] En exact ratio er nødvendig, men phase/temperature/compatibility må også være gyldig før finished alloy-state dannes.
+- [ ] Deriver properties fra weighted baseline + deterministiske synergy/penalty-termer: atomic-size mismatch, cohesion/bonding, crystal compatibility, solubility-like behavior og ratio.
+- [ ] Bruk diminishing returns slik at en svært liten ekstrem komponent ikke dominerer hele alloyen.
+- [ ] Re-classify capabilities fra resultatet; ikke arve `metal`, `wire`, `casing` osv. blindt.
+- [ ] En alloy kan bli bedre enn parents i én property og dårligere i en annen.
+- [ ] Processing state som cast/annealed/hardened er senere utvidelse og må ikke duplisere substance identity unødvendig.
+
+## Separasjon
+
+- [ ] En physical powder/phase mixture kan bruke magnetic/density/phase separation når egenskapene faktisk skiller fraksjonene.
+- [ ] En homogeneous metallic lattice krever normalt molten electrorefining eller annen fysisk begrunnet metallurgisk route.
+- [ ] Electrolysis/electrowinning krever gyldig solution/molten ionic state.
+- [ ] Acid route må først lage slurry/solution; tørr dust destilleres aldri.
+- [ ] Komplekse blandinger bruker concentrates/residual mixtures i flere terminerende steg når maskin-IO ikke rommer alle outputs.
+- [ ] En definert alloy er ikke automatisk centrifugerbar tilbake til parents.
+- [ ] Alle routes valideres mot exact massevektor og hele recipe-grafen før publisering.
+
+## Ytelse
+
+- [ ] Normalisering er `O(k log k)` ved innholdsendring.
+- [ ] Maks 20 komponenter gir høyst 400 pairwise property checks når cache må bygges.
+- [ ] Cache key inkluderer canonical composition, structure/state og rules revision.
+- [ ] Exact lookup skjer synkront; bare stor immutable planlegging kan gå på bounded shared worker.
+- [ ] Ingen recipe/material scan per tick og ingen egen thread per Foundry.
+
+## Tester
+
+- [ ] Exact/scaled/non-match ratios.
+- [ ] Nested composite constituents.
+- [ ] Ambiguous flattened signatures.
+- [ ] Deterministisk canonical payload og serialization.
+- [ ] 20-component performance.
+- [ ] Generic mixture cast/cool/grind/separate round-trip uten gevinst/tap.
+- [ ] Defined alloy property tradeoffs og bounds.
+- [ ] Ingen closest/missing UI.
+- [ ] Ingen profitable graph cycle, heller ikke med tiny/small/chance conversions.
 
 ## Ferdig når
 
-To eller flere materials kan gi en deterministisk alloy med egen identity, properties, classes, forms og capabilities uten håndskrevne per-alloy gameplay-statistikker.
+Definerte exact ratios kan bli canonical alloys med avledede properties, mens alle andre ratios forblir trygge uklassifiserte blandinger som kan lagres, støpes og separeres uten hardkodede navn, registry explosion eller materialduping. Se også `07-foundry-and-heater-multiblocks.md`.

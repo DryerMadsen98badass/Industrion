@@ -4,11 +4,21 @@ import net.mads.industron.material.IndustrialSubstance;
 import net.mads.industron.material.chemistry.ChemicalTopologyResolver;
 import net.mads.industron.material.chemistry.ChemistryDiagnostic;
 import net.mads.industron.material.chemistry.ChemistryStatus;
+import net.mads.industron.material.chemistry.CompositionVector;
+import net.mads.industron.material.chemistry.ChemicalStructure;
+import net.mads.industron.material.chemistry.ChemicalStructureGenerator;
 import net.mads.industron.material.chemistry.MaterialAnalysis;
 import net.mads.industron.material.chemistry.MaterialSnapshot;
+import net.mads.industron.material.chemistry.PolymerDescriptor;
+import net.mads.industron.material.chemistry.ReactionPlan;
+import net.mads.industron.material.chemistry.ReactionSolver;
+import net.mads.industron.material.chemistry.StructuralMotif;
+import net.mads.industron.material.chemistry.SubstanceIdentity;
 import net.mads.industron.material.chemistry.geology.DepositDefinition;
 import net.mads.industron.material.chemistry.geology.OreMineral;
+import net.mads.industron.material.chemistry.process.ProcessMaterial;
 import net.mads.industron.material.chemistry.process.ProcessPlan;
+import net.mads.industron.material.chemistry.process.ProcessRequirement;
 import net.mads.industron.material.chemistry.process.ProcessStep;
 
 import java.io.IOException;
@@ -35,7 +45,7 @@ public final class ChemistryReportWriter {
 
         Map<String, List<ProcessPlan>> byTarget = new LinkedHashMap<>();
         for (ProcessPlan plan : plans) {
-            byTarget.computeIfAbsent(plan.targetMaterialId(), ignored -> new ArrayList<>()).add(plan);
+            byTarget.computeIfAbsent(reportMaterialId(plan), ignored -> new ArrayList<>()).add(plan);
         }
         Map<String, MaterialSnapshot> snapshots = new LinkedHashMap<>();
         analyses.forEach((id, analysis) -> snapshots.put(id, analysis.source()));
@@ -48,7 +58,7 @@ public final class ChemistryReportWriter {
                     analysis,
                     snapshots,
                     byTarget.getOrDefault(analysis.source().id(), List.of()),
-                    diagnostics.stream().filter(d -> d.materialId().equals(analysis.source().id())).toList()
+                    diagnostics.stream().filter(d -> diagnosticBelongsTo(d, analysis.source().id())).toList()
             );
         }
 
@@ -59,6 +69,27 @@ public final class ChemistryReportWriter {
         writeDiagnostics(root.resolve("impossible-materials.txt"), diagnostics, d -> d.status() == ChemistryStatus.IMPOSSIBLE);
         writeGeology(root.resolve("geology.txt"), minerals, deposits);
         writeProcesses(root.resolve("process-plans.txt"), plans);
+    }
+
+    private static String reportMaterialId(ProcessPlan plan) {
+        return plan == null ? "" : normalizeGeneratedPlanTarget(plan.targetMaterialId());
+    }
+
+    private static boolean diagnosticBelongsTo(ChemistryDiagnostic diagnostic, String materialId) {
+        return diagnostic != null
+                && normalizeGeneratedPlanTarget(diagnostic.materialId()).equals(materialId);
+    }
+
+    private static String normalizeGeneratedPlanTarget(String id) {
+        if (id == null) return "";
+        for (String suffix : List.of(
+                "_ore_dust_processing",
+                "_mineral_dust_processing",
+                "_composite_dust_processing"
+        )) {
+            if (id.endsWith(suffix)) return id.substring(0, id.length() - suffix.length());
+        }
+        return id;
     }
 
     private void writeSummary(
@@ -96,7 +127,7 @@ public final class ChemistryReportWriter {
     ) throws IOException {
         List<String> lines = new ArrayList<>();
         lines.add("MATERIAL: " + analysis.source().displayName() + " (" + analysis.source().id() + ")");
-        lines.add("STATUS: " + analysis.status());
+        lines.add("STATUS: " + combinedStatus(analysis, plannerDiagnostics));
         lines.add("PHASE: " + analysis.phase());
         lines.add("TIER: " + analysis.calculatedTierName() + " [" + analysis.calculatedTierIndex() + "]");
         lines.add("CLASSIFICATIONS: " + analysis.classifications());
@@ -104,6 +135,19 @@ public final class ChemistryReportWriter {
         if (analysis.source().backingMaterial() instanceof IndustrialSubstance substance) {
             String formula = substance.formula();
             if (!formula.isBlank()) lines.add("FORMULA: " + formula);
+        }
+        try {
+            SubstanceIdentity identity = analysis.source().substanceIdentity(snapshots);
+            lines.add("");
+            lines.add("SUBSTANCE IDENTITY:");
+            lines.add("  direct=" + identity.directComposition().signature());
+            lines.add("  conserved=" + identity.conservedComposition().signature());
+            lines.add("  atomic=" + identity.atomicComposition().map(CompositionVector::signature).orElse("<not fully atomic>"));
+            lines.add("  structure=" + identity.structureSignature().orElse("<none>"));
+        } catch (RuntimeException error) {
+            lines.add("");
+            lines.add("SUBSTANCE IDENTITY:");
+            lines.add("  <unresolved: " + error.getMessage() + ">");
         }
         lines.add("");
         lines.add("COMPOSITION:");
@@ -117,16 +161,28 @@ public final class ChemistryReportWriter {
 
         lines.add("");
         lines.add("STRUCTURE:");
-        if (analysis.source().structure().isEmpty()) {
-            lines.add("  source=automatic from .contains(...) and component properties");
+        java.util.Optional<ChemicalStructure> generatedStructure = analysis.source().structure().isEmpty()
+                ? ChemicalStructureGenerator.generate(analysis.source(), snapshots)
+                : java.util.Optional.empty();
+        if (analysis.source().structure().isEmpty() && generatedStructure.isEmpty()) {
+            lines.add("  source=automatic topology from .contains(...) and component properties");
             lines.add("  topology=" + ChemicalTopologyResolver.resolve(analysis.source(), snapshots));
-            lines.add("  exact atom graph=<not required for bulk inference>");
+            lines.add("  exact atom graph=<not generated for this bulk/runtime substance>");
         } else {
-            var structure = analysis.source().structure().orElseThrow();
-            lines.add("  source=explicit override");
+            var structure = analysis.source().structure().orElseGet(generatedStructure::orElseThrow);
+            lines.add("  source=" + (analysis.source().structure().isPresent() ? "explicit override" : "generated deterministic graph"));
             lines.add("  topology=" + structure.topology());
             lines.add("  atomFormula=" + structure.formula());
             lines.add("  netCharge=" + structure.netCharge());
+            lines.add("  canonicalSignature=" + structure.canonicalSignature());
+            lines.add("  motifs=" + StructuralMotif.detect(structure).stream().map(StructuralMotif::id).toList());
+            PolymerDescriptor polymer = PolymerDescriptor.from(structure);
+            if (polymer.family() != PolymerDescriptor.PolymerFamily.NOT_POLYMER) {
+                lines.add("  polymerFamily=" + polymer.family());
+                lines.add("  repeatUnit=" + polymer.repeatUnitId() + " x" + polymer.repeatCount());
+                lines.add("  chainFlexibility=" + polymer.chainFlexibility());
+                lines.add("  crosslinkDensity=" + polymer.crosslinkDensity());
+            }
             lines.add("  atoms:");
             if (structure.atoms().isEmpty()) lines.add("    <none / bulk mixture topology>");
             structure.atoms().forEach(atom -> lines.add(
@@ -149,16 +205,31 @@ public final class ChemistryReportWriter {
         lines.add("PROCESS PLANS:");
         if (plans.isEmpty()) lines.add("  <none>");
         for (ProcessPlan plan : plans) {
+            lines.add("  PLAN " + plan.targetMaterialId());
+            lines.add("    CHAIN " + chainSummary(plan));
             for (ProcessStep step : plan.steps()) {
-                lines.add("  " + step.kind() + " " + step.id()
+                lines.add("    " + step.kind() + " " + step.id()
                         + " | tier=" + step.recipeTierName()
                         + " | duration=" + step.durationTicks() + " ticks"
                         + " | temperature=" + step.requiredTemperature() + " C"
                         + " | balanced=" + step.balanced());
-                lines.add("    inputs=" + step.inputs());
-                lines.add("    outputs=" + step.outputs());
-                if (!step.requirements().isEmpty()) lines.add("    requirements=" + step.requirements());
+                lines.add("      inputs=" + step.inputs());
+                lines.add("      outputs=" + step.outputs());
+                for (ProcessRequirement requirement : step.requirements()) {
+                    lines.add("      requirement=" + formatRequirement(requirement));
+                }
             }
+        }
+
+        lines.add("");
+        lines.add("REACTION SOLVER:");
+        java.util.Optional<ReactionPlan> synthesis = ReactionSolver.synthesize(analysis.source(), snapshots);
+        java.util.Optional<ReactionPlan> decomposition = ReactionSolver.decompose(analysis.source(), snapshots);
+        if (synthesis.isEmpty() && decomposition.isEmpty()) {
+            lines.add("  <none>");
+        } else {
+            synthesis.ifPresent(plan -> lines.add("  SYNTHESIS " + reactionSummary(plan)));
+            decomposition.ifPresent(plan -> lines.add("  DECOMPOSITION " + reactionSummary(plan)));
         }
 
         lines.add("");
@@ -180,6 +251,59 @@ public final class ChemistryReportWriter {
         }
 
         Files.write(path, lines, StandardCharsets.UTF_8);
+    }
+
+    private static ChemistryStatus combinedStatus(
+            MaterialAnalysis analysis,
+            List<ChemistryDiagnostic> plannerDiagnostics
+    ) {
+        ChemistryStatus status = analysis.status();
+        for (ChemistryDiagnostic diagnostic : plannerDiagnostics) {
+            if (diagnostic.status().ordinal() > status.ordinal()) status = diagnostic.status();
+        }
+        return status;
+    }
+
+    private static String chainSummary(ProcessPlan plan) {
+        if (plan.steps().isEmpty()) return "<empty>";
+        List<String> nodes = new ArrayList<>();
+        ProcessStep first = plan.steps().getFirst();
+        nodes.add(formatMaterials(first.inputs()));
+        for (ProcessStep step : plan.steps()) {
+            nodes.add(formatMaterials(step.outputs()));
+        }
+        return String.join(" -> ", nodes);
+    }
+
+    private static String reactionSummary(ReactionPlan plan) {
+        return plan.reactants() + " -> " + plan.products()
+                + " | temperature=" + plan.requiredTemperature() + " C"
+                + " | cb=" + plan.minChemicalBalance() + ".." + plan.maxChemicalBalance()
+                + (plan.catalystFamily().isBlank() ? "" : " | catalyst=" + plan.catalystFamily());
+    }
+
+    private static String formatMaterials(List<ProcessMaterial> materials) {
+        if (materials.isEmpty()) return "<none>";
+        return materials.stream()
+                .map(material -> material.materialId()
+                        + "@" + (material.part() == null ? material.phase() : material.part())
+                        + "[" + material.milliUnits() + "mu]")
+                .toList()
+                .toString();
+    }
+
+    private static String formatRequirement(ProcessRequirement requirement) {
+        if (requirement.role() == ProcessRequirement.Role.CHEMICAL_BALANCE) {
+            return "CHEMICAL_BALANCE " + requirement.constraints();
+        }
+        if (requirement.fixedMaterial()) {
+            return requirement.role() + " fixed=" + requirement.fixedMaterialId()
+                    + " phase=" + requirement.requiredPhase()
+                    + " nonConsumable=true";
+        }
+        return requirement.role() + " phase=" + requirement.requiredPhase()
+                + " constraints=" + requirement.constraints()
+                + " nonConsumable=true";
     }
 
     private void writeDiagnostics(

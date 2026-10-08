@@ -1,7 +1,10 @@
 package net.mads.industron.recipe.recipetypes.assembly;
 
+import net.mads.industron.material.IndustrialMaterial;
+import net.mads.industron.material.IndustrialSubstance;
 import net.mads.industron.material.MaterialPart;
-import net.mads.industron.recipe.recipes.assembly.Metal;
+import net.mads.industron.material.plant.PlantPart;
+import net.mads.industron.recipe.recipes.assembly.MaterialType;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
 
@@ -13,7 +16,7 @@ import java.util.Objects;
  * Recursive semantic component structure.
  *
  * <p>Definitions contain structure. A normal material/component step inherits the
- * current material mode: a fixed Metal.X stays fixed through the complete subtree,
+ * current material mode: a fixed IndustrialMaterial stays fixed through the complete subtree,
  * while a free/ANY caller stays free and lets each material leaf resolve independently.</p>
  *
  * <p>{@code inputAny(...)} explicitly breaks an inherited fixed material binding for
@@ -26,12 +29,13 @@ import java.util.Objects;
  * every step, including that physical component.</p>
  */
 public final class ComponentDefinition {
-    public enum StepKind { MATERIAL, COMPONENT, ITEM, TOOL, WAIT }
+    public enum StepKind { MATERIAL, PLANT_PART, COMPONENT, ITEM, TOOL, WAIT }
 
     public record Step(
             StepKind kind,
             MaterialPart material,
-            AssemblyMetal metalOverride,
+            PlantPart plantPart,
+            AssemblyMaterialSelector materialOverride,
             AssemblyComponent component,
             ResourceLocation itemId,
             AssemblyToolType tool,
@@ -47,13 +51,13 @@ public final class ComponentDefinition {
         }
 
         Step withSound(SoundEvent value) {
-            return new Step(kind, material, metalOverride, component, itemId, tool, count, relativeRequirements, waitTicks, value);
+            return new Step(kind, material, plantPart, materialOverride, component, itemId, tool, count, relativeRequirements, waitTicks, value);
         }
 
         Step withRelativeRequirement(AssemblyRelativeRequirement requirement) {
             List<AssemblyRelativeRequirement> next = new ArrayList<>(relativeRequirements);
             next.add(Objects.requireNonNull(requirement));
-            return new Step(kind, material, metalOverride, component, itemId, tool, count, next, waitTicks, sound);
+            return new Step(kind, material, plantPart, materialOverride, component, itemId, tool, count, next, waitTicks, sound);
         }
     }
 
@@ -84,38 +88,57 @@ public final class ComponentDefinition {
         /** Physical material leaf that inherits the current fixed/free material mode. */
         public Builder input(MaterialPart material) { return input(material, 1); }
         public Builder input(MaterialPart material, int count) {
-            addStep(new Step(StepKind.MATERIAL, requireItemMaterial(material), null, null, null, null, count, List.of(), 0, null), false);
+            addStep(new Step(StepKind.MATERIAL, requireItemMaterial(material), null, null, null, null, null, count, List.of(), 0, null), false);
             return this;
         }
 
-        /** Physical material leaf with an explicit fixed/free override. */
-        public Builder input(MaterialPart material, AssemblyMetal metal) { return input(material, metal, 1); }
-        public Builder input(MaterialPart material, AssemblyMetal metal, int count) {
-            AssemblyMetal requiredMetal = Objects.requireNonNull(metal, "metal");
-            addStep(new Step(StepKind.MATERIAL, requireItemMaterial(material), requiredMetal, null, null, null, count, List.of(), 0, null), requiredMetal.isAny());
+        /** Physical material leaf with an explicit fixed/category/free override. */
+        public Builder input(MaterialPart material, AssemblyMaterialSelector selector) { return input(material, selector, 1); }
+        public Builder input(MaterialPart material, AssemblyMaterialSelector selector, int count) {
+            AssemblyMaterialSelector requiredSelector = Objects.requireNonNull(selector, "selector");
+            addStep(new Step(StepKind.MATERIAL, requireItemMaterial(material), null, requiredSelector, null, null, null, count, List.of(), 0, null), requiredSelector.isAny());
             return this;
         }
 
-        /** Explicitly frees this material leaf from an inherited fixed Metal.X binding. */
+        /** Explicitly fixes this leaf to one canonical IndustrialMaterial. */
+        public Builder input(MaterialPart material, IndustrialSubstance fixedMaterial) { return input(material, fixedMaterial, 1); }
+        public Builder input(MaterialPart material, IndustrialSubstance fixedMaterial, int count) {
+            return input(material, AssemblyMaterialSelector.fixed(Objects.requireNonNull(fixedMaterial)), count);
+        }
+
+        /** Explicitly frees this material leaf from an inherited fixed IndustrialMaterial binding. */
         public Builder inputAny(MaterialPart material) { return inputAny(material, 1); }
         public Builder inputAny(MaterialPart material, int count) {
-            addStep(new Step(StepKind.MATERIAL, requireItemMaterial(material), Metal.ANY, null, null, null, count, List.of(), 0, null), true);
+            addStep(new Step(StepKind.MATERIAL, requireItemMaterial(material), null, MaterialType.ANY, null, null, null, count, List.of(), 0, null), true);
+            return this;
+        }
+
+        /** Plant-material role. Each use accepts any physical item registered for that PlantPart. */
+        public Builder input(PlantPart part) { return input(part, 1); }
+        public Builder input(PlantPart part, int count) {
+            addStep(new Step(StepKind.PLANT_PART, null, Objects.requireNonNull(part, "part"), null, null, null, null, count, List.of(), 0, null), false);
             return this;
         }
 
         /** Nested component that inherits the current fixed/free material mode. */
         public Builder input(AssemblyComponent component) { return input(component, 1); }
         public Builder input(AssemblyComponent component, int count) {
-            addStep(new Step(StepKind.COMPONENT, null, null, Objects.requireNonNull(component), null, null, count, List.of(), 0, null), false);
+            addStep(new Step(StepKind.COMPONENT, null, null, null, Objects.requireNonNull(component), null, null, count, List.of(), 0, null), false);
             return this;
         }
 
-        /** Nested component with an explicit fixed/free override. */
-        public Builder input(AssemblyComponent component, AssemblyMetal metal) { return input(component, metal, 1); }
-        public Builder input(AssemblyComponent component, AssemblyMetal metal, int count) {
-            AssemblyMetal requiredMetal = Objects.requireNonNull(metal, "metal");
-            addStep(new Step(StepKind.COMPONENT, null, requiredMetal, Objects.requireNonNull(component), null, null, count, List.of(), 0, null), requiredMetal.isAny());
+        /** Nested component with an explicit fixed/category/free override. */
+        public Builder input(AssemblyComponent component, AssemblyMaterialSelector selector) { return input(component, selector, 1); }
+        public Builder input(AssemblyComponent component, AssemblyMaterialSelector selector, int count) {
+            AssemblyMaterialSelector requiredSelector = Objects.requireNonNull(selector, "selector");
+            addStep(new Step(StepKind.COMPONENT, null, null, requiredSelector, Objects.requireNonNull(component), null, null, count, List.of(), 0, null), requiredSelector.isAny());
             return this;
+        }
+
+        /** Explicitly fixes this complete nested branch to one canonical IndustrialMaterial. */
+        public Builder input(AssemblyComponent component, IndustrialSubstance fixedMaterial) { return input(component, fixedMaterial, 1); }
+        public Builder input(AssemblyComponent component, IndustrialSubstance fixedMaterial, int count) {
+            return input(component, AssemblyMaterialSelector.fixed(Objects.requireNonNull(fixedMaterial)), count);
         }
 
         /**
@@ -125,26 +148,40 @@ public final class ComponentDefinition {
          */
         public Builder inputAny(AssemblyComponent component) { return inputAny(component, 1); }
         public Builder inputAny(AssemblyComponent component, int count) {
-            addStep(new Step(StepKind.COMPONENT, null, Metal.ANY, Objects.requireNonNull(component), null, null, count, List.of(), 0, null), true);
+            addStep(new Step(StepKind.COMPONENT, null, null, MaterialType.ANY, Objects.requireNonNull(component), null, null, count, List.of(), 0, null), true);
             return this;
         }
 
         /** Exact item-id leaf. */
         public Builder input(String itemId) { return input(itemId, 1); }
         public Builder input(String itemId, int count) {
-            addStep(new Step(StepKind.ITEM, null, null, null, ResourceLocation.parse(itemId), null, count, List.of(), 0, null), false);
+            addStep(new Step(StepKind.ITEM, null, null, null, null, ResourceLocation.parse(itemId), null, count, List.of(), 0, null), false);
             return this;
         }
 
         /** Tool action. The tool is not consumed as a material input. */
         public Builder input(AssemblyToolType tool) {
-            addStep(new Step(StepKind.TOOL, null, null, null, null, Objects.requireNonNull(tool), 1, List.of(), 0, null), false);
+            return tool(tool, 1);
+        }
+
+        public Builder input(ToolDefinition tool) {
+            return tool(tool, 1);
+        }
+
+        /** Public recipe syntax: .tool(Tool.PICKAXE, amount). */
+        public Builder tool(ToolDefinition tool, int amount) {
+            return tool(Objects.requireNonNull(tool).type(), amount);
+        }
+
+        /** Repeats the same non-consumed tool action the requested number of times. */
+        public Builder tool(AssemblyToolType tool, int amount) {
+            addStep(new Step(StepKind.TOOL, null, null, null, null, null, Objects.requireNonNull(tool), amount, List.of(), 0, null), false);
             return this;
         }
 
         public Builder waitTicks(int ticks) {
             if (ticks < 1) throw new IllegalArgumentException("Wait must be >= 1 tick");
-            addStep(new Step(StepKind.WAIT, null, null, null, null, null, 1, List.of(), ticks, null), false);
+            addStep(new Step(StepKind.WAIT, null, null, null, null, null, null, 1, List.of(), ticks, null), false);
             return this;
         }
 

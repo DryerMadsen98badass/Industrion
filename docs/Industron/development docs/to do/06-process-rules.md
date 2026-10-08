@@ -1,85 +1,102 @@
 # Phase 06 – Process Rules og fysiske transformasjoner
 
-RecipeType sier **hvilken prosess en machine utfører**. Process Rules sier **hva den prosessen fysisk har lov til å gjøre**. Dette må finnes før automatic chemistry generation, ellers kan systemet generere transformasjoner som ikke passer prosessen.
+**Status: FERDIG.** Phase 06 er implementert som et typed process-semantics-lag over RecipeType-foundationen. Neste aktive fase er **Phase 07 – Foundry, Heater, støping og dynamiske metallblandinger**.
 
-Én konkret machine bruker én RecipeType. Process Rules skal derfor beskrive semantics for den ene typen, ikke la én machine bli en samling av mange RecipeTypes.
+RecipeType sier **hvilken prosess en machine utfører**. Process Rules sier **hva den prosessen fysisk har lov til å gjøre**. Power source, controller-navn og konkrete recipe-conditions er fortsatt utenfor RecipeType/process identity.
+
+## Implementert kjerne
+
+Følgende er nå den kanoniske Phase 06-kjeden:
+
+```text
+MaterialAnalysis / runtime composition state
+    -> ProcessSubstanceState
+    -> ProcessOperation-set
+    -> ProcessIntent
+    -> ProcessRecipeResolver
+    -> ProcessKind + RecipeTypeDefinition
+    -> ProcessSemantics
+    -> ProcessSafetyValidator
+    -> recipe emission/runtime caller
+```
+
+Viktige implementerte typer:
+
+- `ProcessSubstanceState` – skiller bonded substance fra powder/liquid/solution/suspension/phase-separated/molten/gas/reaction mixtures.
+- `ProcessOperation` – typed physical/chemical capabilities; ingen string-capability keys.
+- `ProcessRuleSet` – capability-set per `ProcessKind`.
+- `ProcessIntent` – abstrakt behov med operations, inputs, outputs, requirements og temperature-data uten controller/power-source.
+- `ProcessRecipeResolver` – velger/validerer RecipeType/process identity og returnerer konkrete rejection diagnostics når ingen prosess passer.
+- `ProcessSemantics` – state/topology-regler for physical separation, distillation/fractionation, mixing/alloying, phase changes og chemistry routes.
+- `ElectrochemistrySemantics` – electron/oxidation-state signal validation for electrolysis/electrorefining/electrowinning.
+- `ProcessSafetyValidator` – semantics + resolver + atom-/material-conservation + graph-cycle checks før automatic chemistry emitteres.
 
 ## 1. Skill mixture fra bonded substance
 
-- [ ] Definer typed structure/state som kan skille minst mellom fysisk mixture, solution/suspension, molten mixture, alloy/solid phase, molecular compound og ionic compound.
-- [ ] Ikke anta at «samme elemental composition» betyr at materialene kan separeres mekanisk.
-- [ ] En process vurderer substance structure, phases og bonds, ikke bare input/output-listen.
+- [x] Typed structure/state skiller physical mixture, metallic/ionic/molecular/network topology og fluid/molten phases.
+- [x] Runtime-state kan representere dynamic Foundry mixtures, solutions, suspensions, phase-separated baths, molten mixtures og reaction mixtures uten å registrere en ny bonded substance.
+- [x] Samme elemental composition brukes ikke som bevis på mekanisk separerbarhet.
+- [x] Process semantics vurderer topology/state/phase og ikke bare input/output-slottene.
 
-Fiktivt eksempel:
-
-```text
-Material A particles + Material B particles
--> physical mixture
--> kan potensielt separeres fysisk
-
-Bonded Compound C
--> bonded chemical substance
--> kan ikke splittes til parent-atomer med en ren physical separator
-```
+`ProcessSubstanceState` er runtime-kontrakten. `PHYSICAL_MIXTURE` er separat fra `METALLIC_LATTICE`, `IONIC_LATTICE`, molecular/network topology osv.
 
 ## 2. Typed process operations
 
-- [ ] Definer typed process-operation/capability keys, ikke strings.
-- [ ] Eksempelretning:
-
-```text
-MIX_PHASES
-SEPARATE_PHYSICAL_PHASES
-SEPARATE_BY_DENSITY
-FRACTIONATE_BY_BOILING_POINT
-BREAK_OR_FORM_BONDS
-TRANSFER_ELECTRONS
-CHANGE_OXIDATION_STATE
-FORM_IONIC_STRUCTURE
-FORM_METALLIC_PHASE
-CRYSTALLIZE
-DISSOLVE
-PRECIPITATE
-```
-
-Hver RecipeType har ett tydelig fysisk process-semantikk-sett som senere automatic generation kan targete.
+- [x] Process capabilities er typed `ProcessOperation`-verdier, ikke strings.
+- [x] Capability-set dekker blant annet mixing, physical separation, density/magnetism/filtering, distillation/fractionation, bond change, electron transfer, oxidation-state change, metallic/ionic formation, crystallization, dissolution, leaching og precipitation.
+- [x] `ProcessKind -> ProcessRuleSet -> RecipeTypeDefinition` er den eksplisitte mappingen mellom fysisk semantics og registrert process identity.
+- [x] Alle `ProcessKind`-verdier i Phase 06 har unik capability-signatur og minst én registrert RecipeType-ID.
 
 ## 3. Physical separation
 
-- [ ] `CENTRIFUGING`, `FILTRATION`, `SIFTING`, `PHASE_SEPARATION` og beslektede typer skal bare separere states de fysisk kan skille.
-- [ ] De kan ikke bryte bonds bare fordi output-materialene er kjent.
-- [ ] En ferdig bonded alloy/compound er ikke automatisk reversibel til parent materials med en mechanical separator.
+- [x] Generated composite-dust planner velger physical separation bare for `PHYSICAL_MIXTURE`.
+- [x] Samme regel kan brukes av håndskrevne/runtime callers gjennom `ProcessRecipeResolver.validateRecipeType(...)` og `ProcessSemantics`.
+- [x] Centrifuging krever physical mixture + phase-compatible outputs + reell density contrast.
+- [x] Magnetic separation krever physical solid mixture med magnetisk og ikke-magnetisk fraksjon.
+- [x] Filtration krever eksplisitt `SUSPENSION`, ikke bare «en eller annen liquid».
+- [x] Phase separation krever eksplisitt `MIXED`/`PHASE_SEPARATED` state.
+- [x] En bonded alloy/compound kan ikke åpnes av physical separators.
+- [x] Ingen fallback velger centrifuge når ingen fysisk regel passer; generation avvises med diagnostic.
 
 ## 4. Distillation og fractionation
 
-- [ ] `DISTILLATION` separerer en egnet fluid mixture etter boiling/volatility behavior.
-- [ ] `FRACTIONATION` brukes når prosessen er definert som fractionation og skal ikke blandes inn som en ekstra type på samme machine.
-- [ ] Distillation/fractionation bryter ikke chemical bonds i en bonded substance.
-- [ ] Boiling-point proximity kan senere påvirke difficulty/duration uten å bli hardkodet i RecipeType.
+- [x] Tørr dust-distillasjon avvises.
+- [x] `DISTILLATION` krever en physical condensed-fluid mixture og separerbare fluid/gas fractions.
+- [x] `FRACTIONATION` er en egen process identity og velges ved close-but-distinguishable boiling/volatility behavior.
+- [x] Planner bruker generated `boilingpoint`/`volatility` data når disse finnes.
+- [x] Runtime/generated `ProcessMaterial.processProperties` kan brukes uten hardkodet backing-material.
+- [x] Distillation/fractionation kan ikke brukes som skjult bond breaker fordi input må være `PHYSICAL_MIXTURE`.
+- [x] Boiling proximity ligger i process selection/semantics og ikke som hardkodet konkret RecipeType-temperature/duration value.
 
 ## 5. Electrochemical processes
 
-- [ ] `ELECTROLYSIS`, `ELECTROREFINING` og `ELECTROWINNING` får hvert sitt tydelige process-rule-sett.
-- [ ] Electron transfer/oxidation-state changes skal bruke ion/bond/reaction-data når chemistry finnes.
-- [ ] Recipe/machine kan kreve temperature, CB, tier, duration eller catalyst etter behov; RecipeType eier ikke slike konkrete values.
+- [x] `ELECTROLYSIS`, `ELECTROREFINING` og `ELECTROWINNING` har separate typed operation-set.
+- [x] Electrolysis krever liquid/molten ionic/solution-compatible feed.
+- [x] Electrorefining krever molten metallic lattice/molten metal mixture.
+- [x] Electrowinning krever metal-bearing liquid physical mixture/solution og metallic guaranteed products.
+- [x] Electron-transfer/oxidation-state validation bruker `processProperties` først og backing `MaterialProperties` som fallback.
+- [x] Generated chemistry kan derfor levere electrochemical potential, donation/acceptance og preferred ion charge uten named-material special cases.
+- [x] Temperature, CB, tier, duration og catalyst ligger fortsatt på recipe/machine/requirements, ikke på RecipeType.
 
 ## 6. Mixing og alloying
 
-- [ ] `MIXING` kan lage physical mixture uten å late som bonds eller metallic phase automatisk oppstår.
-- [ ] `ALLOYING` kan senere danne en metallic/alloy phase når Phase 09 alloy-reglene sier at composition/state er gyldig.
-- [ ] Powder mixture, molten mixture og finished alloy er forskjellige states.
-- [ ] En ferdig alloy er ikke automatisk fysisk separerbar til parent materials.
+- [x] `MIXING` må produsere en eksplisitt physical-mixture state.
+- [x] `ALLOYING` må produsere en eksplisitt `METALLIC_LATTICE`/alloy state.
+- [x] Powder mixture, liquid/solution/suspension, molten mixture og finished metallic lattice er forskjellige process states.
+- [x] En ferdig metallic lattice er ikke automatisk fysisk separerbar til parent materials.
+- [x] Phase 09 beholder ansvaret for exact alloy composition/matching og hvilke alloy-ratios som er gyldige.
 
 ## 7. Chemical reaction
 
-- [ ] `CHEMICAL_REACTION` utfører et allerede validert reaction plan fra senere chemistry-system.
-- [ ] Processen balanserer eller oppfinner ikke compounds selv.
-- [ ] Temperature, CB, catalyst, state og andre eksisterende recipe/machine conditions kan avgjøre om en bestemt reaction path er tilgjengelig.
-- [ ] Pressure brukes ikke som process-condition.
+- [x] `CHEMICAL_REACTION` er en executor for et allerede planlagt `ProcessStep`/`ProcessPlan`.
+- [x] Recipe-emitteren oppfinner ikke nye compounds og balanserer ikke reaksjoner selv.
+- [x] `ProcessSafetyValidator` kontrollerer flattened conservation vector før emission.
+- [x] Temperature, CB, catalyst, state og andre conditions kan ligge på recipe/process requirements.
+- [x] Pressure brukes ikke som process-condition i Phase 06 process-systemet.
 
 ## 8. Chemical Balance
 
-Legacy pH skal ikke være process-begrepet.
+Canonical sign:
 
 ```text
 CB < 0 = basic
@@ -87,27 +104,46 @@ CB = 0 = neutral
 CB > 0 = acidic
 ```
 
-- [x] Recipe/machine kan uttrykke nødvendig `chemicalBalanceRange(min, max)`.
-- [x] CB er en condition på recipe/machine, ikke en egenskap hardkodet i RecipeType.
-- [ ] Senere compounds/fluids kan få CB fra deres generated chemistry/material model uten at process-reglene trenger hardkodede stoffnavn.
+- [x] Recipe/machine kan uttrykke `chemicalBalanceRange(min, max)`.
+- [x] CB er en recipe/machine condition, ikke en RecipeType-property.
+- [x] Generated compound/material fluids får sin beregnede `MaterialProperties.acidity()` propagert til `IndustrialFluid.chemicalBalanceHundredths`.
+- [x] Tooltip og Chemical Balance hatch leser dermed samme faktiske fluid-data; CB er ikke bare displaytekst.
+- [x] Ingen hardkodede stoffnavn kreves for generated fluid CB.
 
 ## 9. Process selection contract
 
-Senere chemistry skal kunne produsere et abstrakt behov som:
+Et caller kan beskrive et abstrakt behov, for eksempel:
 
 ```text
-requires electron transfer
-requires bond breaking
-reactants are in a compatible fluid/molten state
+TRANSFER_ELECTRONS
+CHANGE_OXIDATION_STATE
+BREAK_OR_FORM_BONDS
++ compatible liquid/molten ProcessSubstanceState
 ```
 
-Process resolver velger bare en RecipeType hvis dens process rules dekker behovet.
+- [x] Komplett typed `ProcessIntent`/operation-set finnes for Phase 06 og kan også brukes av runtime Foundry payloads.
+- [x] Resolver returnerer bare process types som støtter alle nødvendige operations og validerer input/output states.
+- [x] Resolver returnerer `ProcessKind + RecipeTypeDefinition`, aldri controller-navn eller power source.
+- [x] Ingen passende process gir failure med candidate/rejection diagnostics i stedet for «nærmeste» fallback.
+- [x] Automatic chemistry går gjennom samme resolver/semantics contract i safety/emission-pipelinen.
+- [x] Håndskrevne/runtime routes har et offentlig `validateRecipeType(...)`-entry point for samme contract.
 
-- [ ] Definer typed `ProcessIntent`/operation-set.
-- [ ] Resolver skal bare returnere process types som støtter alle nødvendige operations og input states.
-- [ ] Dersom ingen process passer skal generation avvises med konkret diagnostic, ikke «nærmeste» fallback.
-- [ ] Resolver returnerer RecipeType/process identity, ikke controller-navn eller power source.
+## 10. Validation
 
-## Ferdig når
+- [x] `ChemistrySelfTest` dekker bonded-vs-mixture separation, explicit suspension, mixing-state, distillation/fractionation, generated electrochemistry properties og typed operation capabilities.
+- [x] Separate Java 21 compile/self-test checks er kjørt på Phase 06 process-kjernen.
+- [x] Separate CB-propagation checks bekrefter at generated acidity `40` blir fluid-data `4000` hundredths / `40.00 CB`, og at hatch-readable data finnes.
+- [x] Source-structure validation bekrefter at alle Phase 06 `ProcessKind`-verdier mapper til registrert RecipeType og at capability-signaturene er unike.
+- [x] Ingen default/unconditional centrifuge fallback finnes.
 
-En process kan forklare hvorfor en transformasjon er gyldig eller ugyldig, automatic chemistry kan velge én passende RecipeType uten machine-special-cases, og physical separators aldri brukes som universal bond-breakers.
+Den opplastede source-pakken inneholder ikke prosjektets Gradle-wrapper/build-filer, så full NeoForge `gradlew build/runData` kan ikke kjøres fra chat-arkivet alene. Phase 06-koden er derfor validert med Java 21 compile harness, self-tests og strukturelle source checks; full prosjektbuild kan kjøres direkte i den lokale Industrion-roten.
+
+## Ferdigkriterium
+
+- [x] En process kan forklare hvorfor en transformasjon er gyldig eller ugyldig.
+- [x] Automatic chemistry kan resolve én passende process/RecipeType gjennom typed operations uten machine-name/power-source special cases.
+- [x] Physical separators brukes ikke som universal bond-breakers.
+- [x] Generated/runtime mixtures har eksplisitt state i stedet for å bli behandlet som bonded compounds.
+- [x] Phase 07 kan bygge Foundry runtime oppå `ProcessSubstanceState`, `ProcessIntent` og `ProcessRecipeResolver` uten å lage et parallelt process-system.
+
+**Status: FERDIG. Neste aktive fase: Phase 07 – Foundry, Heater, støping og dynamiske metallblandinger.**

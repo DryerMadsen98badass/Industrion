@@ -7,7 +7,7 @@ public final class MixingRecipeType {
     public static final RecipeTypeDefinition DEFINITION = RecipeTypeDefinition.recipeType()
             .recipeTypeDefinition(RecipeTypeDefinition.Option.id("mixing"))
             .recipeTypeDefinition(RecipeTypeDefinition.Option.displayName("Mixing"))
-            .recipeTypeDefinition(RecipeTypeDefinition.Option.maxIO(6, 4, 4, 4))
+            .recipeTypeDefinition(RecipeTypeDefinition.Option.maxIO(9, 4, 6, 4))
             .recipeTypeDefinition(RecipeTypeDefinition.Option.progressBar(ProgressBar.ARROW))
             .build();
 

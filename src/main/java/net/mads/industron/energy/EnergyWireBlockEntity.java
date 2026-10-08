@@ -36,6 +36,8 @@ public class EnergyWireBlockEntity extends BlockEntity {
     private double syncedAmperage;
     private long lastBroadcastVoltage = Long.MIN_VALUE;
     private double lastBroadcastAmperage = Double.NaN;
+    private long nextFlowSyncTick;
+    private int lastBroadcastTemperature = DEFAULT_TEMPERATURE;
     private int heatQueue;
     private int temperature = DEFAULT_TEMPERATURE;
     private int connectionsMask;
@@ -145,7 +147,7 @@ public class EnergyWireBlockEntity extends BlockEntity {
         int cableTier = MachineTierStats.tierIndex(MachineTierStats.tierForVoltage(maxVoltage()));
         int tierDifference = Math.max(1, suppliedTier - cableTier);
         heatQueue += saturatedInt((long) tierDifference * 80L);
-        contentChanged();
+        setChanged();
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, EnergyWireBlockEntity wire) {
@@ -158,7 +160,7 @@ public class EnergyWireBlockEntity extends BlockEntity {
             EnergyWireBlock.refreshAllConnections(level, pos);
             wire.connectionsInitialized = true;
             if (wire.connectionsMask() != previousConnections) {
-                CEEnergyNetwork.invalidate(level);
+                CEEnergyNetwork.invalidate(level, pos);
             }
         }
 
@@ -169,11 +171,11 @@ public class EnergyWireBlockEntity extends BlockEntity {
         if (wire.heatQueue > 0) {
             wire.temperature = saturatedInt((long) wire.temperature + wire.heatQueue);
             wire.heatQueue = 0;
-            wire.contentChanged();
+            wire.setChanged();
         } else if (wire.temperature > DEFAULT_TEMPERATURE) {
             int cooling = Math.max(1, (int) Math.pow(wire.temperature - DEFAULT_TEMPERATURE, 0.35D));
             wire.temperature = Math.max(DEFAULT_TEMPERATURE, wire.temperature - cooling);
-            wire.contentChanged();
+            wire.setChanged();
         }
 
         if (wire.temperature >= MELT_TEMPERATURE) {
@@ -304,13 +306,18 @@ public class EnergyWireBlockEntity extends BlockEntity {
         if (level == null || level.isClientSide()) {
             return;
         }
+        long tick = level.getGameTime();
+        if (tick < nextFlowSyncTick) return;
+        nextFlowSyncTick = tick + 10;
         long voltage = currentVoltage();
         double average = averageAmperage();
-        if (voltage == lastBroadcastVoltage && Double.compare(average, lastBroadcastAmperage) == 0) {
-            return;
-        }
+        boolean idleChanged = (average == 0) != (lastBroadcastAmperage == 0);
+        boolean ampsChanged = !Double.isFinite(lastBroadcastAmperage) || idleChanged
+                || Math.abs(average - lastBroadcastAmperage) >= Math.max(0.05D, Math.abs(lastBroadcastAmperage) * 0.02D);
+        if (voltage == lastBroadcastVoltage && !ampsChanged && Math.abs(temperature - lastBroadcastTemperature) < 5) return;
         lastBroadcastVoltage = voltage;
         lastBroadcastAmperage = average;
+        lastBroadcastTemperature = temperature;
         contentChanged();
     }
 

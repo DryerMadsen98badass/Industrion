@@ -34,6 +34,14 @@ public final class Material {
     public static final MaterialPart TINY_DUST = MaterialPart.TINY_DUST;
     public static final MaterialPart SMALL_DUST = MaterialPart.SMALL_DUST;
     public static final MaterialPart DUST = MaterialPart.DUST;
+    public static final MaterialPart CLAY = MaterialPart.CLAY;
+    public static final MaterialPart CLAY_BLOCK = MaterialPart.CLAY_BLOCK;
+    public static final MaterialPart UNFIRED_BRICK = MaterialPart.UNFIRED_BRICK;
+    public static final MaterialPart BRICK = MaterialPart.BRICK;
+    public static final MaterialPart BRICKS = MaterialPart.BRICKS;
+    public static final MaterialPart BRICK_SLAB = MaterialPart.BRICK_SLAB;
+    public static final MaterialPart BRICK_STAIRS = MaterialPart.BRICK_STAIRS;
+    public static final MaterialPart BRICK_WALL = MaterialPart.BRICK_WALL;
     public static final MaterialPart IMPURE_DUST = MaterialPart.IMPURE_DUST;
     public static final MaterialPart PURIFIED_DUST = MaterialPart.PURIFIED_DUST;
     public static final MaterialPart TINY_GEM = MaterialPart.TINY_GEM;
@@ -135,7 +143,7 @@ public final class Material {
     public static final MaterialPart CAST_BEARING_BALL = MaterialPart.CAST_BEARING_BALL;
     public static final MaterialPart CAST_BEARING = MaterialPart.CAST_BEARING;
     public static final MaterialPart CAST_ROTOR = MaterialPart.CAST_ROTOR;
-    public static final MaterialPart TOOL_HEAD_BUZZ_SAW = MaterialPart.TOOL_HEAD_BUZZ_SAW;
+    public static final MaterialPart BUZZ_SAW = MaterialPart.BUZZ_SAW;
     public static final MaterialPart CASING = MaterialPart.CASING;
     public static final MaterialPart MACHINE_HULL = MaterialPart.MACHINE_HULL;
     public static final MaterialPart CAST_NUGGET_MOLD = MaterialPart.CAST_NUGGET_MOLD;
@@ -168,6 +176,8 @@ public final class Material {
     public static final MaterialPart HOT_CAST_SMALL_GEAR_MOLD = MaterialPart.HOT_CAST_SMALL_GEAR_MOLD;
     public static final MaterialPart HOT_CAST_BEARING_MOLD = MaterialPart.HOT_CAST_BEARING_MOLD;
     public static final MaterialPart HOT_CAST_SCREW_MOLD = MaterialPart.HOT_CAST_SCREW_MOLD;
+
+    public static final MaterialPart STICK = MaterialPart.STICK;
 
     private Material() {
     }

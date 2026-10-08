@@ -1,0 +1,70 @@
+{
+  "parent": "minecraft:block/block",
+  "ambientocclusion": true,
+  "render_type": "minecraft:cutout",
+  "textures": {
+    "particle": "#front_base"
+  },
+  "elements": [
+    {
+      "from": [1, 0, 1],
+      "to": [15, 2, 15],
+      "faces": {
+        "north": {"texture": "#front_base"},
+        "east": {"texture": "#front_base"},
+        "south": {"texture": "#front_base"},
+        "west": {"texture": "#front_base"},
+        "up": {"texture": "#front_base"},
+        "down": {"texture": "#front_base"}
+      }
+    },
+    {
+      "from": [1, 2, 1],
+      "to": [3, 10, 15],
+      "faces": {
+        "north": {"texture": "#front_base"},
+        "east": {"texture": "#front_base"},
+        "south": {"texture": "#front_base"},
+        "west": {"texture": "#front_base"},
+        "up": {"texture": "#front_base"},
+        "down": {"texture": "#front_base"}
+      }
+    },
+    {
+      "from": [13, 2, 1],
+      "to": [15, 10, 15],
+      "faces": {
+        "north": {"texture": "#front_base"},
+        "east": {"texture": "#front_base"},
+        "south": {"texture": "#front_base"},
+        "west": {"texture": "#front_base"},
+        "up": {"texture": "#front_base"},
+        "down": {"texture": "#front_base"}
+      }
+    },
+    {
+      "from": [3, 2, 1],
+      "to": [13, 10, 3],
+      "faces": {
+        "north": {"texture": "#front_base"},
+        "east": {"texture": "#front_base"},
+        "south": {"texture": "#front_base"},
+        "west": {"texture": "#front_base"},
+        "up": {"texture": "#front_base"},
+        "down": {"texture": "#front_base"}
+      }
+    },
+    {
+      "from": [3, 2, 13],
+      "to": [13, 10, 15],
+      "faces": {
+        "north": {"texture": "#front_base"},
+        "east": {"texture": "#front_base"},
+        "south": {"texture": "#front_base"},
+        "west": {"texture": "#front_base"},
+        "up": {"texture": "#front_base"},
+        "down": {"texture": "#front_base"}
+      }
+    }
+  ]
+}

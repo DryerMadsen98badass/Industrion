@@ -11,18 +11,27 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.fluids.FluidStack;
+import net.mads.industron.runtime.BoundedIdentityCache;
 
-import java.util.Collections;
-import java.util.IdentityHashMap;
-import java.util.Map;
+import java.util.Optional;
 
 public final class MaterialLookup {
-    private static final Map<Item, MaterialTarget> EXISTING_ITEM_CACHE =
-            Collections.synchronizedMap(new IdentityHashMap<>());
-    private static final Map<net.minecraft.world.level.material.Fluid, MaterialTarget> MATERIAL_FLUID_CACHE =
-            Collections.synchronizedMap(new IdentityHashMap<>());
+    private static final BoundedIdentityCache<Item, Optional<MaterialTarget>> EXISTING_ITEM_CACHE = new BoundedIdentityCache<>(4096);
+    private static final BoundedIdentityCache<Item, Optional<MaterialTarget>> BUCKET_CACHE = new BoundedIdentityCache<>(4096);
+    private static final BoundedIdentityCache<net.minecraft.world.level.material.Fluid, Optional<MaterialTarget>> MATERIAL_FLUID_CACHE = new BoundedIdentityCache<>(4096);
+    private static int itemMaterials = -1, bucketMaterials = -1, bucketFluids = -1, fluidMaterials = -1, fluidCount = -1;
 
     private MaterialLookup() {
+    }
+
+    public static synchronized void clearCaches() {
+        EXISTING_ITEM_CACHE.clear(); BUCKET_CACHE.clear(); MATERIAL_FLUID_CACHE.clear();
+        itemMaterials = bucketMaterials = bucketFluids = fluidMaterials = fluidCount = -1;
+    }
+
+    private static int registeredFluidCount() {
+        return FluidRegistry.MATERIAL_FLUIDS.size() + FluidRegistry.CHEMICAL_FLUIDS.size()
+                + FluidRegistry.PLANT_PROCESS_FLUIDS.size() + 2;
     }
 
     public static MaterialTarget find(ItemStack stack) {
@@ -33,7 +42,7 @@ public final class MaterialLookup {
         }
 
         if (item instanceof BlockItem blockItem
-                && blockItem.getBlock() instanceof MaterialBlock materialBlock) {
+                && blockItem.getBlock() instanceof MaterialPartBlock materialBlock) {
             return new MaterialTarget(materialBlock.material(), materialBlock.part(), false);
         }
 
@@ -61,18 +70,21 @@ public final class MaterialLookup {
     }
 
     /** Existing API for molten fluids generated from or mapped onto IndustrialMaterial definitions. */
-    public static MaterialTarget find(FluidStack stack) {
+    public static synchronized MaterialTarget find(FluidStack stack) {
         if (stack.isEmpty()) {
             return null;
         }
 
-        MaterialTarget cached = MATERIAL_FLUID_CACHE.get(stack.getFluid());
-        if (cached != null) {
-            return cached;
+        int materials = IndustrialMaterials.ALL.size(), fluids = registeredFluidCount();
+        if (fluidMaterials != materials || fluidCount != fluids) {
+            MATERIAL_FLUID_CACHE.clear(); fluidMaterials = materials; fluidCount = fluids;
         }
+        return MATERIAL_FLUID_CACHE.computeIfAbsent(stack.getFluid(), MaterialLookup::findMaterialFluid).orElse(null);
+    }
 
+    private static Optional<MaterialTarget> findMaterialFluid(net.minecraft.world.level.material.Fluid candidate) {
         for (FluidRegistry.RegisteredFluid fluid : FluidRegistry.allFluids()) {
-            if (!stack.is(fluid.source().get()) && !stack.is(fluid.flowing().get())) {
+            if (candidate != fluid.source().get() && candidate != fluid.flowing().get()) {
                 continue;
             }
 
@@ -81,48 +93,54 @@ public final class MaterialLookup {
                 continue;
             }
 
-            MaterialTarget target = new MaterialTarget(material, fluidPart(fluid), false);
-            MATERIAL_FLUID_CACHE.put(fluid.source().get(), target);
-            MATERIAL_FLUID_CACHE.put(fluid.flowing().get(), target);
-            return target;
+            return Optional.of(new MaterialTarget(material, fluidPart(fluid), false));
         }
 
-        return null;
+        return Optional.empty();
     }
 
-    private static MaterialTarget findExistingMaterialPart(Item item) {
-        MaterialTarget cached = EXISTING_ITEM_CACHE.get(item);
-        if (cached != null) {
-            return cached;
+    private static synchronized MaterialTarget findExistingMaterialPart(Item item) {
+        int materials = IndustrialMaterials.ALL.size();
+        if (itemMaterials != materials) {
+            EXISTING_ITEM_CACHE.clear(); itemMaterials = materials;
         }
+        return EXISTING_ITEM_CACHE.computeIfAbsent(item, MaterialLookup::existingMaterialPart).orElse(null);
+    }
 
+    private static Optional<MaterialTarget> existingMaterialPart(Item item) {
         ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(item);
         for (IndustrialMaterial material : IndustrialMaterials.ALL) {
             for (MaterialPart part : material.parts()) {
                 if (itemId.equals(material.existingParts().get(part))) {
-                    MaterialTarget target = new MaterialTarget(material, part, false);
-                    EXISTING_ITEM_CACHE.put(item, target);
-                    return target;
+                    return Optional.of(new MaterialTarget(material, part, false));
                 }
             }
         }
 
-        return null;
+        return Optional.empty();
     }
 
-    private static MaterialTarget findMoltenBucket(ItemStack stack) {
+    private static synchronized MaterialTarget findMoltenBucket(ItemStack stack) {
+        int materials = IndustrialMaterials.ALL.size(), fluids = registeredFluidCount();
+        if (bucketMaterials != materials || bucketFluids != fluids) {
+            BUCKET_CACHE.clear(); bucketMaterials = materials; bucketFluids = fluids;
+        }
+        return BUCKET_CACHE.computeIfAbsent(stack.getItem(), MaterialLookup::materialBucket).orElse(null);
+    }
+
+    private static Optional<MaterialTarget> materialBucket(Item item) {
         for (FluidRegistry.RegisteredFluid fluid : FluidRegistry.allFluids()) {
-            if (!stack.is(fluid.bucket().get())) {
+            if (item != fluid.bucket().get()) {
                 continue;
             }
 
             IndustrialMaterial material = materialForFluid(fluid);
             if (material != null) {
-                return new MaterialTarget(material, fluidPart(fluid), false);
+                return Optional.of(new MaterialTarget(material, fluidPart(fluid), false));
             }
         }
 
-        return null;
+        return Optional.empty();
     }
 
     private static IndustrialMaterial materialForFluid(FluidRegistry.RegisteredFluid fluid) {

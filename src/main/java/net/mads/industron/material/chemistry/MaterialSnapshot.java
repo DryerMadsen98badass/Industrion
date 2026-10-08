@@ -50,6 +50,14 @@ public record MaterialSnapshot(
                 || hasSource(MaterialSourceType.EXTERNAL_MAPPING);
     }
 
+    public CompositionVector directComposition() {
+        return CompositionVector.direct(composition);
+    }
+
+    public SubstanceIdentity substanceIdentity(Map<String, MaterialSnapshot> registry) {
+        return SubstanceIdentity.of(this, registry);
+    }
+
     private static String normalize(String value) {
         Objects.requireNonNull(value, "value");
         String normalized = value.trim().toLowerCase(java.util.Locale.ROOT);

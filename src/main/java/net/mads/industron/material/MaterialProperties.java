@@ -1,6 +1,7 @@
 package net.mads.industron.material;
 
 import java.util.List;
+import java.util.Set;
 
 public record MaterialProperties(
         int tierMultiplier,
@@ -112,11 +113,31 @@ public record MaterialProperties(
         int minChemicalRange,
         int maxChemicalRange,
         int tankCapabilityScore,
-        int tankCapacity
+        int tankCapacity,
+        Set<String> unavailableProperties
 ) {
     public MaterialProperties {
         electronShells = List.copyOf(electronShells);
+        unavailableProperties = unavailableProperties == null ? Set.of() : Set.copyOf(unavailableProperties);
     }
+
+    public boolean hasProperty(String propertyName) {
+        return propertyName != null && !unavailableProperties.contains(propertyName);
+    }
+
+    private void requireProperty(String propertyName) {
+        if (!hasProperty(propertyName)) {
+            throw new IllegalStateException("Material property does not exist: " + propertyName);
+        }
+    }
+
+    public int density() { requireProperty("density"); return density; }
+    public int hardness() { requireProperty("hardness"); return hardness; }
+    public int meltingPoint() { requireProperty("meltingPoint"); return meltingPoint; }
+    public int electricalConductivity() { requireProperty("electricalConductivity"); return electricalConductivity; }
+    public ElectricalBehavior electricalBehavior() { requireProperty("electricalBehavior"); return electricalBehavior; }
+    public int corrosionResistance() { requireProperty("corrosionResistance"); return corrosionResistance; }
+    public int reactivity() { requireProperty("reactivity"); return reactivity; }
 
 
     /**
@@ -129,11 +150,14 @@ public record MaterialProperties(
     }
 
     public boolean electricallyConductive() {
-        return electricalBehavior == ElectricalBehavior.CONDUCTOR;
+        return hasProperty("electricalBehavior")
+                && hasProperty("electricalConductivity")
+                && electricalBehavior == ElectricalBehavior.CONDUCTOR;
     }
 
     public boolean electricallyInsulating() {
-        return electricalBehavior == ElectricalBehavior.INSULATOR;
+        return hasProperty("electricalBehavior")
+                && electricalBehavior == ElectricalBehavior.INSULATOR;
     }
 
     /**

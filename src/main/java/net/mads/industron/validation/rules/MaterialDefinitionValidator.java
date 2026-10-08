@@ -1,11 +1,13 @@
 package net.mads.industron.validation.rules;
 
 import net.mads.industron.material.ElementDefinition;
+import net.mads.industron.material.ClayMaterialRules;
 import net.mads.industron.material.IndustrialMaterial;
 import net.mads.industron.material.IndustrialSubstance;
 import net.mads.industron.material.MaterialComponent;
 import net.mads.industron.material.MaterialProperties;
 import net.mads.industron.material.MaterialPropertyCalculator;
+import net.mads.industron.material.structure.StructureMaterial;
 import net.mads.industron.validation.ValidationCode;
 import net.mads.industron.validation.ValidationCollector;
 import net.mads.industron.validation.ValidationContext;
@@ -70,13 +72,17 @@ public final class MaterialDefinitionValidator implements ValidationRule {
             }
         }
 
-        for (int atomicNumber = 1; atomicNumber <= 100; atomicNumber++) {
+        int highestAtomicNumber = context.elements().stream()
+                .mapToInt(ElementDefinition::atomicNumber)
+                .max()
+                .orElse(0);
+        for (int atomicNumber = 1; atomicNumber <= highestAtomicNumber; atomicNumber++) {
             if (!atomicNumbers.contains(atomicNumber)) {
                 diagnostics.error(
                         ValidationSubsystem.MATERIAL,
                         ValidationCode.INVALID_DEFINITION,
                         "atomic_number:" + atomicNumber,
-                        "Baseline element set must contain every atomic number from 1 through 100"
+                        "Element set must be continuous from atomic number 1 through " + highestAtomicNumber
                 );
             }
         }
@@ -115,7 +121,9 @@ public final class MaterialDefinitionValidator implements ValidationRule {
                         "A material cannot be both metal and gem"
                 );
             }
-            validateElectricalBehavior(material, subject, diagnostics);
+            if (material.properties().hasProperty("electricalBehavior")) {
+                validateElectricalBehavior(material, subject, diagnostics);
+            }
             if (!material.parts().containsAll(material.existingParts().keySet())) {
                 diagnostics.error(
                         ValidationSubsystem.MATERIAL,
@@ -123,6 +131,33 @@ public final class MaterialDefinitionValidator implements ValidationRule {
                         subject,
                         "existingParts contains a part that is missing from the material's part set"
                 );
+            }
+            if (material.isClayMaterial()) {
+                if (!material.parts().equals(ClayMaterialRules.FORMS)) {
+                    diagnostics.error(
+                            ValidationSubsystem.MATERIAL,
+                            ValidationCode.DOMAIN_INVARIANT_FAILED,
+                            subject,
+                            "Clay must own exactly the closed clay-processing forms plus Bricks, Firebox, Brick Slab, Brick Stairs and Brick Wall"
+                    );
+                }
+                if (material.properties().maxOperatingTemperature() <= 0) {
+                    diagnostics.error(
+                            ValidationSubsystem.MATERIAL,
+                            ValidationCode.DOMAIN_INVARIANT_FAILED,
+                            subject,
+                            "Clay maximum operating temperature must be positive"
+                    );
+                }
+                int firingTemperature = ClayMaterialRules.firingTemperature(material);
+                if (firingTemperature <= 0 || firingTemperature >= material.properties().maxOperatingTemperature()) {
+                    diagnostics.error(
+                            ValidationSubsystem.MATERIAL,
+                            ValidationCode.DOMAIN_INVARIANT_FAILED,
+                            subject,
+                            "Calculated clay firing temperature must be positive and below maximum operating temperature"
+                    );
+                }
             }
 
             ElementDefinition element = elementsById.get(material.id());
@@ -151,6 +186,7 @@ public final class MaterialDefinitionValidator implements ValidationRule {
         List<IndustrialSubstance> knownSubstances = new java.util.ArrayList<>();
         knownSubstances.addAll(context.elements());
         knownSubstances.addAll(context.materials());
+        knownSubstances.addAll(context.structureMaterials());
 
         ValidationGraph.detectUnknownReferences(
                 knownSubstances,
@@ -171,8 +207,12 @@ public final class MaterialDefinitionValidator implements ValidationRule {
     }
 
     private static List<IndustrialSubstance> dependencies(IndustrialSubstance substance) {
-        if (!(substance instanceof IndustrialMaterial material)) return List.of();
-        return material.components().stream()
+        List<MaterialComponent> components = substance instanceof IndustrialMaterial material
+                ? material.components()
+                : substance instanceof StructureMaterial structureMaterial
+                ? structureMaterial.components()
+                : List.of();
+        return components.stream()
                 .map(MaterialComponent::substance)
                 .toList();
     }

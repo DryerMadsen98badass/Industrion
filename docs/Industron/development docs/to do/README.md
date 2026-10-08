@@ -8,10 +8,10 @@ Denne TODO-en beholder den opprinnelige implementeringsrekkefølgen og langsikti
 2. **Phase 01 – Atomic model og ions: FERDIG**
 3. **Phase 02 – Material properties: FERDIG**
 4. **Phase 03 – Capabilities and requirements: FERDIG**
-5. **Phase 04 casing-kjerne: IMPLEMENTERT / øvrig content-generation fortsatt roadmap**
+5. **Phase 04 – Content generation + Casings: FERDIG**
 6. **Phase 15–17 Assembly-kjerne: IMPLEMENTERT** – ComponentDefinition, AssemblyPlan/runtime, Workbench, JEI, free/fixed materials, Frame/Casing assembly og Deployer tool-work finnes i dagens kode
 
-Generated alloys/compounds/chemistry skal fortsatt vente til recipe/process-fundamentet og Foundry/casing-grunnlaget er på plass.
+Generated chemistry er ikke lenger bare roadmap: dagens kode har analyzer, deterministic composite-dust planner, automatic intermediates, recipe emission og safety validation. Foundry runtime og dynamic alloys/mixtures er fortsatt planlagt.
 
 ## Anbefalt rekkefølge
 
@@ -21,13 +21,13 @@ Generated alloys/compounds/chemistry skal fortsatt vente til recipe/process-fund
 1. **01 Atomic model + ions – FERDIG** – neutral atoms, multiple ion states og tier-uavhengig atomic identity.
 2. **02 Material properties – FERDIG** – sentral property-kilde og generated intrinsic stats.
 3. **03 Capabilities and requirements – FERDIG** – typed scalar/range/exact/enum/bool requirements, practical capabilities og environment propagation.
-4. **04 Content generation + Casings – AKTIV** – robust content generation, dynamic ore hosts og material-derived casing generation fra `Stats`/requirements.
+4. **04 Content generation + Casings – FERDIG** – deterministic content-generation, dynamic ore hosts og material-derived casing generation er ferdig i Phase 04-kontrakten.
 
 ### 05–07: Process/machine fundament – før generated chemistry
 
-5. **05 Recipe Type Foundation** – 53 gameplay process types, typed identities og ULV–IV recipe-folder skeletons. RecipeType eier ikke power source eller konkrete process conditions.
-6. **06 Process Rules** – hva hver process fysisk har lov til å gjøre; separation, distillation, electrolysis, mixing, alloying, chemical reaction osv.
-7. **07 Foundry + Heater Multiblocks** – variable Foundry, full-footprint heater variants og heat-provider contract før generated alloys kobles inn.
+5. **05 Recipe Type Foundation – FERDIG** – den opprinnelige Phase-05 process-katalogen/skeleton-kontrakten er ferdig. Senere primitive/manual additions har utvidet dagens `CERecipeTypes.ALL` til **69 gameplay types**; tierless/manual types som `HAND_PROCESSING` skal ikke ha ULV–IV skeletons. RecipeType eier ikke power source eller konkrete process conditions.
+6. **06 Process Rules – FERDIG** – typed process operations/state/intent/resolver, physical separation, distillation/fractionation, electrochemistry, CB-fluiddata og diagnostics er implementert og validert.
+7. **07 Foundry + Heater Multiblocks – AKTIV FASE** – variable Foundry, exact alloy/mixture state, hot molds/cooling, full-footprint heaters og dupe-sikker runtime.
 
 Faste regler:
 
@@ -49,9 +49,7 @@ Pressure brukes ikke som process-condition
 
 ### 14: Automatic recipes
 
-14. **14 Automatic Process Recipe Generation** – map validated reaction/process intent til riktig RecipeType og beregn tier/duration/conditions.
-
-`material/recipes/` brukes i den aktive integrasjonen for automatiske recipes fra `StoneMaterial`, `WoodMaterial` og deklarerte raw ore-source-materialer. Senere utvidelse til andre familier er separat scope.
+14. **14 Automatic Process Recipe Generation – FØRSTE GENERELLE PIPELINE IMPLEMENTERT** – registered composite dust analyseres, planlegges, sikkerhetsvalideres og emitteres; IO/graph/dynamic-carrier hardening gjenstår.
 
 ### 15–17: Assembly crafting
 
@@ -113,10 +111,21 @@ Heateren fyller hele arealet direkte under Foundryen og må matche size variant 
 - Automatic chemistry recipes velges fra typed process rules, ikke hardkodede machine-navn.
 - Runtime bruker precompiled/indexed/cached state der det er mulig, ikke recursive global search per tick/interaksjon.
 
+## Plants side-roadmap
+
+Plant-arbeid som ikke hører naturlig inn i hovedfasene ligger nå under `plants/`. Bare `PlantMaterial`/fiber/string + tierless `HAND_PROCESSING` er implementert nå. Growth, placement, multiblock-lignende environment interactions og crop genes er eksplisitt TODO og skal ikke tolkes som eksisterende runtime.
+
 ## Hva vi gjør nå
 
-Roadmapen over er fortsatt nyttig for gjenstående systemer, men aktiv prioritet skal bestemmes fra siste prosjekt og brukerens siste instruks. Casing- og Assembly-kjernen er allerede implementert senere enn den opprinnelige statuslinjen. For Assembly er `../code/recipes/assembly-recipes.md` fasit.
+**Phase 05 og Phase 06 er ferdige. Phase 07 er neste aktive fase.** Roadmapen over er fortsatt nyttig for senere systemer. Casing- og Assembly-kjernen er allerede implementert senere enn den opprinnelige rekkefølgen. For Assembly er `../code/recipes/assembly-recipes.md` fasit.
 
-- `23-material-geology-autorecipe-integration.md` - CURRENT canonical implementation order for MaterialPart, stone/wood, ore hosts, geology and autorecipes.
-- `22-geology-and-ore-generation.md` - geology sub-phase, now subordinate to Phase 23 integration plan.
-- `14-automatic-process-recipe-generation.md` - current stone/wood/raw-ore processing scope.
+- `06-process-rules.md` – FERDIG canonical process-semantics contract.
+- `07-foundry-and-heater-multiblocks.md` – CURRENT aktive Foundry/Heater/alloy-mixture phase.
+- `09-alloys.md` – exact defined alloys og dynamic unclassified mixtures.
+- `14-automatic-process-recipe-generation.md` – faktisk implementert chemistry-planlegging og gjenstående hardening.
+- `23-material-geology-autorecipe-integration.md` – historisk execution plan; beholdt som referanse, ikke current baseline.
+
+
+## Runtime performance — 2026-10-08
+
+Siste implementerte ytelsesendringer og gjenstående målebehov ligger i [TODO_Performance.md](TODO_Performance.md). Oppslag/cache-regler står i [PROGRAMMING_HELP.md](../PROGRAMMING_HELP.md). Dette endrer ikke hovedfasenes progresjon.

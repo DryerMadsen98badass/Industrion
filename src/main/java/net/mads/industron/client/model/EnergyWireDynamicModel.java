@@ -26,6 +26,7 @@ import java.util.List;
  * connections are read from the block entity and composed from cached partial models.
  */
 public final class EnergyWireDynamicModel extends BakedModelWrapperWithData {
+    private static final Direction[] DIRECTIONS = Direction.values();
     private static final ModelProperty<Integer> CONNECTIONS_PROPERTY = new ModelProperty<>();
 
     private final WireThickness thickness;
@@ -62,7 +63,7 @@ public final class EnergyWireDynamicModel extends BakedModelWrapperWithData {
         renderTypes.add(super.getRenderTypes(state, random, modelData));
 
         int connections = connections(modelData);
-        for (Direction direction : Direction.values()) {
+        for (Direction direction : DIRECTIONS) {
             if ((connections & bit(direction)) == 0) {
                 continue;
             }
@@ -81,10 +82,12 @@ public final class EnergyWireDynamicModel extends BakedModelWrapperWithData {
             ModelData modelData,
             RenderType renderType
     ) {
-        List<BakedQuad> quads = new ArrayList<>(super.getQuads(state, side, random, modelData, renderType));
+        List<BakedQuad> base = super.getQuads(state, side, random, modelData, renderType);
         int connections = connections(modelData);
+        if (connections == 0) return base;
+        List<BakedQuad> quads = new ArrayList<>(base);
 
-        for (Direction direction : Direction.values()) {
+        for (Direction direction : DIRECTIONS) {
             if ((connections & bit(direction)) == 0) {
                 continue;
             }

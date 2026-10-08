@@ -8,21 +8,31 @@ import net.mads.industron.energy.EnergyWireBlock;
 import net.mads.industron.energy.WireThickness;
 import net.mads.industron.item.SimpleItems;
 import net.mads.industron.machine.MachineDefinition;
+import net.mads.industron.block.coils.CoilDefinition;
+import net.mads.industron.block.coils.CoilDefinitions;
 import net.mads.industron.machine.MachinePortType;
 import net.mads.industron.machine.MachineTier;
 import net.mads.industron.machine.SingleBlockMachineInstance;
 import net.mads.industron.machine.StaticMachinePortType;
+import net.mads.industron.machine.foundry.FoundryPartType;
 import net.mads.industron.machine.machines.electric.multiblock.MultiblockDefinitions;
 import net.mads.industron.material.IndustrialMaterial;
 import net.mads.industron.material.defenitions.IndustrialMaterials;
+import net.mads.industron.material.defenitions.PlantMaterials;
+import net.mads.industron.material.plant.PlantMaterialGenerator;
+import net.mads.industron.material.plant.PlantProcessingPlanner;
+import net.mads.industron.material.plant.PlantPart;
 import net.mads.industron.material.MaterialPart;
 import net.mads.industron.material.MaterialOreHost;
 import net.mads.industron.material.recipes.MaterialCasingGenerator;
 import net.mads.industron.material.structure.StructureBlockDefinition;
 import net.mads.industron.material.structure.StructureMaterial;
+import net.mads.industron.material.structure.StoneMaterial;
+import net.mads.industron.material.structure.WoodMaterial;
 import net.mads.industron.material.structure.StructureMaterialGenerator;
 import net.mads.industron.material.structure.StructureMaterials;
 import net.mads.industron.registry.FluidRegistry;
+import net.mads.industron.recipe.recipes.assembly.ToolDefinitions;
 import net.mads.industron.transport.FluidTransportTier;
 import net.mads.industron.transport.color.PipeColorDefinitions;
 import net.minecraft.data.PackOutput;
@@ -37,21 +47,58 @@ public class ModLanguageProvider extends LanguageProvider {
     @Override
     protected void addTranslations() {
         add("itemGroup.industron", "Industron");
+        add(blockKey("lathe"), "Lathe");
+        add(blockKey("mechanical_centrifuge"), "Mechanical Centrifuge");
+        add(blockKey("mechanical_sifter"), "Mechanical Sifter");
+        add(blockKey("pulverizer"), "Pulverizer");
+        add(blockKey("wire_drawing_machine"), "Wire Drawing Machine");
+        add(blockKey("winding_machine"), "Winding Machine");
+        add(blockKey("mechanical_bender"), "Mechanical Bender");
+        add(blockKey("magnetic_separator"), "Magnetic Separator");
+        add("tooltip.industron.kinetic_rpm", "Operating speed: %s–%s RPM");
+        add("tooltip.industron.kinetic_progress", "Progress: %s%%");
+        add("tooltip.industron.kinetic_not_fast_enough", "Rotation is stopped or outside the required RPM range.");
+        add("tooltip.industron.kinetic_circuit", "Circuit setting: %s");
+        add("message.industron.kinetic_circuit", "Circuit setting: %s (0 = none)");
+        add("tooltip.industron.kinetic_controls", "Empty hand: retrieve output. Sneak: retrieve input. Sneak-click back: circuit.");
         add(itemKey("machine_control_schedule"), "Machine Control Schedule");
         add(itemKey("multiblock_dev_tool"), "Multiblock Dev Tool");
-        add(blockKey("assembly_workbench"), "Assembly Workbench");
+        add(itemKey("creative_goggles"), "Creative Goggles");
+        add(itemKey("climate_instrument"), "Climate Instrument");
+        add(itemKey("wool_hood"), "Wool Hood");
+        add(itemKey("wool_coat"), "Wool Coat");
+        add(itemKey("wool_trousers"), "Wool Trousers");
+        add(itemKey("wool_boots"), "Wool Boots");
+
+        // Vanilla stick is the Oak material's existing STICK form in Industron.
+        add("item.minecraft.stick", "Oak Stick");
+        add(blockKey("basic_assembly_workbench"), "Assembly Workbench");
+        add(blockKey("assembly_workbench"), "Industrial Assembly Workbench");
         add("gui.industron.machine_control_schedule", "Machine Control Schedule");
+        add("gui.industron.stone_shaping", "Stone Shaping");
         add("config.jade.plugin_industron.machine_info", "Machine Information");
         add("config.jade.plugin_industron.multiblock_status", "Multiblock Status");
         add("config.jade.plugin_industron.ce_wire", "CE Wire");
+        add("config.jade.plugin_industron.kinetic_port", "Kinetic Port");
+        add("config.jade.plugin_industron.ce_energy_storage", "CE Energy Storage");
 
         addSimpleItems();
         addSimpleBlocks();
         addFluidTransport();
         addMultiblockControllers();
+        addFoundryBlocks();
         addMachineBlocks();
+        addCoils();
         addMaterials();
         addStructureMaterials();
+        for (var definition : net.mads.industron.material.organism.BiologicalItemCatalog.ALL) {
+            add(itemKey(definition.id()), definition.displayName());
+        }
+        for (var definition : net.mads.industron.material.organism.OrganismItemCatalog.generated()) {
+            add(itemKey(definition.itemId().substring("industron:".length())), definition.displayName());
+        }
+        addPlantMaterials();
+        addComposedTools();
         addFluids();
     }
 
@@ -92,6 +139,17 @@ public class ModLanguageProvider extends LanguageProvider {
         MultiblockDefinitions.controllers().forEach(controller -> add(blockKey(controller.registryName()), controller.displayName()));
     }
 
+    private void addFoundryBlocks() {
+        for (var clay : net.mads.industron.material.defenitions.IndustrialMaterials.ALL) {
+            if (!clay.isClayMaterial()) continue;
+            add(blockKey(clay.id() + "_caster"), clay.displayName() + " Caster");
+            add(blockKey(clay.id() + "_faucet"), clay.displayName() + " Faucet");
+        }
+        for (FoundryPartType type : FoundryPartType.ALL) {
+            add(blockKey(type.id()), type.displayName());
+        }
+    }
+
     private void addMachineBlocks() {
         for (MachineTier tier : MachineTier.ALL) {
             add(blockKey(tier.casingRegistryName()), tier.casingDisplayName());
@@ -107,6 +165,12 @@ public class ModLanguageProvider extends LanguageProvider {
         }
         for (SingleBlockMachineInstance machine : MachineDefinition.INSTANCES) {
             add(blockKey(machine.registryName()), machine.displayName());
+        }
+    }
+
+    private void addCoils() {
+        for (CoilDefinition definition : CoilDefinitions.ALL) {
+            add(blockKey(definition.blockId()), definition.displayName());
         }
     }
 
@@ -157,7 +221,39 @@ public class ModLanguageProvider extends LanguageProvider {
             for (MaterialPart part : StructureMaterialGenerator.generatedItemForms(material)) {
                 add(itemKey(part.registryName(material)), part.readableName(material));
             }
+
+            if (material instanceof StoneMaterial stone
+                    && stone.generatedForms().contains(MaterialPart.PEBBLE)) {
+                add(blockKey(stone.id() + "_loose_pebble"), MaterialPart.PEBBLE.readableName(stone));
+            }
+            if (material instanceof WoodMaterial wood
+                    && (wood.generatedForms().contains(MaterialPart.STICK) || wood.hasExistingPart(MaterialPart.STICK))) {
+                add(blockKey(wood.id() + "_fallen_stick"), MaterialPart.STICK.readableName(wood));
+            }
         }
+    }
+
+
+    private void addPlantMaterials() {
+        for (var material : net.mads.industron.material.plant.PlantStorage.materials())
+            add("block.industron." + material.storageBlockId(), material.displayName() + " Stack");
+        for (var material : PlantMaterials.ALL) {
+            for (PlantPart part : PlantMaterialGenerator.generatedItemForms(material)) {
+                add(itemKey(part.registryName(material)), part.readableName(material));
+            }
+        }
+        for (var intermediate : PlantProcessingPlanner.allRequiredIntermediates()) {
+            if (intermediate.isSolid()) {
+                add(itemKey(intermediate.id()), intermediate.displayName());
+            }
+        }
+    }
+
+    private void addComposedTools() {
+        ToolDefinitions.ALL.stream()
+                .filter(net.mads.industron.recipe.recipetypes.assembly.ToolDefinition::isAssembledTool)
+                .filter(net.mads.industron.recipe.recipetypes.assembly.ToolDefinition::isFinishedToolEnabled)
+                .forEach(definition -> add(itemKey(definition.id()), definition.displayName()));
     }
 
     private void addFluids() {

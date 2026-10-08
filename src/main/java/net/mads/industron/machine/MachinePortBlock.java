@@ -1,5 +1,7 @@
 package net.mads.industron.machine;
 
+import net.mads.industron.block.loot.AssemblySalvageBlock;
+
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.kinetics.base.DirectionalKineticBlock;
 import com.simibubi.create.foundation.block.IBE;
@@ -40,7 +42,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
 
-public class MachinePortBlock extends DirectionalKineticBlock implements IBE<MachinePortBlockEntity> {
+public class MachinePortBlock extends DirectionalKineticBlock implements IBE<MachinePortBlockEntity>, AssemblySalvageBlock {
     public static final MapCodec<MachinePortBlock> CODEC = simpleCodec(properties ->
             new MachinePortBlock(MachineTier.LV, MachinePortType.INPUT_BUS, properties));
 
@@ -299,6 +301,22 @@ public class MachinePortBlock extends DirectionalKineticBlock implements IBE<Mac
             ((IPlayerExtension) player).openMenu(port, pos);
         }
         return InteractionResult.SUCCESS;
+    }
+
+    @Override
+    public void onRemove(
+            BlockState state,
+            Level level,
+            BlockPos pos,
+            BlockState newState,
+            boolean movedByPiston
+    ) {
+        if (!state.is(newState.getBlock())
+                && !level.isClientSide()
+                && level.getBlockEntity(pos) instanceof MachinePortBlockEntity port) {
+            port.dropStoredItemsAndDiscardFluids();
+        }
+        super.onRemove(state, level, pos, newState, movedByPiston);
     }
 
     @Override

@@ -9,8 +9,13 @@ import java.util.List;
 
 import static net.mads.industron.material.recipes.CasingDefinition.casing;
 
-/** Test casing family for the material-derived casing generator. */
+/** Permanent Phase-04 material-derived casing catalogue. */
 public final class MaterialCasingRecipes {
+    /**
+     * General structural casing available at every electric tier when the material and its
+     * generated forms satisfy the projected structural requirement. Specialized thermal,
+     * chemical and Foundry casings are added by their owning gameplay phases, not guessed here.
+     */
     public static final CasingDefinition MACHINE_CASING = casing("machine_casing")
             .displayName("Machine Casing")
             .texture("industron:block/structure_sets/casing/casings/variant_6")

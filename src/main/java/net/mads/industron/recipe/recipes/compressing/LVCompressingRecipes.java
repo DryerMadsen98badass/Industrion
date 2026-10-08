@@ -15,6 +15,12 @@ public final class LVCompressingRecipes {
             RecipeOutput output,
             HolderLookup.Provider holderLookup
     ) {
+        recipe("portal_core")
+                .recipeDefinition(RecipeDefinition.Option.inputItem("minecraft:obsidian", 2))
+                .recipeDefinition(RecipeDefinition.Option.inputItem("minecraft:redstone", 8))
+                .recipeDefinition(RecipeDefinition.Option.outputItem("industron:portal_core", 1))
+                .recipeDefinition(RecipeDefinition.Option.duration(400))
+                .save(output);
     }
 
     private static RecipeDefinition recipe(String id) {

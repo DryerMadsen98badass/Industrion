@@ -15,6 +15,12 @@ public final class ULVEvaporationRecipes {
             RecipeOutput output,
             HolderLookup.Provider holderLookup
     ) {
+        recipe("water_to_steam")
+                .recipeDefinition(RecipeDefinition.Option.inputFluid("minecraft:water", 144))
+                .recipeDefinition(RecipeDefinition.Option.outputFluid("industron:steam", 576))
+                .recipeDefinition(RecipeDefinition.Option.temperature(100))
+                .recipeDefinition(RecipeDefinition.Option.duration(144))
+                .save(output);
     }
 
     private static RecipeDefinition recipe(String id) {

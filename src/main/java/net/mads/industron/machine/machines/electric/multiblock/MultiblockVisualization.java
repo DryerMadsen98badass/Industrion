@@ -2,6 +2,7 @@ package net.mads.industron.machine.machines.electric.multiblock;
 
 import net.mads.industron.machine.MachinePortBlock;
 import net.mads.industron.machine.MachineTier;
+import net.mads.industron.block.coils.CoilDefinitions;
 import net.mads.industron.registry.BlockRegistry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -65,30 +66,40 @@ public record MultiblockVisualization(List<MachineTier> tiers, Map<Character, Sy
             List<MultiblockPredicates.TieredBlock> tieredBlocks,
             Set<MultiblockAbility> requiredAbilities,
             Set<MultiblockAbility> anyAbilities,
-            boolean tieredMachineCasing
+            boolean tieredMachineCasing,
+            Set<String> materialCasingDefinitions,
+            boolean coilBlocks
     ) {
         public static SymbolInfo block(ResourceLocation blockId) {
-            return new SymbolInfo(List.of(blockId), List.of(), Set.of(), Set.of(), false);
+            return new SymbolInfo(List.of(blockId), List.of(), Set.of(), Set.of(), false, Set.of(), false);
         }
 
         public static SymbolInfo tieredBlock(MultiblockPredicates.TieredBlock block) {
-            return new SymbolInfo(List.of(), List.of(block), Set.of(), Set.of(), false);
+            return new SymbolInfo(List.of(), List.of(block), Set.of(), Set.of(), false, Set.of(), false);
         }
 
         public static SymbolInfo tieredBlocks(List<MultiblockPredicates.TieredBlock> blocks) {
-            return new SymbolInfo(List.of(), List.copyOf(blocks), Set.of(), Set.of(), false);
+            return new SymbolInfo(List.of(), List.copyOf(blocks), Set.of(), Set.of(), false, Set.of(), false);
         }
 
         public static SymbolInfo requiredAbility(Set<MultiblockAbility> abilities) {
-            return new SymbolInfo(List.of(), List.of(), Set.copyOf(abilities), Set.of(), false);
+            return new SymbolInfo(List.of(), List.of(), Set.copyOf(abilities), Set.of(), false, Set.of(), false);
         }
 
         public static SymbolInfo anyAbility(Set<MultiblockAbility> abilities) {
-            return new SymbolInfo(List.of(), List.of(), Set.of(), Set.copyOf(abilities), false);
+            return new SymbolInfo(List.of(), List.of(), Set.of(), Set.copyOf(abilities), false, Set.of(), false);
         }
 
         public static SymbolInfo machineCasings() {
-            return new SymbolInfo(List.of(), List.of(), Set.of(), Set.of(), true);
+            return new SymbolInfo(List.of(), List.of(), Set.of(), Set.of(), true, Set.of(), false);
+        }
+
+        public static SymbolInfo materialMachineCasings(String definitionId) {
+            return new SymbolInfo(List.of(), List.of(), Set.of(), Set.of(), false, Set.of(definitionId), false);
+        }
+
+        public static SymbolInfo coils() {
+            return new SymbolInfo(List.of(), List.of(), Set.of(), Set.of(), false, Set.of(), true);
         }
 
         public SymbolInfo merge(SymbolInfo other) {
@@ -96,7 +107,16 @@ public record MultiblockVisualization(List<MachineTier> tiers, Map<Character, Sy
             List<MultiblockPredicates.TieredBlock> mergedTieredBlocks = mergeLists(tieredBlocks, other.tieredBlocks);
             Set<MultiblockAbility> mergedRequired = mergeSets(requiredAbilities, other.requiredAbilities);
             Set<MultiblockAbility> mergedAny = mergeSets(anyAbilities, other.anyAbilities);
-            return new SymbolInfo(mergedBlockIds, mergedTieredBlocks, mergedRequired, mergedAny, tieredMachineCasing || other.tieredMachineCasing);
+            Set<String> mergedMaterialCasings = mergeSets(materialCasingDefinitions, other.materialCasingDefinitions);
+            return new SymbolInfo(
+                    mergedBlockIds,
+                    mergedTieredBlocks,
+                    mergedRequired,
+                    mergedAny,
+                    tieredMachineCasing || other.tieredMachineCasing,
+                    mergedMaterialCasings,
+                    coilBlocks || other.coilBlocks
+            );
         }
 
         public List<ItemStack> validStacks(MachineTier tier) {
@@ -108,6 +128,22 @@ public record MultiblockVisualization(List<MachineTier> tiers, Map<Character, Sy
                         stacks.add(new ItemStack(block.get()));
                     }
                 });
+            }
+
+            if (!materialCasingDefinitions.isEmpty()) {
+                BlockRegistry.MATERIAL_MACHINE_CASINGS.values().forEach(block -> {
+                    if (block.get().tier().equals(tier)
+                            && materialCasingDefinitions.contains(block.get().definition().id())) {
+                        stacks.add(new ItemStack(block.get()));
+                    }
+                });
+            }
+
+            if (coilBlocks) {
+                CoilDefinitions.ALL.stream()
+                        .map(definition -> BlockRegistry.getCoil(definition.id()))
+                        .filter(java.util.Objects::nonNull)
+                        .forEach(block -> stacks.add(new ItemStack(block.get())));
             }
 
             for (MultiblockPredicates.TieredBlock entry : tieredBlocks) {

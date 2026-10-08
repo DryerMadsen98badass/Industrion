@@ -1,6 +1,8 @@
 package net.mads.industron.material.structure;
 
+import net.mads.industron.machine.MachineTier;
 import net.mads.industron.material.MaterialPart;
+import net.mads.industron.material.MaterialCategory;
 
 import net.mads.industron.material.IndustrialMaterial;
 import net.mads.industron.material.MaterialComponent;
@@ -16,8 +18,8 @@ public record MetalMaterial(IndustrialMaterial source) implements StructureMater
         if (source == null) {
             throw new IllegalArgumentException("Metal structure material source cannot be null");
         }
-        if (!source.properties().metal()) {
-            throw new IllegalArgumentException(source.id() + " is not classified as a metal");
+        if (!MaterialCategory.METAL.matches(source)) {
+            throw new IllegalArgumentException(source.id() + " is not a gameplay metal");
         }
     }
 
@@ -34,6 +36,11 @@ public record MetalMaterial(IndustrialMaterial source) implements StructureMater
     @Override
     public int color() {
         return source.color();
+    }
+
+    @Override
+    public MachineTier tier() {
+        return source.tier();
     }
 
     @Override

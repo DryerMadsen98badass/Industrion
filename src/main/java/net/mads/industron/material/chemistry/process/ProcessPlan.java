@@ -23,6 +23,12 @@ public final class ProcessPlan {
         this.dependencies=Collections.unmodifiableMap(deps);
     }
     public String targetMaterialId(){return targetMaterialId;}
+    /** Stable identity for one concrete generated route, even when a target owns multiple plans. */
+    public String id(){
+        StringBuilder id=new StringBuilder(targetMaterialId);
+        for(ProcessStep step:steps) id.append("::").append(step.id());
+        return id.toString();
+    }
     public List<ProcessStep> steps(){return steps;}
     public Map<String,List<String>> dependencies(){return dependencies;}
     public static Builder builder(String target){return new Builder(target);}

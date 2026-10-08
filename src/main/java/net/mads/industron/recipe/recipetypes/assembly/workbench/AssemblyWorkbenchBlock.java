@@ -13,7 +13,7 @@ import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 
-/** Smithing-textured temporary host for manual item/block assembly. */
+/** Shared block implementation for every registered Assembly Workbench level. */
 public final class AssemblyWorkbenchBlock extends BaseEntityBlock {
     public AssemblyWorkbenchBlock(BlockBehaviour.Properties properties) {
         super(properties);

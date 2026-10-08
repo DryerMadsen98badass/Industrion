@@ -1,5 +1,6 @@
 package net.mads.industron.material.defenitions;
 
+import net.mads.industron.machine.MachineTier;
 import net.mads.industron.material.MaterialPart;
 import net.mads.industron.material.MaterialOrePolicy;
 import net.mads.industron.material.structure.StoneMaterial;
@@ -16,16 +17,19 @@ public final class StoneMaterials {
             "stone",
             "Stone",
             0x767676,
-            StoneModel.STONE
+            StoneModel.STONE,
+            MachineTier.ULV
     )
             .contains(component(VERNALITE, 2), component(DRAXITE, 1), component(ELNARITE, 1), component(FYRALITE, 1), component(JORVITE, 1), component(KAVRITE, 1), component(RELYXITE, 1), component(SENVRAITE, 1), component(TALYXITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.OVERWORLD)
+            .baseRock()
             .existing(MaterialPart.STONE, "minecraft:stone")
             .existing(MaterialPart.SLAB, "minecraft:stone_slab")
             .existing(MaterialPart.STAIRS, "minecraft:stone_stairs")
             .existing(MaterialPart.BUTTON, "minecraft:stone_button")
             .existing(MaterialPart.PRESSURE_PLATE, "minecraft:stone_pressure_plate")
             .existing(MaterialPart.COBBLED_STONE, "minecraft:cobblestone")
+            .existing(MaterialPart.GRAVEL, "minecraft:gravel")
             .existing(MaterialPart.COBBLED_SLAB, "minecraft:cobblestone_slab")
             .existing(MaterialPart.COBBLED_STAIRS, "minecraft:cobblestone_stairs")
             .existing(MaterialPart.COBBLED_WALL, "minecraft:cobblestone_wall")
@@ -42,7 +46,8 @@ public final class StoneMaterials {
             "andesite",
             "Andesite",
             0x808080,
-            StoneModel.ANDESITE
+            StoneModel.ANDESITE,
+            MachineTier.ULV
     )
             .contains(component(KAVRITE, 2), component(LORYXITE, 2), component(VASKYRITE, 1), component(USKARITE, 1), component(DRAXITE, 1), component(JORVITE, 1), component(FYRALITE, 1), component(TALYXITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.OVERWORLD)
@@ -77,7 +82,8 @@ public final class StoneMaterials {
             "asurine",
             "Asurine",
             0x668EA5,
-            StoneModel.ASURINE
+            StoneModel.ASURINE,
+            MachineTier.ULV
     )
             .contains(component(WELYRITE, 2), component(XAVRITE, 1), component(CYVERITE, 1), component(GORVIXITE, 1), component(DRAXITE, 1), component(SENVRAITE, 1), component(AULVENITE, 1), component(HORYXITE, 1), component(KELYRITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.OVERWORLD)
@@ -106,7 +112,8 @@ public final class StoneMaterials {
             "basalt",
             "Basalt",
             0x7F7D83,
-            StoneModel.BASALT
+            StoneModel.BASALT,
+            MachineTier.ULV
     )
             .contains(component(SORYNITE, 2), component(AEVRITE, 1), component(BRALYXITE, 1), component(MORYXITE, 1), component(NAXIRITE, 1), component(HAVORITE, 1), component(KORVENITE, 1), component(PRYVENITE, 1), component(DOVREXITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.NETHER)
@@ -122,7 +129,8 @@ public final class StoneMaterials {
             "blackstone",
             "Blackstone",
             0x8D798A,
-            StoneModel.BLACKSTONE
+            StoneModel.BLACKSTONE,
+            MachineTier.ULV
     )
             .contains(component(RASKORITE, 2), component(CIRYNITE, 1), component(DOVREXITE, 1), component(MORYXITE, 1), component(NAXIRITE, 1), component(OVELYNITE, 1), component(JELYXITE, 1), component(TAVORITE, 1), component(PRYVENITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.NETHER)
@@ -149,7 +157,8 @@ public final class StoneMaterials {
             "calcite",
             "Calcite",
             0x80817E,
-            StoneModel.CALCITE
+            StoneModel.CALCITE,
+            MachineTier.ULV
     )
             .contains(component(RELYXITE, 2), component(VERNALITE, 2), component(WELYRITE, 1), component(EVORINITE, 1), component(DASKENITE, 1), component(ELNARITE, 1), component(VASKYRITE, 1), component(HORYXITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.OVERWORLD)
@@ -178,7 +187,8 @@ public final class StoneMaterials {
             "crimsite",
             "Crimsite",
             0xC76C68,
-            StoneModel.CRIMSITE
+            StoneModel.CRIMSITE,
+            MachineTier.ULV
     )
             .contains(component(GORVIXITE, 2), component(KELYRITE, 1), component(XAVRITE, 1), component(ZORIXITE, 1), component(DASKENITE, 1), component(FYRALITE, 1), component(USKARITE, 1), component(HORYXITE, 1), component(CYVERITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.OVERWORLD)
@@ -207,10 +217,12 @@ public final class StoneMaterials {
             "deepslate",
             "Deepslate",
             0x7F7F82,
-            StoneModel.DEEPSLATE
+            StoneModel.DEEPSLATE,
+            MachineTier.ULV
     )
             .contains(component(DASKENITE, 2), component(GORVIXITE, 2), component(EVORINITE, 1), component(FALYXITE, 1), component(GRAVENITE, 1), component(KELYRITE, 1), component(WELYRITE, 1), component(AULVENITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.OVERWORLD)
+            .baseRock()
             .existing(MaterialPart.STONE, "minecraft:deepslate")
             .existing(MaterialPart.COBBLED_STONE, "minecraft:cobbled_deepslate")
             .existing(MaterialPart.COBBLED_SLAB, "minecraft:cobbled_deepslate_slab")
@@ -254,7 +266,8 @@ public final class StoneMaterials {
             "diorite",
             "Diorite",
             0x808080,
-            StoneModel.DIORITE
+            StoneModel.DIORITE,
+            MachineTier.ULV
     )
             .contains(component(KELYRITE, 2), component(GORVIXITE, 1), component(CYVERITE, 1), component(HORYXITE, 1), component(EVORINITE, 1), component(WELYRITE, 1), component(JORVITE, 1), component(RELYXITE, 1), component(AULVENITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.OVERWORLD)
@@ -289,7 +302,8 @@ public final class StoneMaterials {
             "dripstone",
             "Dripstone",
             0x97786A,
-            StoneModel.DRIPSTONE
+            StoneModel.DRIPSTONE,
+            MachineTier.ULV
     )
             .contains(component(WELYRITE, 2), component(DASKENITE, 1), component(EVORINITE, 1), component(HORYXITE, 1), component(GRAVENITE, 1), component(RELYXITE, 1), component(VERNALITE, 1), component(ELNARITE, 1), component(VASKYRITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.OVERWORLD)
@@ -318,10 +332,12 @@ public final class StoneMaterials {
             "end_stone",
             "End Stone",
             0x83845E,
-            StoneModel.END_STONE
+            StoneModel.END_STONE,
+            MachineTier.ULV
     )
             .contains(component(YRYXITE, 2), component(ZORVANITE, 1), component(AXYRITE, 1), component(BELVIXITE, 1), component(GALYTHITE, 1), component(MYRITHITE, 1), component(QEVORITE, 1), component(NUVEXITE, 1), component(XYTHERITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.END)
+            .baseRock()
             .existing(MaterialPart.COBBLED_STONE, "minecraft:end_stone")
             .existing(MaterialPart.STONE_BRICKS, "minecraft:end_stone_bricks")
             .existing(MaterialPart.STONE_BRICK_SLAB, "minecraft:end_stone_brick_slab")
@@ -333,7 +349,8 @@ public final class StoneMaterials {
             "granite",
             "Granite",
             0xA6735F,
-            StoneModel.GRANITE
+            StoneModel.GRANITE,
+            MachineTier.ULV
     )
             .contains(component(GORVIXITE, 2), component(KELYRITE, 2), component(WELYRITE, 1), component(XAVRITE, 1), component(YSKELITE, 1), component(ZORIXITE, 1), component(AULVENITE, 1), component(CYVERITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.OVERWORLD)
@@ -368,7 +385,8 @@ public final class StoneMaterials {
             "limestone",
             "Limestone",
             0x948B6B,
-            StoneModel.LIMESTONE
+            StoneModel.LIMESTONE,
+            MachineTier.ULV
     )
             .contains(component(RELYXITE, 2), component(VERNALITE, 1), component(WELYRITE, 1), component(DASKENITE, 1), component(EVORINITE, 1), component(FYRALITE, 1), component(SENVRAITE, 1), component(VASKYRITE, 1), component(AULVENITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.OVERWORLD)
@@ -397,10 +415,12 @@ public final class StoneMaterials {
             "netherrack",
             "Netherrack",
             0xDE5757,
-            StoneModel.NETHERRACK
+            StoneModel.NETHERRACK,
+            MachineTier.ULV
     )
             .contains(component(SORYXITE, 2), component(SORYNITE, 1), component(RASKORITE, 1), component(NERYNITE, 1), component(AEVRITE, 1), component(BRALYXITE, 1), component(HAVORITE, 1), component(MORYXITE, 1), component(OVELYNITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.NETHER)
+            .baseRock()
             .existing(MaterialPart.COBBLED_STONE, "minecraft:netherrack")
             .without(MaterialPart.STONE);
 
@@ -408,7 +428,8 @@ public final class StoneMaterials {
             "ochrum",
             "Ochrum",
             0xB88737,
-            StoneModel.OCHRUM
+            StoneModel.OCHRUM,
+            MachineTier.ULV
     )
             .contains(component(CYVERITE, 2), component(GORVIXITE, 1), component(WELYRITE, 1), component(HORYXITE, 1), component(GRAVENITE, 1), component(FYRALITE, 1), component(TALYXITE, 1), component(KELYRITE, 1), component(XAVRITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.OVERWORLD)
@@ -437,11 +458,13 @@ public final class StoneMaterials {
             "red_sandstone",
             "Red Sandstone",
             0xCB6C20,
-            StoneModel.RED_SANDSTONE
+            StoneModel.RED_SANDSTONE,
+            MachineTier.ULV
     )
             .contains(component(TALYXITE, 2), component(FYRALITE, 2), component(VERNALITE, 1), component(AULVENITE, 1), component(WELYRITE, 1), component(DASKENITE, 1), component(USKARITE, 1), component(SENVRAITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.OVERWORLD)
             .existing(MaterialPart.STONE, "minecraft:red_sandstone")
+            .existing(MaterialPart.GRAVEL, "minecraft:red_sand")
             .existing(MaterialPart.SLAB, "minecraft:red_sandstone_slab")
             .existing(MaterialPart.STAIRS, "minecraft:red_sandstone_stairs")
             .existing(MaterialPart.WALL, "minecraft:red_sandstone_wall")
@@ -457,11 +480,13 @@ public final class StoneMaterials {
             "sandstone",
             "Sandstone",
             0x898162,
-            StoneModel.SANDSTONE
+            StoneModel.SANDSTONE,
+            MachineTier.ULV
     )
             .contains(component(VERNALITE, 2), component(JORVITE, 1), component(KAVRITE, 1), component(LORYXITE, 1), component(RELYXITE, 1), component(SENVRAITE, 1), component(TALYXITE, 1), component(USKARITE, 1), component(VASKYRITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.OVERWORLD)
             .existing(MaterialPart.STONE, "minecraft:sandstone")
+            .existing(MaterialPart.GRAVEL, "minecraft:sand")
             .existing(MaterialPart.SLAB, "minecraft:sandstone_slab")
             .existing(MaterialPart.STAIRS, "minecraft:sandstone_stairs")
             .existing(MaterialPart.WALL, "minecraft:sandstone_wall")
@@ -477,7 +502,8 @@ public final class StoneMaterials {
             "scorchia",
             "Scorchia",
             0x897F7C,
-            StoneModel.SCORCHIA
+            StoneModel.SCORCHIA,
+            MachineTier.ULV
     )
             .contains(component(SORYXITE, 2), component(MORYXITE, 2), component(RHELIXITE, 1), component(SYVRENITE, 1), component(TYRAXITE, 1), component(IXRANITE, 1), component(TAVORITE, 1), component(PRYVENITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.NETHER)
@@ -506,7 +532,8 @@ public final class StoneMaterials {
             "scoria",
             "Scoria",
             0xA46E5C,
-            StoneModel.SCORIA
+            StoneModel.SCORIA,
+            MachineTier.ULV
     )
             .contains(component(NERYNITE, 2), component(AEVRITE, 1), component(CIRYNITE, 1), component(QYXARITE, 1), component(RHELIXITE, 1), component(SYVRENITE, 1), component(HAVORITE, 1), component(JELYXITE, 1), component(NAXIRITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.NETHER)
@@ -535,7 +562,8 @@ public final class StoneMaterials {
             "tuff",
             "Tuff",
             0x808179,
-            StoneModel.TUFF
+            StoneModel.TUFF,
+            MachineTier.ULV
     )
             .contains(component(MADSIITE, 2), component(HAVORITE, 2), component(IXRANITE, 1), component(GORVIXITE, 1), component(KELYRITE, 1), component(WELYRITE, 1), component(DASKENITE, 1), component(CYVERITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.OVERWORLD)
@@ -577,7 +605,8 @@ public final class StoneMaterials {
             "veridium",
             "Veridium",
             0x679681,
-            StoneModel.VERIDIUM
+            StoneModel.VERIDIUM,
+            MachineTier.ULV
     )
             .contains(component(WELYRITE, 2), component(XAVRITE, 1), component(ZORIXITE, 1), component(CYVERITE, 1), component(GORVIXITE, 1), component(KELYRITE, 1), component(AULVENITE, 1), component(EVORINITE, 1), component(HORYXITE, 1))
             .dimension(MaterialOrePolicy.DimensionBand.OVERWORLD)
@@ -628,7 +657,7 @@ public final class StoneMaterials {
     private StoneMaterials() {
     }
 
-    public static StoneMaterial stone(String id, String displayName, int color, StoneModel model) {
-        return new StoneMaterial(id, displayName, color, model);
+    public static StoneMaterial stone(String id, String displayName, int color, StoneModel model, MachineTier tier) {
+        return new StoneMaterial(id, displayName, color, model, tier);
     }
 }

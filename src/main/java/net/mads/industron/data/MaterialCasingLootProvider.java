@@ -1,20 +1,19 @@
 package net.mads.industron.data;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
 import net.mads.industron.Industron;
+import net.mads.industron.material.MaterialPart;
 import net.mads.industron.material.recipes.MaterialCasingGenerator;
+import net.mads.industron.material.recipes.MaterialRecipeHelper;
 import net.minecraft.data.CachedOutput;
 import net.minecraft.data.DataProvider;
 import net.minecraft.data.PackOutput;
 import net.minecraft.resources.ResourceLocation;
 
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-/** Drop-self loot tables for automatically generated material casings. */
+/** Salvage loot for generated material casings. The finished casing never drops itself. */
 public final class MaterialCasingLootProvider implements DataProvider {
     private final PackOutput.PathProvider lootTables;
 
@@ -30,37 +29,20 @@ public final class MaterialCasingLootProvider implements DataProvider {
                     Industron.MOD_ID,
                     generated.registryName()
             );
-
-            JsonObject root = new JsonObject();
-            root.addProperty("type", "minecraft:block");
-
-            JsonObject pool = new JsonObject();
-            pool.addProperty("rolls", 1.0F);
-
-            JsonObject entry = new JsonObject();
-            entry.addProperty("type", "minecraft:item");
-            entry.addProperty("name", block.toString());
-            JsonArray entries = new JsonArray();
-            entries.add(entry);
-            pool.add("entries", entries);
-
-            JsonObject survivesExplosion = new JsonObject();
-            survivesExplosion.addProperty("condition", "minecraft:survives_explosion");
-            JsonArray conditions = new JsonArray();
-            conditions.add(survivesExplosion);
-            pool.add("conditions", conditions);
-
-            JsonArray pools = new JsonArray();
-            pools.add(pool);
-            root.add("pools", pools);
-
-            futures.add(DataProvider.saveStable(output, root, lootTables.json(block)));
+            ResourceLocation recoveredPlate = ResourceLocation.parse(
+                    MaterialRecipeHelper.itemId(generated.material(), MaterialPart.PLATE)
+            );
+            futures.add(DataProvider.saveStable(
+                    output,
+                    SalvageLootTable.singleItem(recoveredPlate),
+                    lootTables.json(block)
+            ));
         }
         return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
     }
 
     @Override
     public String getName() {
-        return "Industron Material Casing Loot Tables";
+        return "Industron Material Casing Salvage Loot Tables";
     }
 }

@@ -141,10 +141,22 @@ These decisions override older geology/automatic-recipe text where it conflicts.
 - Ore-source definitions live under `material/defenitions`.
 - `runData` reports deterministic missing-source composition proposals and exact copyable `.contains(component(...), ...)` syntax, but never invents source names/IDs or edits Java source.
 - Material/deposit dimension is selected from highest relevant tier: ULV-HV Overworld, EV-LuV Nether, ZPM+ End.
-- Current automatic material processing scope is stone, wood and raw ore-source materials only.
-- Processing begins from DUST for stone/raw source and WOOD_PULP for wood. Ore-to-dust processing is deferred.
+- The earlier stone/wood/raw-source scope has been superseded by the implemented generic composite-DUST planner. Ore preprocessing is implemented separately and hands off at the ore material's own `DUST`.
 - Generated processing recipe tier is one electric tier below resolved source tier, clamped at ULV.
 - Process selection is based on actual composition/phase/properties/structure. Physical separators do not break bonds. Ambiguous topology produces a diagnostic rather than a guessed recipe.
 - Multi-step routes are allowed only when each step is physically/process-semantically justified.
 - Recipe emission must respect actual IO limits and may never silently truncate outputs.
 - Geology planning is not complete until registered runtime worldgen places deterministic deposits in chunks.
+
+## 2026-09-02 – Foundry/alloy-mixture decisions
+
+- Foundry is an early-game stateful metallurgical multiblock heated by a separate exact-footprint Heater provider.
+- Exact normalized `.contains(...)` ratios identify defined alloys; non-matching ratios remain unclassified mixtures.
+- The UI shows actual contents only: no closest-alloy or missing-amount suggestion.
+- Undefined mixtures use generic data-bearing carriers, support at least 20 constituents and must always retain a physically valid separation path.
+- Direct and flattened composition ledgers are both retained: direct identity for preferred recovery, flattened elements for conservation.
+- Composite dust chemistry cannot be bypassed by generic melting. Dry dust cannot be distilled.
+- Hot molds and cast outputs require explicit thermal/cooling transitions.
+- Generic elemental `DUST -> INGOT` remains removed until a proper production/casting system owns it.
+- Reversible Foundry transformations are allowed only after graph validation proves exact zero net material gain; energy and time never excuse a dupe.
+- Exact matching is synchronous and cached; no global material/recipe/structure scan occurs per tick and no thread is created per Foundry.

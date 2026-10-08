@@ -1,11 +1,12 @@
 package net.mads.industron.machine.machines.electric.multiblock;
 
 import net.mads.industron.gui.ProgressBar;
+import net.mads.industron.machine.MachineCasingBlock;
 import net.mads.industron.machine.MachineDrive;
 import net.mads.industron.machine.MachinePortBlockEntity;
 import net.mads.industron.machine.MachineTier;
 import net.mads.industron.machine.MachineTierStats;
-import net.mads.industron.machine.coil.CoilBlock;
+import net.mads.industron.block.coils.CoilBlock;
 import net.mads.industron.machine.coil.CoilLogic;
 import net.mads.industron.machine.interaction.BlockInteraction;
 import net.mads.industron.machine.interaction.MachineCondition;
@@ -18,6 +19,7 @@ import net.mads.industron.recipe.ChemicalBalanceRange;
 import net.mads.industron.recipe.RecipeTypeDefinition;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
@@ -33,6 +35,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.ToLongFunction;
 
 public final class MultiblockDefinition {
     private final String id;
@@ -49,6 +52,7 @@ public final class MultiblockDefinition {
     private final Set<MultiblockAbility> requiredRecipeAbilities;
     private final MachineDrive drive;
     private final int energyUsage;
+    private final ToLongFunction<MultiblockControllerBlockEntity> continuousEnergyUsage;
     private final int steamUsage;
     private final Optional<Integer> minRpm;
     private final Optional<Integer> maxRpm;
@@ -70,6 +74,7 @@ public final class MultiblockDefinition {
     private final ProgressBar progressBar;
     private final int maxParallel;
     private final boolean parallelHatches;
+    private final List<ResourceLocation> activationItems;
 
     private MultiblockDefinition(Builder builder) {
         this.id = builder.id;
@@ -78,12 +83,16 @@ public final class MultiblockDefinition {
         this.controllerId = builder.controllerId;
         this.recipeTypes = List.copyOf(builder.recipeTypes);
         this.logicIds = List.copyOf(builder.logicIds);
-        this.maxTier = builder.maxTier;
-        this.tierRestricted = builder.tierDefined;
+        MachineTier controllerTier = builder.controllerDefinition == null ? null : builder.controllerDefinition.tier();
+        this.maxTier = builder.tierDefined
+                ? builder.maxTier
+                : controllerTier != null ? controllerTier.recipeTier() : builder.maxTier;
+        this.tierRestricted = builder.tierDefined || controllerTier != null;
         this.predicates = Map.copyOf(builder.predicates);
         this.requiredRecipeAbilities = builder.requiredRecipeAbilities.isEmpty() ? Set.of() : EnumSet.copyOf(builder.requiredRecipeAbilities);
         this.drive = builder.drive;
         this.energyUsage = builder.energyUsage;
+        this.continuousEnergyUsage = builder.continuousEnergyUsage;
         this.steamUsage = builder.steamUsage;
         this.minRpm = builder.minRpm;
         this.maxRpm = builder.maxRpm;
@@ -107,6 +116,7 @@ public final class MultiblockDefinition {
         this.areas = List.copyOf(builder.areas);
         this.maxParallel = Math.max(1, builder.maxParallel);
         this.parallelHatches = builder.parallelHatches;
+        this.activationItems = List.copyOf(builder.activationItems);
         this.progressBar = builder.progressBar != null
                 ? builder.progressBar
                 : builder.recipeTypeDefinitions.stream()
@@ -248,6 +258,17 @@ public final class MultiblockDefinition {
         return energyUsage;
     }
 
+    public boolean hasContinuousEnergyUsage() {
+        return continuousEnergyUsage != null;
+    }
+
+    public long continuousEnergyUsage(MultiblockControllerBlockEntity controller) {
+        if (continuousEnergyUsage == null || controller == null) {
+            return 0L;
+        }
+        return Math.max(0L, continuousEnergyUsage.applyAsLong(controller));
+    }
+
     public int steamUsage() {
         return steamUsage;
     }
@@ -294,6 +315,20 @@ public final class MultiblockDefinition {
 
     public ProgressBar progressBar() {
         return progressBar;
+    }
+
+    /** Items that may be used on the formed controller before a new recipe may start. */
+    public List<ResourceLocation> activationItems() {
+        return activationItems;
+    }
+
+    /** Compatibility accessor for definitions that use one activation item. */
+    public Optional<ResourceLocation> activationItem() {
+        return activationItems.stream().findFirst();
+    }
+
+    public boolean requiresActivation() {
+        return !activationItems.isEmpty();
     }
 
     public MultiblockMatchResult tryMatch(Level level, BlockPos controllerPos, Direction facing) {
@@ -346,6 +381,8 @@ public final class MultiblockDefinition {
         Map<Integer, BlockPos> sequentialOutputPositions = new HashMap<>();
         Map<String, Integer> countMatches = new HashMap<>();
         Map<BlockPos, ResourceLocation> overlayModels = new HashMap<>();
+        Map<BlockPos, MultiblockModelSource> modelSources = new HashMap<>();
+        Map<ResourceLocation, Integer> casingCounts = new HashMap<>();
 
         for (int x = 0; x < variant.layers().size(); x++) {
             MultiblockPattern.Row[] rows = variant.layers().get(x);
@@ -372,7 +409,13 @@ public final class MultiblockDefinition {
                     }
 
                     positions.add(worldPos);
-                    formedTier = MultiblockPredicates.lowestTier(formedTier, match.tier());
+                    if (state.getBlock() instanceof MachineCasingBlock casing) {
+                        formedTier = MultiblockPredicates.lowestTier(formedTier, casing.tier());
+                        ResourceLocation casingId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+                        if (casingId != null) {
+                            casingCounts.merge(casingId, 1, Integer::sum);
+                        }
+                    }
                     for (MultiblockAbility ability : match.abilities()) {
                         abilityPositions.computeIfAbsent(ability, ignored -> new ArrayList<>()).add(worldPos);
                     }
@@ -393,6 +436,9 @@ public final class MultiblockDefinition {
                     if (match.overlayModel() != null) {
                         overlayModels.put(worldPos, match.overlayModel());
                     }
+                    if (match.modelSource() != null) {
+                        modelSources.put(worldPos, match.modelSource());
+                    }
                 }
             }
         }
@@ -411,7 +457,12 @@ public final class MultiblockDefinition {
         }
 
         CoilInfo coilInfo = coilInfo(level, positions);
-        if (requiresCoils() && !coilInfo.valid()) {
+        if (!coilInfo.valid() || (requiresCoils() && coilInfo.count() == 0)) {
+            return MultiblockMatchResult.failed();
+        }
+
+        ResourceLocation casingModel = dominantCasingModel(casingCounts);
+        if (!resolveModelSources(modelSources, casingModel, overlayModels)) {
             return MultiblockMatchResult.failed();
         }
 
@@ -422,12 +473,43 @@ public final class MultiblockDefinition {
                 formedTier,
                 coilInfo.heat(),
                 coilInfo.count(),
+                casingModel,
                 List.copyOf(positions),
                 copyAbilities(abilityPositions),
                 Map.copyOf(sequentialInputPositions),
                 Map.copyOf(sequentialOutputPositions),
                 Map.copyOf(overlayModels)
         );
+    }
+
+    private static ResourceLocation dominantCasingModel(Map<ResourceLocation, Integer> casingCounts) {
+        ResourceLocation casingId = casingCounts.entrySet().stream()
+                .sorted(Comparator
+                        .<Map.Entry<ResourceLocation, Integer>>comparingInt(Map.Entry::getValue)
+                        .reversed()
+                        .thenComparing(entry -> entry.getKey().toString()))
+                .map(Map.Entry::getKey)
+                .findFirst()
+                .orElse(null);
+        return casingId == null
+                ? null
+                : ResourceLocation.fromNamespaceAndPath(casingId.getNamespace(), "block/" + casingId.getPath());
+    }
+
+    private static boolean resolveModelSources(
+            Map<BlockPos, MultiblockModelSource> modelSources,
+            ResourceLocation casingModel,
+            Map<BlockPos, ResourceLocation> overlayModels
+    ) {
+        for (Map.Entry<BlockPos, MultiblockModelSource> entry : modelSources.entrySet()) {
+            if (entry.getValue() == MultiblockModelSource.CASING) {
+                if (casingModel == null) {
+                    return false;
+                }
+                overlayModels.put(entry.getKey(), casingModel);
+            }
+        }
+        return true;
     }
 
     private static boolean hasValidSequentialInputs(Map<Integer, BlockPos> sequentialInputPositions) {
@@ -461,24 +543,25 @@ public final class MultiblockDefinition {
     }
 
     private CoilInfo coilInfo(Level level, List<BlockPos> positions) {
-        String coilId = null;
+        net.minecraft.world.level.block.Block coilBlock = null;
         int heat = 0;
         int count = 0;
         for (BlockPos pos : positions) {
-            if (!(level.getBlockState(pos).getBlock() instanceof CoilBlock coil)) {
+            BlockState state = level.getBlockState(pos);
+            if (!(state.getBlock() instanceof CoilBlock coil)) {
                 continue;
             }
 
-            if (coilId == null) {
-                coilId = coil.definition().id();
+            if (coilBlock == null) {
+                coilBlock = state.getBlock();
                 heat = coil.definition().heat();
-            } else if (!coilId.equals(coil.definition().id())) {
+            } else if (state.getBlock() != coilBlock) {
                 return CoilInfo.invalid();
             }
 
             count++;
         }
-        return new CoilInfo(heat, count, count > 0);
+        return new CoilInfo(heat, count, true);
     }
 
     private record CoilInfo(int heat, int count, boolean valid) {
@@ -643,12 +726,30 @@ public final class MultiblockDefinition {
             return builder -> builder.recipeTypes(recipeTypes);
         }
 
+        /** Requires this item to be used on the formed controller before each recipe run. */
+        static Option activationItem(String itemId) {
+            return builder -> builder.activationItem(MultiblockRegistry.id(itemId));
+        }
+
+        /** Requires this item to be used on the formed controller before each recipe run. */
+        static Option activationItem(ResourceLocation itemId) {
+            return builder -> builder.activationItem(itemId);
+        }
+
         static Option parallel(int maxParallel) { return builder -> builder.parallel(maxParallel); }
         static Option parallelHatches() { return Builder::parallelHatches; }
 
         /** Defines the ULV base CE/t and makes this an electric multiblock. */
         static Option energyUsage(int energyUsage) {
             return builder -> builder.energyUsage(energyUsage);
+        }
+
+        /**
+         * Defines an always-on dynamic CE/t demand. A formed machine consumes the returned amount
+         * every tick while enough CE is available, and becomes inactive immediately when it is not.
+         */
+        static Option continuousEnergyUsage(ToLongFunction<MultiblockControllerBlockEntity> energyUsage) {
+            return builder -> builder.continuousEnergyUsage(energyUsage);
         }
 
         /** Makes this a kinetic multiblock powered through a Kinetic Input Box. */
@@ -841,6 +942,7 @@ public final class MultiblockDefinition {
         private final Set<MultiblockAbility> requiredRecipeAbilities = EnumSet.noneOf(MultiblockAbility.class);
         private MachineDrive drive = MachineDrive.NONE;
         private int energyUsage;
+        private ToLongFunction<MultiblockControllerBlockEntity> continuousEnergyUsage;
         private int steamUsage;
         private Optional<Integer> minRpm = Optional.empty();
         private Optional<Integer> maxRpm = Optional.empty();
@@ -862,6 +964,7 @@ public final class MultiblockDefinition {
         private ProgressBar progressBar;
         private int maxParallel = 1;
         private boolean parallelHatches;
+        private final List<ResourceLocation> activationItems = new ArrayList<>();
 
         private Builder() {
         }
@@ -881,6 +984,12 @@ public final class MultiblockDefinition {
 
         private Builder displayName(String displayName) {
             this.displayName = displayName;
+            return this;
+        }
+
+        private Builder activationItem(ResourceLocation itemId) {
+            ResourceLocation value = Objects.requireNonNull(itemId, "multiblock activation item");
+            if (!activationItems.contains(value)) activationItems.add(value);
             return this;
         }
 
@@ -1003,6 +1112,12 @@ public final class MultiblockDefinition {
         private Builder energyUsage(int energyUsage) {
             selectDrive(MachineDrive.ELECTRIC);
             this.energyUsage = energyUsage;
+            return this;
+        }
+
+        private Builder continuousEnergyUsage(ToLongFunction<MultiblockControllerBlockEntity> energyUsage) {
+            selectDrive(MachineDrive.ELECTRIC);
+            this.continuousEnergyUsage = Objects.requireNonNull(energyUsage, "continuous energy usage");
             return this;
         }
 
@@ -1159,12 +1274,24 @@ public final class MultiblockDefinition {
         }
 
         private void validateDrive() {
-            if (drive == MachineDrive.ELECTRIC && (energyUsage <= 0 || energyUsage >= 9)) {
+            if (drive == MachineDrive.ELECTRIC
+                    && continuousEnergyUsage == null
+                    && (energyUsage <= 0 || energyUsage >= 9)) {
                 throw new IllegalStateException(
                         "Electric multiblock " + id + " energy usage must be between 1 and 8"
                 );
             }
-            if (drive != MachineDrive.ELECTRIC && energyUsage != 0) {
+            if (continuousEnergyUsage != null && energyUsage != 0) {
+                throw new IllegalStateException(
+                        "Electric multiblock " + id + " cannot define both base and continuous energy usage"
+                );
+            }
+            if (continuousEnergyUsage != null && !recipeTypes.isEmpty()) {
+                throw new IllegalStateException(
+                        "Continuous energy usage is only valid for recipe-less multiblocks: " + id
+                );
+            }
+            if (drive != MachineDrive.ELECTRIC && (energyUsage != 0 || continuousEnergyUsage != null)) {
                 throw new IllegalStateException("Only electric multiblocks can define energy usage: " + id);
             }
             if (drive == MachineDrive.STEAM && steamUsage <= 0) {

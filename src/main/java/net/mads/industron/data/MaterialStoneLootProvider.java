@@ -20,16 +20,18 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Owns the loot tables for the base STONE and COBBLED_STONE blocks of every
+ * Owns the loot tables for the base STONE, COBBLED_STONE and GRAVEL blocks of every
  * {@link StoneMaterial}.
  *
  * Rules:
  * - Silk Touch always drops the broken block itself.
- * - Without Silk Touch, both STONE and COBBLED_STONE can drop the material dust.
- * - Dust chance is exactly the vanilla gravel -> flint Fortune curve:
+ * - Without Silk Touch, STONE and COBBLED_STONE can drop the material dust.
+ * - GRAVEL uses the same Fortune curve, but vanilla gravel yields flint while every
+ *   other gravel-equivalent (including sand/red sand) yields its owning stone dust.
+ * - Chance is exactly the vanilla gravel -> flint Fortune curve:
  *   10 %, 1/7, 25 %, 100 % for Fortune 0/I/II/III+.
- * - If dust does not drop, STONE drops the material's COBBLED_STONE when one exists.
- * - COBBLED_STONE drops itself when dust does not drop.
+ * - If the chance output does not drop, STONE drops COBBLED_STONE when one exists;
+ *   COBBLED_STONE and GRAVEL drop themselves.
  *
  * Existing Minecraft/Create blocks are intentionally written to their own namespace
  * under the generated data pack. That replaces their normal block loot table while
@@ -54,6 +56,7 @@ public final class MaterialStoneLootProvider implements DataProvider {
 
             Optional<ResourceLocation> stoneBlock = resolveBlock(material, MaterialPart.STONE);
             Optional<ResourceLocation> cobbledBlock = resolveBlock(material, MaterialPart.COBBLED_STONE);
+            Optional<ResourceLocation> gravelBlock = resolveBlock(material, MaterialPart.GRAVEL);
 
             if (stoneBlock.isPresent()) {
                 ResourceLocation fallback = cobbledBlock.orElse(stoneBlock.get());
@@ -62,6 +65,11 @@ public final class MaterialStoneLootProvider implements DataProvider {
 
             if (cobbledBlock.isPresent()) {
                 addLootTable(futures, output, cobbledBlock.get(), dustItem.get(), cobbledBlock.get());
+            }
+
+            if (gravelBlock.isPresent()) {
+                ResourceLocation chanceDrop = gravelChanceDrop(gravelBlock.get(), dustItem.get());
+                addLootTable(futures, output, gravelBlock.get(), chanceDrop, gravelBlock.get());
             }
         }
 
@@ -86,6 +94,14 @@ public final class MaterialStoneLootProvider implements DataProvider {
                 lootTable(blockId, dustItem, normalDrop),
                 lootTablePath
         ));
+    }
+
+
+    private static ResourceLocation gravelChanceDrop(ResourceLocation gravelBlock, ResourceLocation stoneDust) {
+        ResourceLocation vanillaGravel = ResourceLocation.withDefaultNamespace("gravel");
+        return gravelBlock.equals(vanillaGravel)
+                ? ResourceLocation.withDefaultNamespace("flint")
+                : stoneDust;
     }
 
     private static Optional<ResourceLocation> resolveDust(StoneMaterial material) {
@@ -121,7 +137,7 @@ public final class MaterialStoneLootProvider implements DataProvider {
 
     private static JsonObject lootTable(
             ResourceLocation blockId,
-            ResourceLocation dustItem,
+            ResourceLocation chanceItem,
             ResourceLocation normalDrop
     ) {
         JsonObject table = new JsonObject();
@@ -143,7 +159,7 @@ public final class MaterialStoneLootProvider implements DataProvider {
         silkTouchEntry.add("conditions", silkTouchConditions);
         outerChildren.add(silkTouchEntry);
 
-        // Normal mining: dust chance first, then stone/cobbled fallback.
+        // Normal mining: chance output first, then the block-family fallback.
         JsonObject normalAlternatives = new JsonObject();
         normalAlternatives.addProperty("type", "minecraft:alternatives");
         JsonArray normalConditions = new JsonArray();
@@ -151,7 +167,7 @@ public final class MaterialStoneLootProvider implements DataProvider {
         normalAlternatives.add("conditions", normalConditions);
 
         JsonArray normalChildren = new JsonArray();
-        JsonObject dustEntry = itemEntry(dustItem);
+        JsonObject dustEntry = itemEntry(chanceItem);
         JsonArray dustConditions = new JsonArray();
         dustConditions.add(dustChanceCondition());
         dustEntry.add("conditions", dustConditions);

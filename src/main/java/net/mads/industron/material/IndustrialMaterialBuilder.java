@@ -1,6 +1,7 @@
 package net.mads.industron.material;
 
 import net.mads.industron.material.defenitions.IndustrialMaterials;
+import net.mads.industron.machine.MachineTier;
 import net.mads.industron.material.chemistry.ChemicalStructure;
 import net.mads.industron.material.chemistry.ChemistryDefinition;
 import net.mads.industron.material.chemistry.ChemistryPhase;
@@ -45,6 +46,7 @@ public final class IndustrialMaterialBuilder {
     private final Map<MaterialPart, ResourceLocation> customPartTextures = new EnumMap<>(MaterialPart.class);
     private String itemMaterialSet = "dull";
     private String blockMaterialSet = "dull";
+    private MachineTier tierOverride;
 
     public IndustrialMaterialBuilder(String id, String displayName, int color) {
         this(id, displayName, color, MaterialContentProfile.AUTO);
@@ -139,29 +141,64 @@ public final class IndustrialMaterialBuilder {
         return this;
     }
 
+    /**
+     * Explicit gameplay tier for clay definitions. Compound materials otherwise keep their
+     * chemistry-derived tier.
+     */
+    public IndustrialMaterialBuilder tier(MachineTier value) {
+        if (contentProfile != MaterialContentProfile.CLAY) {
+            throw new IllegalStateException("Explicit .tier(...) is only supported for clay materials");
+        }
+        if (value == null) throw new IllegalArgumentException("Clay tier cannot be null");
+        tierOverride = value;
+        return this;
+    }
+
     public IndustrialMaterial build() {
         if (components.isEmpty()) throw new IllegalStateException("Compound material " + id + " is missing .contains(...)");
         validateContentProfile();
 
-        CompoundMaterialPropertyCalculator.Result resolved = CompoundMaterialPropertyCalculator.calculate(
-                id,
-                displayName,
-                color,
-                List.copyOf(components),
-                Optional.ofNullable(structure),
-                Optional.ofNullable(phase),
-                Set.copyOf(classifications),
-                Set.copyOf(sources),
-                Map.copyOf(propertyOverrides)
-        );
+        MaterialProperties resolvedProperties;
+        MachineTier resolvedTier;
+        ChemistryPhase resolvedPhase;
+        Set<MaterialClassification> resolvedClassifications;
+
+        if (contentProfile == MaterialContentProfile.CLAY) {
+            ClayMaterialPropertyCalculator.Result resolved = ClayMaterialPropertyCalculator.calculate(
+                    color,
+                    List.copyOf(components),
+                    tierOverride
+            );
+            resolvedProperties = resolved.properties();
+            resolvedTier = resolved.tier();
+            resolvedPhase = resolved.phase();
+            resolvedClassifications = resolved.classifications();
+        } else {
+            CompoundMaterialPropertyCalculator.Result resolved = CompoundMaterialPropertyCalculator.calculate(
+                    id,
+                    displayName,
+                    color,
+                    List.copyOf(components),
+                    Optional.ofNullable(structure),
+                    Optional.ofNullable(phase),
+                    Set.copyOf(classifications),
+                    Set.copyOf(sources),
+                    Map.copyOf(propertyOverrides)
+            );
+            resolvedProperties = resolved.properties();
+            resolvedTier = resolved.tier();
+            resolvedPhase = resolved.phase();
+            resolvedClassifications = resolved.classifications();
+        }
 
         Set<MaterialPart> parts = CompoundMaterialFormGenerator.partsFor(
                 contentProfile,
-                resolved.properties(),
-                resolved.phase(),
-                resolved.classifications(),
+                resolvedProperties,
+                resolvedPhase,
+                resolvedClassifications,
                 sources,
-                explicitParts
+                explicitParts,
+                List.copyOf(components)
         );
         EnumSet<MaterialPart> withExisting = parts.isEmpty()
                 ? EnumSet.noneOf(MaterialPart.class)
@@ -172,16 +209,16 @@ public final class IndustrialMaterialBuilder {
                 id,
                 displayName,
                 0,
-                resolved.tier(),
+                resolvedTier,
                 contentProfile,
-                resolved.properties(),
+                resolvedProperties,
                 itemMaterialSet,
                 blockMaterialSet,
                 Set.copyOf(withExisting),
                 Map.copyOf(existingParts),
                 Set.copyOf(existingRecipeParts),
                 Map.copyOf(customPartTextures),
-                resolved.properties().radioactivity(),
+                resolvedProperties.radioactivity(),
                 Optional.empty(),
                 List.copyOf(components),
                 0,
@@ -197,9 +234,9 @@ public final class IndustrialMaterialBuilder {
         );
 
         ChemistryDefinition.Builder chemistry = ChemistryDefinition.material(id)
-                .phase(resolved.phase());
+                .phase(resolvedPhase);
         if (structure != null) chemistry.structure(structure);
-        for (MaterialClassification classification : resolved.classifications()) chemistry.classification(classification);
+        for (MaterialClassification classification : resolvedClassifications) chemistry.classification(classification);
         for (MaterialSource source : sources) chemistry.source(source.type(), source.id());
         for (Map.Entry<String, Double> property : propertyOverrides.entrySet()) chemistry.property(property.getKey(), property.getValue());
         chemistry.build();
@@ -209,41 +246,125 @@ public final class IndustrialMaterialBuilder {
     }
 
     private void validateContentProfile() {
+        if (contentProfile == MaterialContentProfile.CLAY) {
+            Set<MaterialPart> generatedExplicit = EnumSet.noneOf(MaterialPart.class);
+            generatedExplicit.addAll(explicitParts);
+            generatedExplicit.removeAll(existingParts.keySet());
+            if (!generatedExplicit.isEmpty()) {
+                throw new IllegalStateException(
+                        "clay(" + id + ") generates its complete form family automatically; remove explicit parts " + generatedExplicit
+                );
+            }
+
+            Set<MaterialPart> invalidExisting = EnumSet.noneOf(MaterialPart.class);
+            invalidExisting.addAll(existingParts.keySet());
+            invalidExisting.removeAll(ClayMaterialRules.FORMS);
+            if (!invalidExisting.isEmpty()) {
+                throw new IllegalStateException(
+                        "clay(" + id + ") may reuse only clay-family forms; remove existing forms " + invalidExisting
+                );
+            }
+
+            Set<MaterialPart> invalidTextures = EnumSet.noneOf(MaterialPart.class);
+            invalidTextures.addAll(customPartTextures.keySet());
+            invalidTextures.removeAll(ClayMaterialRules.FORMS);
+            if (!invalidTextures.isEmpty()) {
+                throw new IllegalStateException(
+                        "clay(" + id + ") may texture only clay-family forms; remove textures for " + invalidTextures
+                );
+            }
+
+            Set<MaterialPart> invalidExistingRecipes = EnumSet.noneOf(MaterialPart.class);
+            invalidExistingRecipes.addAll(existingRecipeParts);
+            invalidExistingRecipes.removeAll(ClayMaterialRules.FORMS);
+            if (!invalidExistingRecipes.isEmpty()) {
+                throw new IllegalStateException(
+                        "clay(" + id + ") may reuse recipes only for clay-family forms; remove recipe forms " + invalidExistingRecipes
+                );
+            }
+            return;
+        }
+        if (contentProfile == MaterialContentProfile.CERAMIC_BRICK) {
+            Set<MaterialPart> allowed = EnumSet.of(MaterialPart.BRICK, MaterialPart.CRACKED_BRICK);
+
+            Set<MaterialPart> invalidExplicit = EnumSet.noneOf(MaterialPart.class);
+            invalidExplicit.addAll(explicitParts);
+            invalidExplicit.removeAll(allowed);
+            if (!invalidExplicit.isEmpty()) {
+                throw new IllegalStateException(
+                        "ceramicBrick(" + id + ") owns only BRICK/CRACKED_BRICK; remove explicit forms " + invalidExplicit
+                );
+            }
+
+            Set<MaterialPart> invalidExisting = EnumSet.noneOf(MaterialPart.class);
+            invalidExisting.addAll(existingParts.keySet());
+            invalidExisting.removeAll(allowed);
+            if (!invalidExisting.isEmpty()) {
+                throw new IllegalStateException(
+                        "ceramicBrick(" + id + ") may reuse only BRICK/CRACKED_BRICK; remove existing forms " + invalidExisting
+                );
+            }
+
+            Set<MaterialPart> invalidTextures = EnumSet.noneOf(MaterialPart.class);
+            invalidTextures.addAll(customPartTextures.keySet());
+            invalidTextures.removeAll(allowed);
+            if (!invalidTextures.isEmpty()) {
+                throw new IllegalStateException(
+                        "ceramicBrick(" + id + ") may texture only BRICK/CRACKED_BRICK; remove textures for " + invalidTextures
+                );
+            }
+
+            Set<MaterialPart> invalidExistingRecipes = EnumSet.noneOf(MaterialPart.class);
+            invalidExistingRecipes.addAll(existingRecipeParts);
+            invalidExistingRecipes.removeAll(allowed);
+            if (!invalidExistingRecipes.isEmpty()) {
+                throw new IllegalStateException(
+                        "ceramicBrick(" + id + ") may reuse recipes only for BRICK/CRACKED_BRICK; remove recipe forms "
+                                + invalidExistingRecipes
+                );
+            }
+            return;
+        }
+
         if (contentProfile != MaterialContentProfile.MINERAL_DUST) return;
 
         Set<MaterialPart> invalidExplicit = EnumSet.noneOf(MaterialPart.class);
         invalidExplicit.addAll(explicitParts);
         invalidExplicit.remove(MaterialPart.DUST);
+        invalidExplicit.remove(MaterialPart.MOLTEN_FLUID);
         if (!invalidExplicit.isEmpty()) {
             throw new IllegalStateException(
-                    "mineralDust(" + id + ") owns only DUST; remove explicit parts " + invalidExplicit
+                    "mineralDust(" + id + ") owns only DUST plus its chemistry-only molten form; remove explicit parts " + invalidExplicit
             );
         }
 
         Set<MaterialPart> invalidExisting = EnumSet.noneOf(MaterialPart.class);
         invalidExisting.addAll(existingParts.keySet());
         invalidExisting.remove(MaterialPart.DUST);
+        invalidExisting.remove(MaterialPart.MOLTEN_FLUID);
         if (!invalidExisting.isEmpty()) {
             throw new IllegalStateException(
-                    "mineralDust(" + id + ") owns only DUST; remove existing forms " + invalidExisting
+                    "mineralDust(" + id + ") owns only DUST plus its chemistry-only molten form; remove existing forms " + invalidExisting
             );
         }
 
         Set<MaterialPart> invalidTextures = EnumSet.noneOf(MaterialPart.class);
         invalidTextures.addAll(customPartTextures.keySet());
         invalidTextures.remove(MaterialPart.DUST);
+        invalidTextures.remove(MaterialPart.MOLTEN_FLUID);
         if (!invalidTextures.isEmpty()) {
             throw new IllegalStateException(
-                    "mineralDust(" + id + ") owns only DUST; remove textures for " + invalidTextures
+                    "mineralDust(" + id + ") owns only DUST plus its chemistry-only molten form; remove textures for " + invalidTextures
             );
         }
 
         Set<MaterialPart> invalidExistingRecipes = EnumSet.noneOf(MaterialPart.class);
         invalidExistingRecipes.addAll(existingRecipeParts);
         invalidExistingRecipes.remove(MaterialPart.DUST);
+        invalidExistingRecipes.remove(MaterialPart.MOLTEN_FLUID);
         if (!invalidExistingRecipes.isEmpty()) {
             throw new IllegalStateException(
-                    "mineralDust(" + id + ") owns only DUST; remove existing recipe forms " + invalidExistingRecipes
+                    "mineralDust(" + id + ") owns only DUST plus its chemistry-only molten form; remove existing recipe forms " + invalidExistingRecipes
             );
         }
     }

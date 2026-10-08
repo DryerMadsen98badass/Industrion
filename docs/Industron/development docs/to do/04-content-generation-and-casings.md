@@ -1,119 +1,159 @@
-# Phase 04 – Content generation og material-derived casings – DELVIS IMPLEMENTERT
+# Phase 04 – Content generation og material-derived casings – FERDIG
 
-Phase 03 er ferdig. Denne fasen gjør content-generatorene robuste og flytter **material-derived casing generation** fram fra den gamle Phase 17 til nåværende aktive fase.
+Phase 04 er ferdig implementert. Fasen etablerer robust, deterministisk content-generation og et generisk casing-system der materialets typed stats avgjør om en casing-variant kan eksistere.
 
-Casings skal genereres fra materialets faktiske stats/capabilities. Det skal ikke finnes en håndskrevet liste over hvilke materialer som «får lov» til å være casing.
+Det finnes ingen navnebaserte materialunntak i qualification-logikken. Et nytt materiale som senere legges inn i `IndustrialMaterials.ALL`, blir automatisk evaluert mot de samme casing-definisjonene.
 
-Denne fasen bygger bare generatoren og casing-systemet for materialer som finnes. **Generated alloys, compounds og polymers kommer senere** og skal da kunne gå gjennom samme casing-generator uten spesialkode.
+## 1. Ferdig content-generation-fundament
 
-## Gjeldende casing-status
+- [x] Material-, structure- og casing-definisjoner valideres av den felles validation-pipelinen.
+- [x] Validation kjøres både ved oppstart og før datagenerering.
+- [x] Ugyldige og dupliserte ID-er blir hard feil før registrering/output.
+- [x] `.existing(...)` hindrer generatoren i å registrere den samme materialformen på nytt.
+- [x] Existing/generated casing-kollisjoner kontrolleres mot materialblokker, ore-host-blokker, structure-blokker og tier-casings.
+- [x] Manglende source-texture for en casing eller structure-definition blir hard feil.
+- [x] Generatorresultater er stabile og deterministisk sortert.
+- [x] Manglende varianttekstur fjerner ikke en ellers gyldig materialform; eksisterende variant-resolusjon beholder fallback-reglene sine.
 
-Kjernen for material-derived casings finnes nå i `CasingDefinition`, `MaterialCasingRecipes`, `MaterialCasingGenerator` og `MaterialCasingAssemblyRecipes`. Qualification bruker typed stats/requirements og Assembly-resolusjon; kvalifiserte variants konverteres til vanlige `AssemblyRecipeDefinition`-recipes. Manglende fysisk part kan gjøre at en materialvariant ikke genereres, mens ugyldig component-definition/cycle er hard feil.
+## 2. Dynamic ore hosts
 
-Den opprinnelige checklista under beholdes fordi den også beskriver content-generation, assets, future substances og hardening som fortsatt kan være relevant. En ukrysset gammel casing-linje betyr derfor ikke automatisk at funksjonen mangler i dagens kode. Se `code/casings/profile-definition.md` for faktisk current API.
+- [x] Registrerte stone-materialer oppdages dynamisk som mulige ore hosts.
+- [x] Normal og small ore genereres for alle kompatible hosts.
+- [x] Host appearance kommer fra stone-materialet, mens ore overlay/tint kommer fra ore-materialet.
+- [x] Dynamic hosts bruker stabile, avledede registry-ID-er.
+- [x] Dupliserte host/ore-ID-er og manglende host-assets stoppes av validation/generator checks.
 
-## 1. Structure/material regression
+Det finnes ingen per-ore hardkodet liste over stone-hosts. Nye kompatible stone-materialer kan derfor kobles inn uten endringer i hver ore-definition.
 
-- [ ] Kjør full `runData` + client regression etter større generatorendringer og verifiser stable IDs, models, blockstates, loot, lang og tags.
-- [ ] Legg automated validation rundt `.existing(...)` slik at eksisterende registry objects aldri får generated duplikater.
-- [ ] Legg automated validation for generated model -> texture references og existing/generated collisions.
-- [ ] Behold regelen om at missing texture ikke skal fjerne en ellers gyldig registry form.
-- [ ] Behold dynamic variant discovery der variant-mapper brukes.
-- [ ] Sørg for at generatorresultatet er deterministisk mellom identiske `runData`-kjøringer.
+## 3. Typed casing-definition
 
-## 2. Ores
+`CasingDefinition` beskriver hva en casing-type trenger:
 
-- [ ] Koble registrerte `StoneMaterial` dynamisk til ore-host generator.
-- [ ] Generer normal + small ore for hver gyldig host uten per-material hardkodet hostliste.
-- [ ] Host-texture skal komme fra stone-materialets genererte block/family, mens ore overlay/tint kommer fra ore-materialet.
-- [ ] Validation skal oppdage duplicate host/ore IDs og manglende generated assets før output skrives.
+- stabil ID og display name
+- start-tier
+- texture
+- base block-form
+- typed material requirements
+- assembly inputs, components og tools
 
-## 3. Material-derived casing definitions
+Requirements bruker Phase 03-systemet og kan uttrykke `atLeast`, `atMost`, `exactly`, ranges og typed enum/bool-krav der capability-typen tillater det.
 
-Casing-typen beskriver **hva en casing krever**. Materialet bestemmer om en variant faktisk kan eksistere.
+`MaterialCasingGenerator` evaluerer alle casing-definisjoner mot alle materialer. En variant genereres bare når:
 
-Konseptuelt:
+- materialet er på eller over casingens start-tier
+- alle typed material requirements er oppfylt
+- nødvendig base block-form finnes
+- alle material-, component- og tool-inputs kan løses
+
+Ett materiale kan kvalifisere til flere casing-typer. Qualification bruker ikke materialnavn, symbolske spesialregler eller en håndskrevet tillatelsesliste.
+
+## 4. Permanent casing-katalog
+
+Phase 04 har én permanent, generell startprofil:
+
+- `machine_casing`
+
+Dette er ikke en testprofil. Den er den generelle strukturelle material-casingen og krever tilstrekkelig structural strength, frame som base og plate-inputs i assembly.
+
+Spesialiserte casings for varme, kjemi, trykk eller bestemte multiblocks skal legges til av fasen som eier det gameplay-systemet. De skal bruke samme `CasingDefinition`-API og trenger ikke endringer i generatoren.
+
+## 5. Stabil identity og naming
+
+Generated casing identity er fast:
 
 ```text
-CasingDefinition
-├─ stable casing ID/name
-├─ typed material requirements
-├─ texture/model template
-├─ optional gameplay metadata
-└─ generated variants
-    ├─ Material A -> kvalifiserer -> casing genereres
-    ├─ Material B -> feiler requirement -> ingen casing
-    └─ Material C -> kvalifiserer -> casing genereres
+registry ID: <material_id>_<casing_definition_id>
+display name: <Material Name> <Casing Name>
 ```
 
-- [ ] Definer typed casing-definition/profile API som bruker `Stats`/typed requirements fra Phase 03.
-- [ ] En casing-definition skal kunne kreve flere stats samtidig med `atLeast`, `atMost`, `exactly`, ranges og typed enum/bool requirements der det gir mening.
-- [ ] Et materiale får **bare** en casing-variant dersom alle requirements for casing-typen er oppfylt.
-- [ ] Ett materiale kan kvalifisere til flere forskjellige casing-typer dersom statsene tillater det.
-- [ ] Ikke bruk navn, tier-spesifikke materiallister eller `if (material == ...)` som permanent qualification-logikk.
-- [ ] Exact casing-profiler og thresholds bestemmes i neste designrunde; generatoren skal ikke låses til en bestemt liste før dette er bestemt.
-- [ ] Ingen pressure-condition/profile legges inn som prosesskrav. Materialets eksisterende materialstats kan fortsatt eksistere som materialdata uten å bli et machine/recipe pressure-system.
+- [x] Definisjoner og materialer sorteres etter ID før qualification.
+- [x] Samme definitionsdata gir samme ordnede resultat.
+- [x] Dupliserte generated IDs blir hard feil.
+- [x] Display name valideres mot materialnavn + casing-navn.
+- [x] Hver casing-definition må generere minst én gyldig variant.
 
-## 4. Generated casing identity og naming
+## 6. Komplett generated casing-content
 
-Hver generated casing skal kombinere casing-identiteten og material-identiteten på en stabil måte.
+For hver kvalifiserte variant genereres hele content-settet:
 
-Eksempelretning:
+- [x] block registration
+- [x] block item registration
+- [x] block model
+- [x] blockstate
+- [x] item model
+- [x] casing texture/template med material-tint
+- [x] lang/display name
+- [x] loot table
+- [x] assembly recipe
+- [x] mining tool/tier tags
+- [x] common block/item casing tags
+- [x] per-definition tags
+- [x] per-material tags
+
+Følgende nye tag-familier er en del av kontrakten:
 
 ```text
-<Casing Name> + <Material Name>
+c:casings
+c:machine_casings
+industron:material_machine_casings
+industron:material_machine_casings/<casing_definition_id>
+industron:material_machine_casings/material/<material_id>
 ```
 
-- [ ] Stable registry ID skal avledes deterministisk fra `casingDefinition + materialId`.
-- [ ] Display name skal alltid inneholde både casing-navnet og material-navnet.
-- [ ] Exact rekkefølge/format for display name og registry ID avgjøres når casing-profilene diskuteres ferdig.
-- [ ] Ingen kollisjon mellom to casing-typer for samme materiale eller samme casing-type for to materialer.
+Block- og item-tags genereres fra den samme `MaterialCasingGenerator.ALL`-listen som registreringen. Manglende registry holder blir hard feil under datagenerering i stedet for stille manglende innhold.
 
-## 5. Generated casing content
+## 7. Casing-validator
 
-Når et materiale kvalifiserer skal generatoren kunne lage hele content-settet som trengs:
+`MaterialCasingDefinitionValidator` er den egne validatoren for casing-definisjoner og generated casing-content. Den kontrollerer:
 
-- [ ] Block registration.
-- [ ] Item/block item.
-- [ ] Model.
-- [ ] Blockstate.
-- [ ] Texture/template + material appearance/tint etter eksisterende material-generatorregler.
-- [ ] Lang/display name.
-- [ ] Loot.
-- [ ] Relevante block/item tags.
-- [ ] Validation for missing template/model/texture references.
-- [ ] Existing/generated collision protection.
+- gyldig og unik definition-ID
+- unik og ikke-tom display name
+- gyldig electric start-tier
+- ikke-tomme typed requirements og assembly inputs
+- at casing-level requirements ikke bruker part-spesifikke practical stats
+- at base input er en block-form
+- at source-texture faktisk finnes
+- at generatoren gir samme resultat ved identiske kjøringer
+- korrekt avledet registry ID og display name
+- dupliserte generated casing-ID-er
+- kollisjon med andre generated block-familier
+- at kvalifisert materiale faktisk har baseformen
+- at hver registrerte casing-definition gir minst én variant
 
-Recipes for generated material-content skal **ikke** spres i casing-generatoren. `material/recipes/` er reservert for de senere automatiske recipe-generatorene for blant annet `StoneMaterial`, `WoodMaterial` og raw ore-source-materialer i den aktive integrasjonen; andre familier er senere scope.
+Feil rapporteres under `ValidationSubsystem.CASING` og stopper registrering/datagen gjennom den eksisterende validation-pipelinen.
 
-## 6. Fremtidig generated substance support
+## 8. Future material support
 
-Denne fasen skal gjøre casing-generatoren substance-agnostic nok til at senere materialer kan kobles inn uten ny casing-spesialkode.
+- [x] Alle dagens `IndustrialMaterials.ALL` evalueres automatisk.
+- [x] Generatoren mottar typed materialdata og er ikke knyttet til elementnavn.
+- [x] Nye alloys, compounds eller polymers kan bruke samme vei når de senere blir representert som `IndustrialMaterial` med forms og derived stats.
+- [x] Et framtidig substance får ikke casing bare fordi det finnes; alle requirements må fortsatt bestås.
+- [x] Nye casing-profiler kan legges til katalogen uten ny registry-, model-, loot-, lang-, tag- eller recipe-kode.
 
-- [ ] Dagens registrerte materialer kan evalueres umiddelbart.
-- [ ] Når generated alloys kommer i Phase 09 skal de automatisk kunne evalueres mot de samme casing-definisjonene.
-- [ ] Når compounds/polymers senere får material-form/content support skal de bare få casing-varianter dersom deres derived stats faktisk oppfyller kravene.
-- [ ] Ikke generer casing-varianter bare fordi et substance finnes; qualification er alltid requirement-basert.
+## 9. Bevisst utenfor Phase 04
 
-## Ikke i Phase 04
+Følgende er ikke uferdige Phase 04-punkter:
 
-Følgende utsettes bevisst:
+- generated alloy definitions og alloy chemistry
+- molecular/compound generation
+- polymer chemistry
+- automatic chemistry og composite-dust separation
+- Foundry-runtime, varme molds og alloy-mixtures
+- heater- og processing-multiblocks
+- tree/sapling growth
 
-- Generated alloy definitions og alloy chemistry.
-- Molecular/compound generation.
-- Polymer chemistry.
-- Automatic chemistry recipes.
-- Foundry runtime og heater-multiblocks; de er spesifisert i Phase 07 etter recipe/process-fundamentet.
-- `TreeDefinition` og faktisk sapling/tree-growth.
+Disse systemene skal gjenbruke fundamentet fra Phase 04, men eies av senere faser.
 
-## Ferdig når
+## 10. Ferdigkriterier
 
-Phase 04 er ferdig når:
+- [x] Existing content-generation har validation rundt IDs og source-assets.
+- [x] Ores bruker registrerte stone hosts dynamisk.
+- [x] Typed casing-definitions uttrykker materialkrav gjennom Phase 03 capabilities/requirements.
+- [x] Alle registrerte materialer testes automatisk mot alle casing-definisjoner.
+- [x] Kun kvalifiserte materialer får generated casing-content.
+- [x] Generated identity, rekkefølge og assets er stabile og deterministiske.
+- [x] Registrering, models, blockstates, item models, lang, loot, tags og assembly recipes bruker samme generated casing-liste.
+- [x] Missing references og ID-kollisjoner stoppes før ugyldig output kan brukes.
+- [x] Senere materialfamilier kan kobles inn uten per-material casing-kode.
 
-- [ ] Existing content generation har regression/validation rundt IDs og assets.
-- [ ] Ores kan bruke registrerte stone hosts dynamisk.
-- [ ] En typed casing-definition kan uttrykke materialkrav gjennom Phase 03 `Stats`/requirements.
-- [ ] Alle registrerte materialer kan testes automatisk mot alle casing-definisjoner.
-- [ ] Kun qualifying materials får generated casing blocks/items/assets.
-- [ ] Generated casing identity og assets er stabile og deterministiske.
-- [ ] Senere alloys/compounds kan kobles inn i samme qualification/generation path uten per-material casing-kode.
+**Status: FERDIG.**

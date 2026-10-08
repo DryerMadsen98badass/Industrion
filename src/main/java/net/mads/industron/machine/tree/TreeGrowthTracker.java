@@ -1,6 +1,8 @@
 package net.mads.industron.machine.tree;
 
 import net.mads.industron.Industron;
+import net.mads.industron.material.structure.WoodMaterial;
+import net.mads.industron.worldgen.FallenStickSurfaceFeature;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -8,6 +10,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.level.BlockEvent;
@@ -32,8 +35,16 @@ public final class TreeGrowthTracker {
     private static final int MAX_TREE_LOGS = 1024;
     private static final int MAX_HORIZONTAL_DISTANCE = 24;
     private static final int MAX_VERTICAL_DISTANCE = 64;
+    private static final int GROWN_TREE_STICK_RADIUS = 5;
+    private static final int GROWN_TREE_STICK_PLACEMENT_ATTEMPTS = 12;
 
-    private static final Map<ServerLevel, Map<BlockPos, Integer>> PENDING_GROWTHS =
+    private record PendingGrowth(int ticksRemaining, WoodMaterial expectedWood) {
+    }
+
+    private record ReadyGrowth(BlockPos pos, WoodMaterial expectedWood) {
+    }
+
+    private static final Map<ServerLevel, Map<BlockPos, PendingGrowth>> PENDING_GROWTHS =
             new IdentityHashMap<>();
 
     private TreeGrowthTracker() {
@@ -45,11 +56,15 @@ public final class TreeGrowthTracker {
             return;
         }
 
+        WoodMaterial expectedWood = FallenStickSurfaceFeature.materialForGrowthSourceBlock(
+                level.getBlockState(event.getPos()).getBlock()
+        );
+
         PENDING_GROWTHS
                 .computeIfAbsent(level, ignored -> new HashMap<>())
                 .put(
                         event.getPos().immutable(),
-                        GROWTH_SCAN_DELAY_TICKS
+                        new PendingGrowth(GROWTH_SCAN_DELAY_TICKS, expectedWood)
                 );
     }
 
@@ -59,22 +74,23 @@ public final class TreeGrowthTracker {
             return;
         }
 
-        Map<BlockPos, Integer> pending = PENDING_GROWTHS.get(level);
+        Map<BlockPos, PendingGrowth> pending = PENDING_GROWTHS.get(level);
 
         if (pending == null || pending.isEmpty()) {
             return;
         }
 
-        List<BlockPos> ready = new ArrayList<>();
-        Map<BlockPos, Integer> updated = new HashMap<>();
+        List<ReadyGrowth> ready = new ArrayList<>();
+        Map<BlockPos, PendingGrowth> updated = new HashMap<>();
 
-        for (Map.Entry<BlockPos, Integer> entry : pending.entrySet()) {
-            int ticksRemaining = entry.getValue() - 1;
+        for (Map.Entry<BlockPos, PendingGrowth> entry : pending.entrySet()) {
+            PendingGrowth growth = entry.getValue();
+            int ticksRemaining = growth.ticksRemaining() - 1;
 
             if (ticksRemaining <= 0) {
-                ready.add(entry.getKey());
+                ready.add(new ReadyGrowth(entry.getKey(), growth.expectedWood()));
             } else {
-                updated.put(entry.getKey(), ticksRemaining);
+                updated.put(entry.getKey(), new PendingGrowth(ticksRemaining, growth.expectedWood()));
             }
         }
 
@@ -84,8 +100,8 @@ public final class TreeGrowthTracker {
             PENDING_GROWTHS.put(level, updated);
         }
 
-        for (BlockPos growthPos : ready) {
-            registerGrownTree(level, growthPos);
+        for (ReadyGrowth growth : ready) {
+            registerGrownTree(level, growth.pos(), growth.expectedWood());
         }
     }
 
@@ -106,9 +122,10 @@ public final class TreeGrowthTracker {
 
     private static void registerGrownTree(
             ServerLevel level,
-            BlockPos growthPos
+            BlockPos growthPos,
+            WoodMaterial expectedWood
     ) {
-        BlockPos seedLog = findSeedLog(level, growthPos);
+        BlockPos seedLog = findSeedLog(level, growthPos, expectedWood);
 
         if (seedLog == null) {
             return;
@@ -145,11 +162,75 @@ public final class TreeGrowthTracker {
                 logs.size(),
                 roots
         );
+
+        WoodMaterial wood = expectedWood != null
+                ? expectedWood
+                : resolveWoodFromLogs(level, logs);
+        if (wood == null) {
+            wood = FallenStickSurfaceFeature.materialForTreeBlock(rootState.getBlock());
+        }
+        if (wood != null) {
+            scatterSticksAfterGrowth(level, growthPos, logs.size(), wood);
+        }
+    }
+
+    /**
+     * A newly-grown tree can leave a few small branches on the ground beneath/around it.
+     * Bigger trees get more independent chances, but this remains a bonus source rather than
+     * guaranteeing sticks from every sapling.
+     */
+    private static void scatterSticksAfterGrowth(
+            ServerLevel level,
+            BlockPos growthPos,
+            int logCount,
+            WoodMaterial wood
+    ) {
+        int rolls = Math.max(1, Math.min(4, 1 + logCount / 12));
+        for (int roll = 0; roll < rolls; roll++) {
+            if (level.random.nextFloat() >= 0.45F) continue;
+
+            for (int attempt = 0; attempt < GROWN_TREE_STICK_PLACEMENT_ATTEMPTS; attempt++) {
+                int dx = level.random.nextInt(GROWN_TREE_STICK_RADIUS * 2 + 1) - GROWN_TREE_STICK_RADIUS;
+                int dz = level.random.nextInt(GROWN_TREE_STICK_RADIUS * 2 + 1) - GROWN_TREE_STICK_RADIUS;
+                if (dx * dx + dz * dz > GROWN_TREE_STICK_RADIUS * GROWN_TREE_STICK_RADIUS) continue;
+
+                int x = growthPos.getX() + dx;
+                int z = growthPos.getZ() + dz;
+                int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
+                BlockPos candidate = new BlockPos(x, y, z);
+                if (FallenStickSurfaceFeature.placeFallenStick(level, candidate, wood, level.random)) {
+                    break;
+                }
+            }
+        }
+    }
+
+    private static WoodMaterial resolveWoodFromLogs(ServerLevel level, Set<BlockPos> logs) {
+        Map<WoodMaterial, Integer> counts = new HashMap<>();
+        for (BlockPos logPos : logs) {
+            WoodMaterial wood = FallenStickSurfaceFeature.materialForTreeBlock(
+                    level.getBlockState(logPos).getBlock()
+            );
+            if (wood != null) {
+                counts.merge(wood, 1, Integer::sum);
+            }
+        }
+
+        WoodMaterial best = null;
+        int bestCount = 0;
+        for (Map.Entry<WoodMaterial, Integer> entry : counts.entrySet()) {
+            if (entry.getValue() > bestCount) {
+                best = entry.getKey();
+                bestCount = entry.getValue();
+            }
+        }
+        return best;
     }
 
     private static BlockPos findSeedLog(
             ServerLevel level,
-            BlockPos growthPos
+            BlockPos growthPos,
+            WoodMaterial expectedWood
     ) {
         BlockPos bestPos = null;
         int bestDistance = Integer.MAX_VALUE;
@@ -163,7 +244,12 @@ public final class TreeGrowthTracker {
                             zOffset
                     );
 
-                    if (!level.getBlockState(candidate).is(BlockTags.LOGS)) {
+                    BlockState candidateState = level.getBlockState(candidate);
+                    if (!candidateState.is(BlockTags.LOGS)) {
+                        continue;
+                    }
+                    if (expectedWood != null
+                            && FallenStickSurfaceFeature.materialForTreeBlock(candidateState.getBlock()) != expectedWood) {
                         continue;
                     }
 

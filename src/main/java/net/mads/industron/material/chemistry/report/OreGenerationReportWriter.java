@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 /** Dedicated runData output for geology, source coverage and ore processing. */
 public final class OreGenerationReportWriter {
@@ -29,8 +30,8 @@ public final class OreGenerationReportWriter {
             List<OreSourceAnalysis> sources,
             List<ProcessPlan> plans
     ) throws IOException {
-        Files.createDirectories(root.resolve("materials"));
-        Files.createDirectories(root.resolve("deposits"));
+        resetGeneratedDirectory(root.resolve("materials"));
+        resetGeneratedDirectory(root.resolve("deposits"));
 
         writeSummary(root.resolve("summary.txt"), minerals, deposits, sources, plans);
         writeMinerals(root.resolve("minerals.txt"), minerals);
@@ -50,6 +51,15 @@ public final class OreGenerationReportWriter {
         }
         for (DepositDefinition deposit : deposits) {
             writeDeposit(root.resolve("deposits").resolve(deposit.id() + ".txt"), deposit);
+        }
+    }
+
+    private static void resetGeneratedDirectory(Path directory) throws IOException {
+        Files.createDirectories(directory);
+        try (var entries = Files.list(directory)) {
+            for (Path entry : entries.toList()) {
+                if (Files.isRegularFile(entry)) Files.deleteIfExists(entry);
+            }
         }
     }
 
@@ -297,18 +307,18 @@ public final class OreGenerationReportWriter {
         List<String> lines = new ArrayList<>();
         lines.add("INDUSTRON STONE GEOLOGY PROFILES");
         lines.add("");
-        lines.add("Stone .contains(...) amounts are independent centrifuge percentage points, not formula stoichiometry.");
+        lines.add("Stone .contains(...) amounts are relative selection weights, not formula stoichiometry.");
         lines.add("The explicit .dimension(...) is a hard geology/worldgen boundary for the stone host.");
         lines.add("");
         for (StoneMaterial stone : StoneMaterials.ALL) {
-            int totalChance = stone.components().stream().mapToInt(component -> component.amount()).sum();
+            int totalWeight = stone.components().stream().mapToInt(component -> component.amount()).sum();
             lines.add(stone.displayName() + " (" + stone.id() + ")");
             lines.add("  dimension=" + stone.dimension());
             lines.add("  strongestTraceTier=" + MaterialTierResolver.strongestComponentTier(stone).displayName());
             lines.add("  formula=" + stone.formula(false));
-            lines.add("  traceOutputs=" + stone.components().size() + " totalChance=" + totalChance + "%");
+            lines.add("  traceOutputs=" + stone.components().size() + " totalWeight=" + totalWeight);
             stone.components().forEach(component -> lines.add(
-                    "    " + component.amount() + "% -> " + component.substance().displayName()
+                    "    weight=" + component.amount() + " -> " + component.substance().displayName()
                             + " [" + component.substance().id() + "] formula=" + component.substance().formula()
             ));
             lines.add("");
@@ -331,6 +341,39 @@ public final class OreGenerationReportWriter {
                 lines.add(material.id() + ": OreMaterials definition has no compatible StoneMaterial host from StoneMaterial .contains(...); worldgen is blocked until a fitting stone exists.");
             }
         }
+
+        List<OreSourceAnalysis> suggestions = sources.stream()
+                .filter(source -> source.status() == OreSourceAnalysis.Status.MISSING_ORE_MINERAL)
+                .filter(source -> !source.suggestedCompanionId().isBlank())
+                .toList();
+        if (!suggestions.isEmpty()) {
+            Map<String, Long> companionCounts = suggestions.stream().collect(java.util.stream.Collectors.groupingBy(
+                    OreSourceAnalysis::suggestedCompanionId, java.util.stream.Collectors.counting()
+            ));
+            companionCounts.entrySet().stream().max(Map.Entry.comparingByValue()).ifPresent(entry -> {
+                double share = entry.getValue() / (double) suggestions.size();
+                if (share >= 0.35D) {
+                    lines.add("COMPANION_BIAS: " + entry.getKey() + " is suggested for " + entry.getValue()
+                            + "/" + suggestions.size() + " missing ores (" + Math.round(share * 100.0D)
+                            + "%). Review companion scoring before defining OreMaterials.");
+                }
+            });
+
+            Map<net.mads.industron.material.chemistry.geology.DepositGeometry, Long> geometryCounts = suggestions.stream()
+                    .filter(source -> source.suggestedGeology() != null)
+                    .collect(java.util.stream.Collectors.groupingBy(
+                            source -> source.suggestedGeology().geometry(), java.util.stream.Collectors.counting()
+                    ));
+            geometryCounts.entrySet().stream().max(Map.Entry.comparingByValue()).ifPresent(entry -> {
+                double share = entry.getValue() / (double) suggestions.size();
+                if (share >= 0.70D) {
+                    lines.add("GEOMETRY_BIAS: " + entry.getKey() + " is projected for " + entry.getValue()
+                            + "/" + suggestions.size() + " missing ores (" + Math.round(share * 100.0D)
+                            + "%). Review normalized geology thresholds before defining OreMaterials.");
+                }
+            });
+        }
+
         if (deposits.isEmpty()) lines.add("No dedicated deposit definitions were generated.");
         Files.write(path, lines, StandardCharsets.UTF_8);
     }

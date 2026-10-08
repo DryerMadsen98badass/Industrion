@@ -22,8 +22,8 @@ Generated recipe IDs må være stabile mellom oppstarter. ID skal bygges fra req
 
 Hvordan duration beregnes er åpent. Foretrukket retning er en formel basert på process family, reaction complexity, temperature/pressure og tier. Energy rate skal fortsatt komme kun fra tier-profilen.
 
-## Current material-autorecipe integration
+## Current implementation
 
-For the current implementation, generated composition processing is scoped to StoneMaterial, WoodMaterial and raw ore-source materials. See `material-autorecipes.md`.
+`ChemistryBootstrap -> ProcessPlanner -> ProcessSafetyValidator -> AutomaticChemistryRecipes -> ReflectiveRecipeEmitter` is the active generated chemistry pipeline. Registered composite materials with `DUST` can receive post-dust processing; mechanical ore preprocessing is separately emitted by `OreProcessingRecipes` and ends at that dust boundary.
 
-The feed boundary is DUST for stone/raw ore-source and WOOD_PULP for wood. Ore-to-dust processing is deliberately later. Recipe tier is one tier below the resolved source tier, clamped at ULV. Process choice must be topology/property/phase driven and must respect actual RecipeType IO limits.
+Process choice is topology/property/phase driven. Generic elemental `DUST -> INGOT` is deliberately absent. Automatic liquid intermediates are registered as slurry, solution or reaction mixture when the plan needs them. Before Foundry supports reversible dynamic mixtures, the graph validator must evolve beyond its current conservative rule that rejects every directed cycle.

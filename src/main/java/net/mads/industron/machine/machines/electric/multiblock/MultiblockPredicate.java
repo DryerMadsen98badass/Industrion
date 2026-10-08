@@ -42,6 +42,11 @@ public interface MultiblockPredicate {
         return net.mads.industron.machine.machines.electric.multiblock.MultiblockPredicates.overlay(this, model);
     }
 
+    /** Uses a dynamic model resolved from the formed multiblock, for example {@code model(casing())}. */
+    default MultiblockPredicate model(MultiblockModelSource source) {
+        return net.mads.industron.machine.machines.electric.multiblock.MultiblockPredicates.model(this, source);
+    }
+
     default MultiblockPredicate min(int minimum) {
         return net.mads.industron.machine.machines.electric.multiblock.MultiblockPredicates.min(this, minimum);
     }
@@ -137,29 +142,40 @@ public interface MultiblockPredicate {
         }
     }
 
-    record Match(boolean matches, MachineTier tier, Set<MultiblockAbility> abilities, Map<String, Integer> counts, ResourceLocation overlayModel) {
+    record Match(
+            boolean matches,
+            MachineTier tier,
+            Set<MultiblockAbility> abilities,
+            Map<String, Integer> counts,
+            ResourceLocation overlayModel,
+            MultiblockModelSource modelSource
+    ) {
         public static Match failed() {
-            return new Match(false, null, Set.of(), Map.of(), null);
+            return new Match(false, null, Set.of(), Map.of(), null, null);
         }
 
         public static Match success() {
-            return new Match(true, null, Set.of(), Map.of(), null);
+            return new Match(true, null, Set.of(), Map.of(), null, null);
         }
 
         public static Match tiered(MachineTier tier) {
-            return new Match(true, tier, Set.of(), Map.of(), null);
+            return new Match(true, tier, Set.of(), Map.of(), null, null);
         }
 
         public static Match abilities(Set<MultiblockAbility> abilities, MachineTier tier) {
-            return new Match(true, tier, abilities, Map.of(), null);
+            return new Match(true, tier, abilities, Map.of(), null, null);
         }
 
         public static Match counted(MachineTier tier, Set<MultiblockAbility> abilities, String key) {
-            return new Match(true, tier, abilities, Map.of(key, 1), null);
+            return new Match(true, tier, abilities, Map.of(key, 1), null, null);
         }
 
         public Match withOverlay(ResourceLocation overlayModel) {
-            return matches ? new Match(true, tier, abilities, counts, overlayModel) : this;
+            return matches ? new Match(true, tier, abilities, counts, overlayModel, modelSource) : this;
+        }
+
+        public Match withModelSource(MultiblockModelSource source) {
+            return matches ? new Match(true, tier, abilities, counts, overlayModel, source) : this;
         }
     }
 }

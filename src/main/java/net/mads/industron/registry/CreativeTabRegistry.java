@@ -22,9 +22,25 @@ public final class CreativeTabRegistry {
                     .displayItems((parameters, output) -> {
                         output.accept(ItemRegistry.MACHINE_CONTROL_SCHEDULE.get());
                         output.accept(ItemRegistry.MULTIBLOCK_DEV_TOOL.get());
+                        output.accept(ItemRegistry.CREATIVE_GOGGLES.get());
+                        output.accept(ItemRegistry.CLIMATE_INSTRUMENT.get());
+                        output.accept(ItemRegistry.WOOL_HOOD.get());
+                        output.accept(ItemRegistry.WOOL_COAT.get());
+                        output.accept(ItemRegistry.WOOL_TROUSERS.get());
+                        output.accept(ItemRegistry.WOOL_BOOTS.get());
+
+                        net.mads.industron.machine.machines.kinetic.KineticMachines.items().forEach(item -> output.accept(item.get()));
                         output.accept(ItemRegistry.ASSEMBLY_WORKBENCH.get());
+                        output.accept(ItemRegistry.INDUSTRIAL_ASSEMBLY_WORKBENCH.get());
+                        ItemRegistry.getAllFoundryPartItems().forEach(item -> output.accept(item.get()));
+                        net.mads.industron.machine.foundry.CastingRegistry.BLOCK_ITEMS.forEach(item -> output.accept(item.get()));
+                        net.mads.industron.machine.foundry.CastingRegistry.MOLDS.values()
+                                .forEach(item -> output.accept(item.get()));
+                        net.mads.industron.machine.foundry.CastingRegistry.moldStageItems()
+                                .forEach(item -> output.accept(item.get()));
                         ItemRegistry.getAllMultiblockControllerItems().forEach(item -> output.accept(item.get()));
                         ItemRegistry.getAllSingleBlockMachineItems().forEach(item -> output.accept(item.get()));
+                        ItemRegistry.getAllCoilItems().forEach(item -> output.accept(item.get()));
                         ItemRegistry.getAllMachineCasingItems().forEach(item -> output.accept(item.get()));
                         ItemRegistry.getAllEnergyWireItems().forEach(item -> output.accept(item.get()));
                         ItemRegistry.getAllInsulatedEnergyWireItems().forEach(item -> output.accept(item.get()));
@@ -33,6 +49,9 @@ public final class CreativeTabRegistry {
                         FluidTransportRegistrations.allItems().forEach(registration -> registration.visibleItems().forEach(item -> output.accept(item.get())));
                         ColoredFluidPipeRegistrations.allItems().forEach(registration -> output.accept(registration.pipe().get()));
                         ItemRegistry.getAllSimpleItems().forEach(item -> output.accept(item.get()));
+                        // Finished composed tools now have valid canonical default components, so
+                        // they can be exposed as normal items outside the Assembly Workbench too.
+                        ItemRegistry.getAllComposedTools().forEach(item -> output.accept(item.get()));
                         ItemRegistry.getAllSimpleBlockItems().forEach(item -> output.accept(item.get()));
                         ItemRegistry.getAllSimpleBlockVariantItems().forEach(item -> output.accept(item.get()));
                         ItemRegistry.getAllMachinePortItems().forEach(item -> output.accept(item.get()));
@@ -41,6 +60,10 @@ public final class CreativeTabRegistry {
                         ItemRegistry.getAllMaterialStoneItems().forEach(item -> output.accept(item.get()));
                         ItemRegistry.getAllStructureMaterialBlockItems().forEach(item -> output.accept(item.get()));
                         ItemRegistry.getAllStructureMaterialFormItems().forEach(item -> output.accept(item.get()));
+                        ItemRegistry.ORGANISM_ITEMS.values().forEach(item -> output.accept(item.get()));
+                        ItemRegistry.BIOLOGICAL_ITEMS.values().forEach(item -> output.accept(item.get()));
+                        ItemRegistry.getAllPlantMaterialItems().forEach(item -> output.accept(item.get()));
+                        ItemRegistry.getAllPlantProcessIntermediateItems().forEach(item -> output.accept(item.get()));
                         FluidRegistry.getAllBucketItems().forEach(item -> output.accept(item.get()));
                     })
                     .build()

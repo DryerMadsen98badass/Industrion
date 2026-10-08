@@ -4,6 +4,8 @@ import net.mads.industron.material.MaterialLookup;
 import net.mads.industron.material.IndustrialMaterial;
 import net.mads.industron.material.MaterialPart;
 import net.mads.industron.material.MaterialProperties;
+import net.mads.industron.machine.MachineTier;
+import net.mads.industron.machine.MachineTierStats;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 
@@ -46,7 +48,23 @@ public record AssemblyRequirement(
     }
 
     public boolean matches(ItemStack stack) {
+        // Tier requirements also apply directly to finished Assembly tools. This lets recipes use
+        // .tool(...).tier(MachineTier.ULV) without exposing the numeric tier multiplier.
+        if (kind != Kind.IS && capability == AssemblyCapability.TIER_MULTIPLIER) {
+            ToolVariantDefinition tool = AssemblyTools.findAny(stack);
+            if (tool != null) {
+                double value = MachineTierStats.tierIndex(tool.tier().recipeTier()) + 1;
+                return matchesScalar(value);
+            }
+        }
+
         MaterialLookup.MaterialTarget target = MaterialLookup.find(stack);
+        if (target == null) {
+            AssemblyMaterialCatalog.Target assemblyTarget = AssemblyMaterialCatalog.find(stack);
+            if (assemblyTarget != null && assemblyTarget.material() instanceof IndustrialMaterial industrial) {
+                target = new MaterialLookup.MaterialTarget(industrial, assemblyTarget.part());
+            }
+        }
         if (target == null) return false;
         MaterialProperties properties = target.material().properties();
 
@@ -60,13 +78,7 @@ public record AssemblyRequirement(
             var resolved = PracticalCapabilityResolver.resolveScalar(capability, target);
             if (resolved.isEmpty()) return false;
             double value = resolved.getAsDouble();
-            return switch (kind) {
-                case AT_LEAST -> value >= first;
-                case AT_MOST -> value <= first;
-                case EXACT -> Double.compare(value, first) == 0;
-                case RANGE -> value >= first && value <= second;
-                case IS -> false;
-            };
+            return matchesScalar(value);
         }
 
         return matches(properties);
@@ -74,7 +86,7 @@ public record AssemblyRequirement(
 
     /** Matches a concrete material form without requiring an already-created ItemStack. */
     public boolean matches(IndustrialMaterial material, MaterialPart part) {
-        if (material == null || part == null || !material.has(part)) return false;
+        if (material == null || part == null || !AssemblyMaterialCatalog.exposesPart(material, part)) return false;
 
         if (kind == Kind.IS) {
             return property != null && property.matches(material.properties(), expected);
@@ -88,13 +100,7 @@ public record AssemblyRequirement(
             );
             if (resolved.isEmpty()) return false;
             double value = resolved.getAsDouble();
-            return switch (kind) {
-                case AT_LEAST -> value >= first;
-                case AT_MOST -> value <= first;
-                case EXACT -> Double.compare(value, first) == 0;
-                case RANGE -> value >= first && value <= second;
-                case IS -> false;
-            };
+            return matchesScalar(value);
         }
 
         return matches(material.properties());
@@ -122,9 +128,26 @@ public record AssemblyRequirement(
         };
     }
 
+    private boolean matchesScalar(double value) {
+        return switch (kind) {
+            case AT_LEAST -> value >= first;
+            case AT_MOST -> value <= first;
+            case EXACT -> Double.compare(value, first) == 0;
+            case RANGE -> value >= first && value <= second;
+            case IS -> false;
+        };
+    }
+
     public Component tooltip() {
         if (kind == Kind.IS) {
             return Component.literal(property.displayName() + ": " + formatExpected(expected));
+        }
+        if (capability == AssemblyCapability.TIER_MULTIPLIER && kind == Kind.EXACT
+                && first == Math.rint(first)) {
+            int index = (int) first - 1;
+            if (index >= 0 && index < MachineTier.ALL.size()) {
+                return Component.literal("Tier: " + MachineTier.ALL.get(index).displayName());
+            }
         }
 
         String firstText = format(first);

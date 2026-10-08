@@ -2,6 +2,7 @@ package net.mads.industron.menu;
 
 import net.mads.industron.machine.runtime.CERecipeLogic;
 import net.mads.industron.machine.runtime.CERecipeLogicMachine;
+import net.mads.industron.machine.machines.electric.multiblock.MultiblockControllerBlockEntity;
 import net.mads.industron.machine.control.MachineControlTarget;
 import net.minecraft.world.inventory.ContainerData;
 
@@ -34,10 +35,21 @@ public final class CERecipeMenuData implements ContainerData {
             case PROGRESS -> logic.progress();
             case DURATION -> logic.duration();
             case PARALLEL -> logic.parallel();
-            case RESOURCE_PER_TICK -> isMachineEnabled() ? logic.resourcePerTick() : 0;
+            case RESOURCE_PER_TICK -> isMachineEnabled() ? displayResourcePerTick(logic) : 0;
             case ENABLED -> isMachineEnabled() ? 1 : 0;
             default -> 0;
         };
+    }
+
+
+    private int displayResourcePerTick(CERecipeLogic logic) {
+        if (machine instanceof MultiblockControllerBlockEntity controller) {
+            long value = controller.displayResourcePerTick();
+            if (value > Integer.MAX_VALUE) return Integer.MAX_VALUE;
+            if (value < Integer.MIN_VALUE) return Integer.MIN_VALUE;
+            return (int) value;
+        }
+        return logic.resourcePerTick();
     }
 
     private boolean isMachineEnabled() {

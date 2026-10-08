@@ -4,6 +4,9 @@ import net.mads.industron.material.ElementDefinition;
 import net.mads.industron.material.IndustrialMaterial;
 import net.mads.industron.material.MaterialProperties;
 import net.mads.industron.material.MaterialPropertyCalculator;
+import net.mads.industron.material.CompoundMaterialPropertyCalculator;
+import net.mads.industron.material.structure.StructureMaterial;
+import net.mads.industron.material.structure.StructureMaterials;
 import net.mads.industron.machine.MachineTier;
 import net.mads.industron.material.chemistry.ChemistryPhase;
 import net.mads.industron.material.chemistry.CompositionEntry;
@@ -35,6 +38,11 @@ public final class IndustrialMaterialReflectionAdapter {
             for(Object material:iterable(all)){
                 MaterialSnapshot snapshot=adapt(material);result.put(snapshot.id(),snapshot);
             }
+            for (StructureMaterial material : StructureMaterials.ALL) {
+                if (result.containsKey(material.id())) continue;
+                MaterialSnapshot snapshot = adapt(material);
+                result.put(snapshot.id(), snapshot);
+            }
         }catch(ReflectiveOperationException e){throw new IllegalStateException("Cannot load IndustrialMaterials",e);}
         return result;
     }
@@ -43,6 +51,9 @@ public final class IndustrialMaterialReflectionAdapter {
         String id=string(call(material,"id","getId")).toLowerCase(Locale.ROOT);
         String name=string(callOr(material,id,"displayName","name","getDisplayName"));
         int color=integer(callOr(material,0x808080,"color","baseColor","rgb"));
+        MaterialProperties resolvedStructureProperties = material instanceof StructureMaterial structureMaterial
+                ? CompoundMaterialPropertyCalculator.propertiesFor(structureMaterial)
+                : null;
         int tier=0;String tierName="ULV";
         Object tierObj=callOr(material,null,"tier","machineTier");
         if(tierObj instanceof MachineTier machineTier){
@@ -52,6 +63,10 @@ public final class IndustrialMaterialReflectionAdapter {
         }else if(tierObj instanceof Enum<?> e){
             tier=e.ordinal();
             tierName=e.name();
+        } else if (resolvedStructureProperties != null) {
+            tier = Math.max(0, Math.min(MachineTier.ALL.size() - 1,
+                    resolvedStructureProperties.tierMultiplier() - 1));
+            tierName = MachineTier.ALL.get(tier).id().toUpperCase(Locale.ROOT);
         }
         List<CompositionEntry> components=new ArrayList<>();
         Object rawComponents=callOr(material,List.of(),"components","composition");
@@ -63,7 +78,9 @@ public final class IndustrialMaterialReflectionAdapter {
             ChemistryPhase phase=inferPhase(substance);
             components.add(new CompositionEntry(child,Math.max(1,amount),phase));
         }
-        Map<String,Double> props=extractProperties(callOr(material,null,"properties","materialProperties"));
+        Map<String,Double> props=extractProperties(resolvedStructureProperties != null
+                ? resolvedStructureProperties
+                : callOr(material,null,"properties","materialProperties"));
         Set<MaterialClassification> classes=EnumSet.noneOf(MaterialClassification.class);
         if(bool(callOr(material,false,"isMetal","metal")))classes.add(MaterialClassification.CONDUCTOR);
         ChemistryPhase phase=inferPhase(material);
@@ -90,6 +107,9 @@ public final class IndustrialMaterialReflectionAdapter {
         }
         if(material instanceof ElementDefinition element){
             return phaseFromProperties(MaterialPropertyCalculator.calculate(element));
+        }
+        if (material instanceof StructureMaterial structureMaterial) {
+            return phaseFromProperties(CompoundMaterialPropertyCalculator.propertiesFor(structureMaterial));
         }
 
         Object value=callOr(material,null,"phase","state","materialState");

@@ -9,6 +9,7 @@ import net.mads.industron.material.MaterialComponent;
 import net.mads.industron.material.IndustrialSubstance;
 import net.mads.industron.material.structure.StoneMaterial;
 import net.mads.industron.material.chemistry.CompositionEntry;
+import net.mads.industron.material.chemistry.ChemicalStructure;
 import net.mads.industron.material.chemistry.MaterialAnalysis;
 import net.mads.industron.material.chemistry.MaterialClassification;
 import net.minecraft.resources.ResourceLocation;
@@ -182,24 +183,37 @@ public final class GeologyPlanner {
     }
 
     private static DepositGeometry geometryFor(MaterialAnalysis analysis) {
-        double density = analysis.properties().get("density");
-        double stability = analysis.properties().get("chemicalstability");
+        // Several bulk properties scale with the material tier multiplier. Geometry must describe
+        // chemistry, not progression, so normalize those values before comparing thresholds.
+        double tierScale = Math.max(1.0D, analysis.properties().get("tiermultiplier"));
+        double density = analysis.properties().get("density") / tierScale;
+        double stability = analysis.properties().get("chemicalstability") / tierScale;
         double reactivity = analysis.properties().get("reactivity");
         double crystal = analysis.properties().get("crystalstability");
-        double magnetic = analysis.properties().get("magneticstrength");
+        double magnetic = analysis.properties().get("magneticstrength") / tierScale;
         double brittleness = analysis.properties().get("brittleness");
-        double pressure = analysis.properties().get("pressureresistance");
+        double pressure = analysis.properties().get("pressureresistance") / tierScale;
         double volatility = analysis.properties().get("volatility");
+        ChemicalStructure.Topology topology = analysis.source().structure()
+                .map(ChemicalStructure::topology)
+                .orElse(ChemicalStructure.Topology.UNKNOWN);
 
         if (analysis.classifications().contains(MaterialClassification.PHYSICAL_MIXTURE)) return DepositGeometry.DISSEMINATED;
-        if (analysis.classifications().contains(MaterialClassification.ALLOY) && density >= 58) return DepositGeometry.MAGMATIC;
-        if (magnetic >= 60 && crystal >= 50) return DepositGeometry.BANDED;
-        if (density >= 78 && stability >= 55) return DepositGeometry.MAGMATIC;
-        if (reactivity >= 62 && volatility >= 28) return DepositGeometry.HYDROTHERMAL;
-        if (crystal >= 72 && brittleness >= 55) return DepositGeometry.PEGMATITE_LIKE;
-        if (pressure >= 72 && reactivity >= 45) return DepositGeometry.SKARN_LIKE;
-        if (density >= 62 && analysis.source().composition().size() >= 3) return DepositGeometry.PORPHYRY;
-        if (stability >= 72 && density < 55) return DepositGeometry.LENS;
+        if (magnetic >= 62.0D && crystal >= 52.0D) return DepositGeometry.BANDED;
+        if (density >= 78.0D && stability >= 68.0D) return DepositGeometry.MAGMATIC;
+        if (reactivity >= 66.0D && volatility >= 18.0D) return DepositGeometry.HYDROTHERMAL;
+        if (crystal >= 74.0D && brittleness >= 56.0D) return DepositGeometry.PEGMATITE_LIKE;
+        if (topology == ChemicalStructure.Topology.IONIC_LATTICE
+                && pressure >= 86.0D && reactivity >= 52.0D) return DepositGeometry.SKARN_LIKE;
+        if (density >= 62.0D && analysis.source().composition().size() >= 3) return DepositGeometry.PORPHYRY;
+        if (stability >= 82.0D && density < 56.0D) return DepositGeometry.LENS;
+        if ((analysis.classifications().contains(MaterialClassification.ALLOY)
+                || topology == ChemicalStructure.Topology.METALLIC_LATTICE) && density >= 62.0D) {
+            return DepositGeometry.MAGMATIC;
+        }
+        if (topology == ChemicalStructure.Topology.IONIC_LATTICE && reactivity >= 72.0D) {
+            return DepositGeometry.HYDROTHERMAL;
+        }
         return DepositGeometry.VEIN;
     }
 

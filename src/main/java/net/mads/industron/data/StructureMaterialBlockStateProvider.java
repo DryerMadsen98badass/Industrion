@@ -1,9 +1,7 @@
 package net.mads.industron.data;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import net.mads.industron.Industron;
+import net.mads.industron.material.MaterialPart;
 import net.mads.industron.material.structure.StructureBlockDefinition;
 import net.mads.industron.material.structure.StructureMaterial;
 import net.mads.industron.material.structure.StoneMaterial;
@@ -11,43 +9,44 @@ import net.mads.industron.material.structure.MetalMaterial;
 import net.mads.industron.material.structure.StructureMaterialGenerator;
 import net.mads.industron.material.structure.StructureMaterials;
 import net.mads.industron.material.structure.StructureSetResolver;
+import net.mads.industron.material.structure.WoodMaterial;
 import net.mads.industron.registry.BlockRegistry;
 import net.minecraft.data.PackOutput;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.packs.PackType;
-import net.minecraft.server.packs.resources.Resource;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.block.BarrelBlock;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.ChiseledBookShelfBlock;
 import net.minecraft.world.level.block.ButtonBlock;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.FenceBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
+import net.minecraft.world.level.block.HorizontalDirectionalBlock;
+import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.PressurePlateBlock;
 import net.minecraft.world.level.block.RotatedPillarBlock;
 import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.WallBlock;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.neoforged.neoforge.client.model.generators.BlockStateProvider;
+import net.neoforged.neoforge.client.model.generators.ConfiguredModel;
 import net.neoforged.neoforge.client.model.generators.ModelFile;
 import net.neoforged.neoforge.client.model.generators.ModelProvider;
 import net.neoforged.neoforge.common.data.ExistingFileHelper;
 
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 /** Generates standard blockstates/models; specialized metal families use MetalStructureModelProvider. */
 public final class StructureMaterialBlockStateProvider extends BlockStateProvider {
     private final ExistingFileHelper existingFileHelper;
+    private final StoneTextureResolver stoneTextureResolver;
 
     public StructureMaterialBlockStateProvider(PackOutput output, ExistingFileHelper existingFileHelper) {
         super(output, Industron.MOD_ID, existingFileHelper);
         this.existingFileHelper = existingFileHelper;
+        this.stoneTextureResolver = new StoneTextureResolver(existingFileHelper);
     }
 
     @Override
@@ -95,7 +94,7 @@ public final class StructureMaterialBlockStateProvider extends BlockStateProvide
         String name = definition.registryName();
 
         switch (definition.shape()) {
-            case CUBE -> {
+            case CUBE, FALLING -> {
                 ModelFile model;
                 if (top.equals(side) && bottom.equals(side)) {
                     var builder = models().cubeAll(name, side);
@@ -179,9 +178,228 @@ public final class StructureMaterialBlockStateProvider extends BlockStateProvide
                 ModelFile model = models().cubeAll(name, side).renderType("cutout");
                 simpleBlockWithItem(block, model);
             }
-            case BARS, BRACKET, BULB, LADDER, SCAFFOLD, WINDOW_PANE ->
+            case BOOKSHELF -> registerBookshelf(definition, block, name, side);
+            case BARREL -> registerBarrel(definition, block, name, side, top, bottom);
+            case CHISELED_BOOKSHELF -> registerChiseledBookshelf(definition, block, name);
+            case CHEST -> registerChest(definition, block, name);
+            case LADDER -> registerWoodLadder(block, name, side);
+            case SHAFT -> registerShaftBlock(name, block, side, top);
+            case BARS, BRACKET, BULB, SCAFFOLD, WINDOW_PANE ->
                     throw new IllegalStateException("Metal model routed to the wood/stone provider: " + name);
         }
+    }
+
+    private void registerShaftBlock(
+            String name,
+            Block block,
+            ResourceLocation side,
+            ResourceLocation end
+    ) {
+        // The placed block is intentionally geometry-free. The visible shaft is the
+        // <name>_rotating partial model used by the kinetic renderer/Flywheel visual.
+        var staticModel = models()
+                .getBuilder(name)
+                .parent(new ModelFile.UncheckedModelFile(mcLoc("block/block")))
+                .texture("particle", side);
+
+        var rotatingModel = models()
+                .getBuilder(name + "_rotating")
+                .parent(new ModelFile.UncheckedModelFile(mcLoc("block/block")))
+                .texture("side", side)
+                .texture("end", end)
+                .texture("particle", side);
+
+        rotatingModel.element()
+                .from(6, 0, 6)
+                .to(10, 16, 10)
+                .allFaces((direction, face) -> {
+                    boolean cap = direction == Direction.UP || direction == Direction.DOWN;
+                    face.texture(cap ? "#end" : "#side");
+                    if (cap) {
+                        face.uvs(6, 6, 10, 10);
+                    } else {
+                        face.uvs(6, 0, 10, 16);
+                    }
+                });
+
+        getVariantBuilder(block).forAllStates(state -> ConfiguredModel.builder()
+                .modelFile(staticModel)
+                .build());
+
+        itemModels().getBuilder(name).parent(rotatingModel);
+    }
+
+    private void registerBookshelf(
+            StructureBlockDefinition definition,
+            Block block,
+            String name,
+            ResourceLocation bookshelfSide
+    ) {
+        WoodMaterial wood = requireWood(definition);
+        ResourceLocation planks = woodPartTexture(wood, MaterialPart.PLANKS);
+        ModelFile model = models().cubeColumn(name, bookshelfSide, planks);
+        simpleBlockWithItem(block, model);
+    }
+
+    private void registerBarrel(
+            StructureBlockDefinition definition,
+            Block block,
+            String name,
+            ResourceLocation side,
+            ResourceLocation top,
+            ResourceLocation bottom
+    ) {
+        ResourceLocation openTop = texture(definition, definition.requiredTexture("open_top"));
+        ModelFile closed = models().cubeBottomTop(name, side, bottom, top);
+        ModelFile open = models().cubeBottomTop(name + "_open", side, bottom, openTop);
+
+        getVariantBuilder(block).forAllStates(state -> {
+            Direction facing = state.getValue(BarrelBlock.FACING);
+            boolean isOpen = state.getValue(BarrelBlock.OPEN);
+            int rotationX;
+            int rotationY;
+            switch (facing) {
+                case DOWN -> { rotationX = 180; rotationY = 0; }
+                case UP -> { rotationX = 0; rotationY = 0; }
+                case NORTH -> { rotationX = 90; rotationY = 0; }
+                case SOUTH -> { rotationX = 90; rotationY = 180; }
+                case WEST -> { rotationX = 90; rotationY = 270; }
+                case EAST -> { rotationX = 90; rotationY = 90; }
+                default -> throw new IllegalStateException("Unexpected barrel facing " + facing);
+            }
+            return ConfiguredModel.builder()
+                    .modelFile(isOpen ? open : closed)
+                    .rotationX(rotationX)
+                    .rotationY(rotationY)
+                    .build();
+        });
+        simpleBlockItem(block, closed);
+    }
+
+    private void registerChiseledBookshelf(
+            StructureBlockDefinition definition,
+            Block block,
+            String name
+    ) {
+        ResourceLocation empty = texture(definition, definition.textureFile());
+        ResourceLocation occupied = texture(definition, definition.requiredTexture("occupied"));
+        ResourceLocation side = texture(definition, definition.requiredTexture("side"));
+        ResourceLocation top = definition.topTextureFile()
+                .map(file -> texture(definition, file))
+                .orElseThrow(() -> new IllegalStateException("Missing chiseled bookshelf top texture for " + name));
+
+        ModelFile body = models().withExistingParent(name, mcLoc("block/chiseled_bookshelf"))
+                .texture("top", top)
+                .texture("side", side)
+                .texture("particle", top);
+
+        String[] slotNames = {
+                "top_left", "top_mid", "top_right",
+                "bottom_left", "bottom_mid", "bottom_right"
+        };
+        ModelFile[] emptySlots = new ModelFile[6];
+        ModelFile[] occupiedSlots = new ModelFile[6];
+        for (int i = 0; i < slotNames.length; i++) {
+            String slot = slotNames[i];
+            emptySlots[i] = models()
+                    .withExistingParent(name + "_empty_slot_" + slot, mcLoc("block/template_chiseled_bookshelf_slot_" + slot))
+                    .texture("texture", empty);
+            occupiedSlots[i] = models()
+                    .withExistingParent(name + "_occupied_slot_" + slot, mcLoc("block/template_chiseled_bookshelf_slot_" + slot))
+                    .texture("texture", occupied);
+        }
+
+        for (Direction facing : Direction.Plane.HORIZONTAL) {
+            int rotationY = switch (facing) {
+                case NORTH -> 0;
+                case EAST -> 90;
+                case SOUTH -> 180;
+                case WEST -> 270;
+                default -> throw new IllegalStateException("Unexpected bookshelf facing " + facing);
+            };
+
+            getMultipartBuilder(block)
+                    .part().modelFile(body).rotationY(rotationY).uvLock(true).addModel()
+                    .condition(HorizontalDirectionalBlock.FACING, facing).end();
+
+            for (int i = 0; i < ChiseledBookShelfBlock.SLOT_OCCUPIED_PROPERTIES.size(); i++) {
+                var property = ChiseledBookShelfBlock.SLOT_OCCUPIED_PROPERTIES.get(i);
+                getMultipartBuilder(block)
+                        .part().modelFile(emptySlots[i]).rotationY(rotationY).addModel()
+                        .condition(HorizontalDirectionalBlock.FACING, facing)
+                        .condition(property, false).end();
+                getMultipartBuilder(block)
+                        .part().modelFile(occupiedSlots[i]).rotationY(rotationY).addModel()
+                        .condition(HorizontalDirectionalBlock.FACING, facing)
+                        .condition(property, true).end();
+            }
+        }
+
+        ModelFile inventory = models().withExistingParent(name + "_inventory", mcLoc("block/chiseled_bookshelf_inventory"))
+                .texture("top", top)
+                .texture("side", side)
+                .texture("front", empty)
+                .texture("particle", top);
+        simpleBlockItem(block, inventory);
+    }
+
+    private void registerChest(
+            StructureBlockDefinition definition,
+            Block block,
+            String name
+    ) {
+        WoodMaterial wood = requireWood(definition);
+        ResourceLocation planks = woodPartTexture(wood, MaterialPart.PLANKS);
+        ModelFile model = models().withExistingParent(name, mcLoc("block/chest"))
+                .texture("particle", planks);
+        simpleBlock(block, model);
+        // Inherit vanilla Chest's item-display transforms while the custom BEWLR supplies this
+        // wood material's generated chest texture. Using builtin/entity directly renders at a
+        // different inventory scale/pose than the normal minecraft:chest item.
+        itemModels().getBuilder(name)
+                .parent(new ModelFile.UncheckedModelFile(mcLoc("item/chest")));
+    }
+
+    private void registerWoodLadder(Block block, String name, ResourceLocation texture) {
+        ModelFile model = models().withExistingParent(name, mcLoc("block/ladder"))
+                .texture("particle", texture)
+                .texture("texture", texture)
+                .renderType("cutout");
+        getVariantBuilder(block).forAllStates(state -> {
+            Direction facing = state.getValue(LadderBlock.FACING);
+            int rotationY = switch (facing) {
+                case NORTH -> 0;
+                case EAST -> 90;
+                case SOUTH -> 180;
+                case WEST -> 270;
+                default -> throw new IllegalStateException("Unexpected ladder facing " + facing);
+            };
+            return ConfiguredModel.builder().modelFile(model).rotationY(rotationY).build();
+        });
+        itemModels().singleTexture(name, mcLoc("item/generated"), "layer0", texture);
+    }
+
+    private ResourceLocation woodPartTexture(WoodMaterial wood, MaterialPart part) {
+        if (wood.hasExistingPart(part)) {
+            return stoneTextureResolver.existingTextures(wood.existingPart(part))
+                    .map(textures -> textures.side())
+                    .orElseGet(() -> ResourceLocation.fromNamespaceAndPath(
+                            wood.existingPart(part).getNamespace(),
+                            "block/" + wood.existingPart(part).getPath()
+                    ));
+        }
+        return StructureMaterialGenerator.blockDefinitions(wood).stream()
+                .filter(definition -> definition.part().orElse(null) == part)
+                .findFirst()
+                .map(definition -> StructureSetResolver.generatedTexture(wood, definition.textureFile()))
+                .orElseThrow(() -> new IllegalStateException(
+                        "Wood " + wood.id() + " has no texture-resolvable form " + part
+                ));
+    }
+
+    private static WoodMaterial requireWood(StructureBlockDefinition definition) {
+        if (definition.material() instanceof WoodMaterial wood) return wood;
+        throw new IllegalStateException(definition.registryName() + " is not a wood definition");
     }
 
     /**
@@ -221,168 +439,20 @@ public final class StructureMaterialBlockStateProvider extends BlockStateProvide
     }
 
     private Optional<ExistingTextures> inheritedExistingTextures(StructureBlockDefinition definition) {
-        if (!(definition.material() instanceof StoneMaterial stone)) {
+        if (!(definition.material() instanceof StoneMaterial stone) || definition.basePart().isEmpty()) {
             return Optional.empty();
         }
-        if (definition.basePart().isEmpty()) {
-            return Optional.empty();
-        }
-
-        var basePart = definition.basePart().get();
-        if (!stone.hasExistingPart(basePart)) {
-            return Optional.empty();
-        }
-
-        ResourceLocation blockId = stone.existingPart(basePart);
-        try {
-            ResourceLocation modelId = blockModel(blockId);
-            if (modelId == null) {
-                return Optional.empty();
-            }
-
-            Map<String, String> textures = new HashMap<>();
-            collectModelTextures(modelId, textures, new HashSet<>());
-
-            ResourceLocation all = resolvedTexture(textures, "all").orElse(null);
-            ResourceLocation side = resolvedTexture(textures, "side")
-                    .or(() -> resolvedTexture(textures, "wall"))
-                    .or(() -> resolvedTexture(textures, "texture"))
-                    .or(() -> Optional.ofNullable(all))
-                    .or(() -> resolvedTexture(textures, "particle"))
-                    .orElse(null);
-            if (side == null) {
-                return Optional.empty();
-            }
-
-            ResourceLocation top = resolvedTexture(textures, "top")
-                    .or(() -> resolvedTexture(textures, "end"))
-                    .orElse(side);
-            ResourceLocation bottom = resolvedTexture(textures, "bottom").orElse(top);
-            return Optional.of(new ExistingTextures(side, top, bottom));
-        } catch (Exception ignored) {
-            return Optional.empty();
-        }
+        return stoneTextureResolver.existingTextures(stone, definition.basePart().get())
+                .map(textures -> new ExistingTextures(textures.side(), textures.top(), textures.bottom()));
     }
 
-    private ResourceLocation blockModel(ResourceLocation blockId) throws Exception {
-        try (InputStream input = openClientResource(blockId, "blockstates")) {
-            if (input == null) {
-                return null;
-            }
-            var reader = new InputStreamReader(input, StandardCharsets.UTF_8);
-            JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
-            JsonElement model = null;
-
-            JsonObject variants = root.has("variants") && root.get("variants").isJsonObject()
-                    ? root.getAsJsonObject("variants")
-                    : null;
-            if (variants != null) {
-                if (variants.has("")) {
-                    model = variants.get("");
-                } else if (!variants.entrySet().isEmpty()) {
-                    model = variants.entrySet().iterator().next().getValue();
-                }
-            }
-
-            if (model == null && root.has("multipart") && root.get("multipart").isJsonArray()) {
-                for (JsonElement part : root.getAsJsonArray("multipart")) {
-                    if (part.isJsonObject() && part.getAsJsonObject().has("apply")) {
-                        model = part.getAsJsonObject().get("apply");
-                        break;
-                    }
-                }
-            }
-
-            if (model == null) {
-                return null;
-            }
-            if (model.isJsonArray()) {
-                if (model.getAsJsonArray().isEmpty()) {
-                    return null;
-                }
-                model = model.getAsJsonArray().get(0);
-            }
-            if (model.isJsonObject() && model.getAsJsonObject().has("model")) {
-                return ResourceLocation.tryParse(model.getAsJsonObject().get("model").getAsString());
-            }
-            return null;
-        }
+    public record ExistingTextures(ResourceLocation side, ResourceLocation top, ResourceLocation bottom) {
     }
 
-    private void collectModelTextures(
-            ResourceLocation modelId,
-            Map<String, String> textures,
-            Set<ResourceLocation> visited
-    ) throws Exception {
-        if (!visited.add(modelId)) {
-            return;
-        }
-
-        try (InputStream input = openClientResource(modelId, "models")) {
-            if (input == null) {
-                throw new IllegalStateException("Missing existing model resource " + modelId);
-            }
-            var reader = new InputStreamReader(input, StandardCharsets.UTF_8);
-            JsonObject model = JsonParser.parseReader(reader).getAsJsonObject();
-            if (model.has("parent")) {
-                ResourceLocation parent = ResourceLocation.tryParse(model.get("parent").getAsString());
-                if (parent != null) {
-                    try {
-                        collectModelTextures(parent, textures, visited);
-                    } catch (Exception ignored) {
-                        // Vanilla geometry-only parents may not contribute texture values.
-                    }
-                }
-            }
-            if (model.has("textures") && model.get("textures").isJsonObject()) {
-                for (var entry : model.getAsJsonObject("textures").entrySet()) {
-                    if (entry.getValue().isJsonPrimitive()) {
-                        textures.put(entry.getKey(), entry.getValue().getAsString());
-                    }
-                }
-            }
-        }
-    }
-
-
-    /**
-     * ExistingFileHelper is not guaranteed to expose dependency assets as readable Resource objects
-     * in every datagen setup. Dependency jars are on the runtime classpath, however, so resolve the
-     * real asset there first and keep ExistingFileHelper as a compatibility fallback.
-     */
-    private InputStream openClientResource(ResourceLocation id, String folder) {
-        String path = "assets/" + id.getNamespace() + "/" + folder + "/" + id.getPath() + ".json";
-        ClassLoader contextLoader = Thread.currentThread().getContextClassLoader();
-        InputStream stream = contextLoader == null ? null : contextLoader.getResourceAsStream(path);
-        if (stream == null) {
-            stream = StructureMaterialBlockStateProvider.class.getClassLoader().getResourceAsStream(path);
-        }
-        if (stream != null) {
-            return stream;
-        }
-
-        try {
-            Resource resource = existingFileHelper.getResource(id, PackType.CLIENT_RESOURCES, ".json", folder);
-            return resource.open();
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    private static Optional<ResourceLocation> resolvedTexture(Map<String, String> textures, String key) {
-        String value = textures.get(key);
-        Set<String> visited = new HashSet<>();
-        while (value != null && value.startsWith("#")) {
-            String next = value.substring(1);
-            if (!visited.add(next)) {
-                return Optional.empty();
-            }
-            value = textures.get(next);
-        }
-        return Optional.ofNullable(value).map(ResourceLocation::tryParse);
-    }
-
-    private record ExistingTextures(ResourceLocation side, ResourceLocation top, ResourceLocation bottom) {
+    public ExistingTextures existingBrickTextures(ResourceLocation blockId) {
+        StoneTextureResolver.ExistingTextures textures = stoneTextureResolver.existingTextures(blockId)
+                .orElseThrow(() -> new IllegalStateException("Cannot resolve existing brick textures for " + blockId));
+        return new ExistingTextures(textures.side(), textures.top(), textures.bottom());
     }
 
     /**

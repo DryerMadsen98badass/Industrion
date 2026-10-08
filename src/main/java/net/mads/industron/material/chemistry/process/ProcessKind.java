@@ -1,6 +1,7 @@
 package net.mads.industron.material.chemistry.process;
 
 import java.util.List;
+import java.util.Set;
 
 public enum ProcessKind {
     MIXING("mixing"),
@@ -33,6 +34,7 @@ public enum ProcessKind {
     ADSORPTION("adsorption"),
     DRYING("drying"),
     EVAPORATION("evaporation"),
+    VAPORIZATION("vaporization"),
     CONDENSATION("condensation"),
     LIQUEFACTION("liquefaction"),
     FREEZING("freezing"),
@@ -43,4 +45,6 @@ public enum ProcessKind {
     ProcessKind(String... recipeTypeIds) { this.recipeTypeIds=List.of(recipeTypeIds); }
     public List<String> recipeTypeIds() { return recipeTypeIds; }
     public String primaryRecipeTypeId() { return recipeTypeIds.get(0); }
+    public ProcessRuleSet ruleSet() { return ProcessRuleSet.forKind(this); }
+    public Set<ProcessOperation> operations() { return ruleSet().operations(); }
 }

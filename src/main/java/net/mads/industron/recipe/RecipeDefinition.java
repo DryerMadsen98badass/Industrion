@@ -1,10 +1,14 @@
 package net.mads.industron.recipe;
 
 import net.mads.industron.Industron;
+import net.mads.industron.data.CreateRecipeBridge;
 import net.mads.industron.machine.MachineTier;
+import net.mads.industron.material.MaterialUnits;
 import net.mads.industron.machine.interaction.BlockInteraction;
 import net.mads.industron.machine.interaction.MachineCondition;
 import net.mads.industron.machine.interaction.MachineModifier;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyToolType;
+import net.mads.industron.recipe.recipetypes.assembly.ToolDefinition;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.data.recipes.RecipeOutput;
 import net.minecraft.resources.ResourceLocation;
@@ -39,11 +43,14 @@ public final class RecipeDefinition {
     private final List<CEChancedFluidInput> chancedFluidInputs = new ArrayList<>();
     private final List<SizedIngredient> notConsumableItems = new ArrayList<>();
     private final List<SizedFluidIngredient> notConsumableFluids = new ArrayList<>();
+    private final List<CEToolRequirement> tools = new ArrayList<>();
     private final List<CEChancedItemOutput> itemOutputs = new ArrayList<>();
     private final List<FluidStack> fluidOutputs = new ArrayList<>();
     private final List<CEChancedFluidOutput> chancedFluidOutputs = new ArrayList<>();
     private Optional<ResourceLocation> treeSource = Optional.empty();
-    private int duration = 100;
+    private Optional<Integer> duration = Optional.empty();
+    private Optional<Integer> manualUses = Optional.empty();
+    private Optional<Double> fuelUnits = Optional.empty();
     private Optional<Integer> circuit = Optional.empty();
     private Optional<String> tier = Optional.empty();
     private Optional<Integer> minRpm = Optional.empty();
@@ -67,6 +74,18 @@ public final class RecipeDefinition {
 
     public RecipeDefinition recipeDefinition(Option option) {
         Objects.requireNonNull(option, "Recipe option").apply(this);
+        return this;
+    }
+
+    /** Declares repeated manual use of a registered tool without treating it as an item input. */
+    public RecipeDefinition tool(ToolDefinition tool, int amount) {
+        Option.tool(tool, amount).apply(this);
+        return this;
+    }
+
+    /** Internal compatibility overload for existing generated assembly definitions. */
+    public RecipeDefinition tool(AssemblyToolType tool, int amount) {
+        Option.tool(tool, amount).apply(this);
         return this;
     }
 
@@ -141,6 +160,16 @@ public final class RecipeDefinition {
             return definition -> definition.fluidInputs.add(SizedFluidIngredient.of(fluid(fluidId), amount));
         }
 
+        static Option inputFluid(FluidStack stack) {
+            FluidStack copy = stack.copy();
+            return definition -> definition.fluidInputs.add(new SizedFluidIngredient(
+                    net.neoforged.neoforge.fluids.crafting.DataComponentFluidIngredient.of(true, copy), copy.getAmount()));
+        }
+
+        static Option outputFluid(FluidStack stack) {
+            return definition -> definition.fluidOutputs.add(stack.copy());
+        }
+
         /** Adds a consumed fluid-tag input measured in millibuckets. */
         static Option inputFluidTag(String tagId, int amount) {
             return definition -> definition.fluidInputs.add(sizedFluidTag(tagId, amount));
@@ -199,6 +228,16 @@ public final class RecipeDefinition {
             return definition -> definition.notConsumableFluids.add(sizedFluidTag(tagId, amount));
         }
 
+        /** Adds a manual tool action. Each completed use costs one durability. */
+        static Option tool(ToolDefinition tool, int amount) {
+            return definition -> definition.tools.add(CEToolRequirement.of(tool, amount));
+        }
+
+        /** Internal compatibility overload for existing generated assembly definitions. */
+        static Option tool(AssemblyToolType tool, int amount) {
+            return definition -> definition.tools.add(CEToolRequirement.of(tool, amount));
+        }
+
         /** Adds an item output with a guaranteed result. */
         static Option outputItem(String itemId, int count) {
             return definition -> definition.itemOutputs.add(new CEChancedItemOutput(
@@ -223,6 +262,11 @@ public final class RecipeDefinition {
             return chancedOutputItem(itemId, count, chance, 0);
         }
 
+        /** Adds a chanced item output from a registered item form. */
+        static Option chancedOutputItem(ItemLike item, int count, int chance) {
+            return chancedOutputItem(item, count, chance, 0);
+        }
+
         /**
          * Adds a chanced item output. Tier bonus is added once per runtime tier
          * above the recipe baseline and may be negative.
@@ -230,6 +274,13 @@ public final class RecipeDefinition {
         static Option chancedOutputItem(String itemId, int count, int chance, int tierBonus) {
             return definition -> definition.itemOutputs.add(
                     new CEChancedItemOutput(new ItemStack(item(itemId), count), chance, tierBonus)
+            );
+        }
+
+        /** Adds a chanced item output from a registered item form, including a per-tier bonus. */
+        static Option chancedOutputItem(ItemLike item, int count, int chance, int tierBonus) {
+            return definition -> definition.itemOutputs.add(
+                    new CEChancedItemOutput(new ItemStack(item, count), chance, tierBonus)
             );
         }
 
@@ -267,7 +318,20 @@ public final class RecipeDefinition {
 
         /** Defines the base processing duration in ticks. */
         static Option duration(int duration) {
-            return definition -> definition.duration = duration;
+            return definition -> definition.duration = Optional.of(duration);
+        }
+
+        /** Defines the number of deliberate hand uses/right-clicks required by a manual recipe. */
+        static Option uses(int uses) {
+            return definition -> definition.manualUses = Optional.of(uses);
+        }
+
+        /** Defines the machine-independent chemical energy stored by a generic fuel recipe. */
+        static Option fuelUnits(double units) {
+            if (!Double.isFinite(units) || units <= 0.0D) {
+                throw new IllegalArgumentException("Fuel Units must be finite and positive");
+            }
+            return definition -> definition.fuelUnits = Optional.of(units);
         }
 
         /** Requires an integrated circuit configuration from 1 through 32. */
@@ -304,6 +368,17 @@ public final class RecipeDefinition {
                 throw new IllegalArgumentException("Temperature requirement must be positive");
             }
             return definition -> definition.requiredTemp = Optional.of(requiredTemperature);
+        }
+
+        /**
+         * Declares a melting heat requirement. The recipe then needs a formed coil multiblock
+         * whose available heat is at least this temperature.
+         */
+        static Option coilTemperature(int requiredTemperature) {
+            return definition -> {
+                temperature(requiredTemperature).apply(definition);
+                requiredLogic(CERecipeLogics.COIL_TEMP).apply(definition);
+            };
         }
 
         /** Defines the inclusive Chemical Balance range required while the recipe is selected and processing. */
@@ -358,13 +433,16 @@ public final class RecipeDefinition {
                 chancedFluidInputs,
                 notConsumableItems,
                 notConsumableFluids,
+                tools,
                 itemOutputs,
                 fluidOutputs,
                 chancedFluidOutputs,
                 treeSource,
                 duration,
+                manualUses,
+                fuelUnits,
                 circuit,
-                tier,
+                effectiveTier(),
                 minRpm,
                 maxRpm,
                 outputRpm,
@@ -379,20 +457,118 @@ public final class RecipeDefinition {
         );
     }
 
+    private Optional<String> effectiveTier() {
+        return type != null && type.ignoresTier() ? Optional.empty() : tier;
+    }
+
     public void save(RecipeOutput output) {
         validateIdentity();
-        output.accept(
-                ResourceLocation.fromNamespaceAndPath(Industron.MOD_ID, type.id().getPath() + "/" + id),
-                build(),
-                null
+        CERecipe recipe = build();
+        ResourceLocation recipeId = ResourceLocation.fromNamespaceAndPath(
+                Industron.MOD_ID, type.id().getPath() + "/" + id
         );
+        output.accept(recipeId, recipe, null);
+        CreateRecipeBridge.save(output, recipeId, recipe);
+        type.generatedRecipeType().ifPresent(generatedTypeId -> {
+            RecipeTypeDefinition generatedType = CERecipeTypes.byId(generatedTypeId);
+            if (generatedType == null) {
+                throw new IllegalStateException("Unknown generated recipe type: " + generatedTypeId);
+            }
+            validateGeneratedType(generatedType);
+            ResourceLocation generatedRecipeId = ResourceLocation.fromNamespaceAndPath(
+                    Industron.MOD_ID, generatedType.id().getPath() + "/" + id
+            );
+            CERecipe generatedRecipe = recipe.automatedCopy(generatedType.id());
+            output.accept(generatedRecipeId, generatedRecipe, null);
+            CreateRecipeBridge.save(output, generatedRecipeId, generatedRecipe);
+        });
+    }
+
+    private void validateGeneratedType(RecipeTypeDefinition generatedType) {
+        if (generatedType.id().equals(type.id())) {
+            throw new IllegalStateException("Recipe type " + type.id() + " cannot generate itself");
+        }
+        if (duration.isEmpty() || duration.orElse(0) <= 0) {
+            throw new IllegalStateException("Recipe " + id + " generates automated type "
+                    + generatedType.id() + " but has no positive duration");
+        }
+        if (itemInputs.size() + chancedItemInputs.size() + notConsumableItems.size() > generatedType.maxItemInputs()
+                || fluidInputs.size() + chancedFluidInputs.size() + notConsumableFluids.size() > generatedType.maxFluidInputs()
+                || itemOutputs.size() > generatedType.maxItemOutputs()
+                || fluidOutputs.size() + chancedFluidOutputs.size() > generatedType.maxFluidOutputs()) {
+            throw new IllegalStateException("Recipe " + id + " does not fit generated type " + generatedType.id());
+        }
+        for (ResourceLocation logic : requiredLogic) {
+            if (!generatedType.supportsLogic(logic)) {
+                throw new IllegalStateException("Generated type " + generatedType.id() + " does not support " + logic);
+            }
+        }
+        for (ResourceLocation logic : optionalLogic) {
+            if (!generatedType.supportsLogic(logic)) {
+                throw new IllegalStateException("Generated type " + generatedType.id() + " does not support " + logic);
+            }
+        }
     }
 
     private void validate() {
         validateIdentity();
 
-        if (duration <= 0) {
-            throw new IllegalStateException("Recipe " + id + " must have a positive duration");
+        if (duration.isPresent() && duration.get() <= 0) {
+            throw new IllegalStateException("Recipe " + id + " must have a positive duration when specified");
+        }
+        if (manualUses.isPresent() && manualUses.get() <= 0) {
+            throw new IllegalStateException("Recipe " + id + " must have a positive use count when specified");
+        }
+        if (fuelUnits.isPresent() && fuelUnits.get() <= 0.0D) {
+            throw new IllegalStateException("Recipe " + id + " must have positive fuel units when specified");
+        }
+        if (type.id().equals(CERecipeTypes.FUEL.id())) {
+            validateFuelRecipe();
+        } else if (fuelUnits.isPresent()) {
+            throw new IllegalStateException("Only generic Fuel recipes may use Option.fuelUnits(...): " + id);
+        }
+        if (type.id().equals(CERecipeTypes.KILN_FIRING.id())) {
+            if (itemInputs.size() != 1
+                    || itemInputs.getFirst().count() != 1
+                    || !chancedItemInputs.isEmpty()
+                    || !notConsumableItems.isEmpty()
+                    || !fluidInputs.isEmpty()
+                    || !chancedFluidInputs.isEmpty()
+                    || !notConsumableFluids.isEmpty()
+                    || itemOutputs.size() != 1
+                    || !itemOutputs.getFirst().guaranteed()
+                    || itemOutputs.getFirst().stack().getCount() != 1
+                    || !fluidOutputs.isEmpty()
+                    || !chancedFluidOutputs.isEmpty()) {
+                throw new IllegalStateException(
+                        "Kiln Firing recipe " + id
+                                + " must be exactly one consumed item -> one guaranteed item; Kiln chambers hold one item"
+                );
+            }
+        }
+        if (type.id().equals(CERecipeTypes.HAND_PROCESSING.id())) {
+            if (manualUses.isEmpty()) {
+                throw new IllegalStateException("Hand Processing recipe " + id + " requires Option.uses(...)");
+            }
+            if (itemInputs.size() != 1
+                    || !chancedItemInputs.isEmpty()
+                    || !notConsumableItems.isEmpty()
+                    || !fluidInputs.isEmpty()
+                    || !chancedFluidInputs.isEmpty()
+                    || !notConsumableFluids.isEmpty()
+                    || !tools.isEmpty()
+                    || itemOutputs.isEmpty()
+                    || !fluidOutputs.isEmpty()
+                    || !chancedFluidOutputs.isEmpty()) {
+                throw new IllegalStateException(
+                        "Hand Processing recipe " + id
+                                + " must use one consumed item input, item output(s), no fluids and no tools"
+                );
+            }
+        } else if (manualUses.isPresent()) {
+            throw new IllegalStateException(
+                    "Only Hand Processing recipes may use Option.uses(...): " + id
+            );
         }
         if (furnaceFuel && (!itemInputs.isEmpty() || !chancedItemInputs.isEmpty())) {
             throw new IllegalStateException("Recipe " + id + " cannot combine Option.furnaceFuel() with normal item inputs");
@@ -409,8 +585,58 @@ public final class RecipeDefinition {
         if (itemInputs.size() + chancedItemInputs.size() + notConsumableItems.size() > type.maxItemInputs()) {
             throw new IllegalStateException("Recipe " + id + " has too many item inputs for " + type.id());
         }
+        for (CEToolRequirement tool : tools) {
+            if (tool.registeredType().isEmpty()) {
+                throw new IllegalStateException("Recipe " + id + " uses unregistered tool " + tool.toolId());
+            }
+        }
 
         validateCommonRecipeRules();
+    }
+
+    private void validateFuelRecipe() {
+        if (fuelUnits.isEmpty()) {
+            throw new IllegalStateException("Fuel recipe " + id + " requires Option.fuelUnits(...)");
+        }
+        int consumedInputs = itemInputs.size() + fluidInputs.size();
+        boolean validFluidFuelAmount = fluidInputs.size() == 1
+                && (fluidInputs.getFirst().amount() == MaterialUnits.LIQUID_MILLIBUCKETS_PER_UNIT
+                || fluidInputs.getFirst().amount() == MaterialUnits.GAS_MILLIBUCKETS_PER_UNIT);
+        boolean validFuelAmount = (itemInputs.size() == 1
+                && itemInputs.getFirst().count() == 1
+                && fluidInputs.isEmpty())
+                || (validFluidFuelAmount && itemInputs.isEmpty());
+        if (consumedInputs != 1
+                || !validFuelAmount
+                || !chancedItemInputs.isEmpty()
+                || !chancedFluidInputs.isEmpty()
+                || !notConsumableItems.isEmpty()
+                || !notConsumableFluids.isEmpty()
+                || !tools.isEmpty()
+                || !itemOutputs.isEmpty()
+                || !fluidOutputs.isEmpty()
+                || !chancedFluidOutputs.isEmpty()
+                || treeSource.isPresent()
+                || duration.isPresent()
+                || manualUses.isPresent()
+                || circuit.isPresent()
+                || minRpm.isPresent()
+                || maxRpm.isPresent()
+                || outputRpm.isPresent()
+                || requiredTemp.isPresent()
+                || chemicalBalanceRange.isPresent()
+                || !requiredLogic.isEmpty()
+                || !optionalLogic.isEmpty()
+                || !blockInteractions.isEmpty()
+                || !conditions.isEmpty()
+                || !modifiers.isEmpty()
+                || furnaceFuel) {
+            throw new IllegalStateException(
+                    "Fuel recipe " + id + " must consume exactly 1 item, "
+                            + MaterialUnits.LIQUID_MILLIBUCKETS_PER_UNIT + " mB liquid, or "
+                            + MaterialUnits.GAS_MILLIBUCKETS_PER_UNIT + " mB gas and only fuel_units"
+            );
+        }
     }
 
     private void validateCommonRecipeRules() {
@@ -437,6 +663,18 @@ public final class RecipeDefinition {
             throw new IllegalStateException(
                     "Recipe " + id + " has output RPM outside 1-" + CERecipe.DEFAULT_MAX_RPM
             );
+        }
+        if (type.requiresCoilTemperature()) {
+            if (requiredTemp.isEmpty()) {
+                throw new IllegalStateException(
+                        "Recipe " + id + " of " + type.id() + " requires a positive coil temperature"
+                );
+            }
+            if (!requiredLogic.contains(CERecipeLogics.COIL_TEMP.id())) {
+                throw new IllegalStateException(
+                        "Recipe " + id + " of " + type.id() + " requires " + CERecipeLogics.COIL_TEMP.id()
+                );
+            }
         }
         validateLogic(requiredLogic);
         validateLogic(optionalLogic);

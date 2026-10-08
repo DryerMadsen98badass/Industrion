@@ -61,6 +61,9 @@ public record IndustrialMaterial(
     public boolean has(MaterialPart part) { return parts.contains(part); }
     public boolean isMineralDust() { return contentProfile == MaterialContentProfile.MINERAL_DUST; }
     public boolean isOreMaterial() { return contentProfile == MaterialContentProfile.ORE; }
+    public boolean isClayMaterial() { return contentProfile == MaterialContentProfile.CLAY; }
+    public boolean isCeramicBrickMaterial() { return contentProfile == MaterialContentProfile.CERAMIC_BRICK; }
+    public boolean supportsCeramicMolds() { return isClayMaterial() || isCeramicBrickMaterial(); }
     public boolean hasExistingPart(MaterialPart part) { return existingParts.containsKey(part); }
     public ResourceLocation existingPart(MaterialPart part) { return existingParts.get(part); }
     public boolean hasExistingRecipe(MaterialPart part) { return existingRecipeParts.contains(part); }

@@ -77,6 +77,21 @@ Reference-foundryen har eldre direkte heat-source knowledge som ikke skal bli pe
 - Steam/Solid Fuel/Liquid Fuel heater implementeres uavhengig av Foundry melting-runtime.
 - Structure/heat links caches og invalideres på relevante structure events i stedet for full lookup per tick.
 
+## TD-0010: Dagens cycle-validator er konservativ
+
+`ProcessSafetyValidator` bevarer flattened mass, avviser chance chemistry outputs og blokkerer alle directed cycles. Det er sikkert for dagens generated chemistry, men kan ikke direkte representere Foundryens eksakt reversible mixing/casting/grinding/separation.
+
+- Før Foundry publiserer reversible routes må validatoren bruke stoichiometric/vector cycle analysis.
+- Bare zero-net-material cycles kan tillates; chance-bonus eller positiv reachable vector forblir hard feil.
+- Form- og thermal-state transitions må ikke forveksles med materialproduksjon.
+
+## TD-0011: Hot forms er ufullstendige
+
+Dagens registry har `HOT_INGOT`, `HOT_NUGGET` og hot molds, men ikke en generell hot state for alle castable forms.
+
+- Mål: typed thermal data component/bands med compatibility bridge for eksisterende hot forms.
+- Ikke legg til én permanent registry enum-form per temperatur og form hvis data kan representere tilstanden trygt.
+
 ## TD-0008: Automated timed-tool progress over full server restart
 
 `AssemblyRuntime` lagrer Workbench recipe step, wait deadline, refund-items og materialbindings. Pågående timed tool state (`activeTool`, `toolProgressTicks`, `toolAutomated`) serialiseres ikke i dagens `ActiveAssembly.save/load`.
@@ -84,3 +99,16 @@ Reference-foundryen har eldre direkte heat-source knowledge som ikke skal bli pe
 - Normal Deployer/FakePlayer pulse-work fungerer mellom vanlige aktiveringer mens runtime-state lever.
 - Full server restart midt i et uferdig automatisert tool-step mister denne delprogressen.
 - Enten serialiser tool-work senere eller behold dette eksplisitt som forventet reset-semantikk; ikke anta persistens som koden ikke har.
+
+
+## TD-PERF-01: Spilletidsprofil og modellminne er fortsatt ikke målt her
+
+JEI-oppslag, material/væske-oppslag, ingredient-cacher, energirute-cacher og eksakte døgnfaktorer er optimalisert i 2026-10-08-patchen. Kontrollerte sammenligninger bevarer resultater, rekkefølge og beregningsverdier.
+
+- Ingen full Minecraft-klient eller brukerens PC var tilgjengelig; FPS, tick-percentiler, GC-pauser og stabil heap er ikke dokumentert som forbedret.
+- Modell-/blockstate-mengden og geometrideling er ikke endret. Ressursinnlastingens heap-topp kan fortsatt være stor.
+- Shelter-geometrien, worldgen og plantenes persisted-data/oppdateringsbudsjetter beholder dagens regler; kostnaden i en faktisk verden er fortsatt ukjent.
+- Material-/væskecacher følger append-registrering gjennom katalogstørrelser. Ved framtidig erstatning eller endring av eksisterende definisjoner uten størrelsesendring må eieren kalle `MaterialLookup.clearCaches()` og `IndustrialFluidLookup.clearCache()`. Dagens registrering gjør tillegg før vanlig runtime.
+- Ikke flytt world-access, data-component/tag-predikater eller energi-/inventarmutasjoner til workers.
+
+Se `TODO_Performance.md` og `docs/performance-2026-10-08.md` for status og dokumenterte kontrollmålinger.

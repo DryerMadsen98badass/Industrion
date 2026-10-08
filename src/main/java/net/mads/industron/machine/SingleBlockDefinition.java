@@ -1,7 +1,8 @@
 package net.mads.industron.machine;
 
-import net.mads.industron.block.MiningTier;
-import net.mads.industron.block.MiningTool;
+import net.mads.industron.block.BlockStrength;
+import net.mads.industron.recipe.recipes.assembly.Tool;
+import net.mads.industron.recipe.recipetypes.assembly.ToolDefinition;
 import net.mads.industron.gui.ProgressBar;
 import net.mads.industron.machine.interaction.BlockInteraction;
 import net.mads.industron.machine.interaction.MachineCondition;
@@ -9,6 +10,8 @@ import net.mads.industron.machine.interaction.MachineModifier;
 import net.mads.industron.machine.interaction.MachineArea;
 import net.mads.industron.recipe.CERecipe;
 import net.mads.industron.recipe.CERecipeTypes;
+import net.mads.industron.material.MaterialPart;
+import net.mads.industron.material.structure.StoneMaterial;
 import net.mads.industron.recipe.RecipeTypeDefinition;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
@@ -17,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -39,9 +43,12 @@ public final class SingleBlockDefinition {
     private final Slots slots;
     private final int steamCapacity;
     private final int steamUsage;
+    private final ResourceLocation steamConversionRecipe;
     private final int energyUsage;
     private final boolean noDurationReset;
     private final int maxParallel;
+    private final ProcessingProfile processingProfile;
+    private final boolean waterloggable;
 
     @Nullable
     private final MachineSide kineticInput;
@@ -67,8 +74,12 @@ public final class SingleBlockDefinition {
 
     @Nullable
     private final String model;
-    private final MiningTier miningTier;
-    private final EnumSet<MiningTool> miningTools;
+    @Nullable
+    private final StoneTextureSource stoneTextureSource;
+    private final MachineTier breakingTier;
+    @Nullable
+    private final BlockStrength strength;
+    private final Set<ToolDefinition> miningTools;
     private final EnumSet<MachineSide> noItemInputSides;
     private final EnumSet<MachineSide> noItemOutputSides;
     private final EnumSet<MachineSide> noFluidInputSides;
@@ -96,9 +107,12 @@ public final class SingleBlockDefinition {
         this.slots = builder.slots;
         this.steamCapacity = builder.steamCapacity;
         this.steamUsage = builder.steamUsage;
+        this.steamConversionRecipe = builder.steamConversionRecipe;
         this.energyUsage = builder.energyUsage;
         this.noDurationReset = builder.noDurationReset;
+        this.processingProfile = builder.processingProfile;
         this.maxParallel = Math.max(1, builder.maxParallel);
+        this.waterloggable = builder.waterloggable;
         this.kineticInput = builder.kineticInput;
         this.kineticOutput = builder.kineticOutput;
         this.startSu = builder.startSu;
@@ -120,6 +134,7 @@ public final class SingleBlockDefinition {
                 new EnumMap<>(builder.sideTextureColors)
         );
         this.model = builder.model;
+        this.stoneTextureSource = builder.stoneTextureSource;
 
         EnumMap<MachineSide, List<String>> overlays =
                 new EnumMap<>(MachineSide.class);
@@ -129,8 +144,9 @@ public final class SingleBlockDefinition {
         );
 
         this.sideOverlays = Collections.unmodifiableMap(overlays);
-        this.miningTier = builder.miningTier;
-        this.miningTools = builder.miningTools.clone();
+        this.breakingTier = builder.breakingTier.recipeTier();
+        this.strength = builder.strength;
+        this.miningTools = Set.copyOf(builder.miningTools);
         this.noItemInputSides = builder.noItemInputSides.clone();
         this.noItemOutputSides = builder.noItemOutputSides.clone();
         this.noFluidInputSides = builder.noFluidInputSides.clone();
@@ -161,6 +177,7 @@ public final class SingleBlockDefinition {
 
     public List<String> tooltips() { return tooltips; }
     public int maxParallel() { return maxParallel; }
+    public boolean waterloggable() { return waterloggable; }
 
     public SingleBlockMachinePower power() {
         return power;
@@ -199,6 +216,8 @@ public final class SingleBlockDefinition {
     public boolean allowsFluidInput(MachineSide side) { return !noFluidInputSides.contains(side); }
     public boolean allowsFluidOutput(MachineSide side) { return !noFluidOutputSides.contains(side); }
 
+    public ResourceLocation steamConversionRecipe() { return steamConversionRecipe; }
+
     public int steamCapacity() {
         return steamCapacity;
     }
@@ -215,6 +234,10 @@ public final class SingleBlockDefinition {
      * When true, a running recipe keeps its current progress while this machine
      * is temporarily missing its required energy or steam.
      */
+    public ProcessingProfile processingProfile(MachineTier tier) {
+        return processingProfile != null ? processingProfile : tier.isSteam() ? ProcessingProfile.STEAM : ProcessingProfile.STANDARD;
+    }
+
     public boolean noDurationReset() {
         return noDurationReset;
     }
@@ -328,6 +351,10 @@ public final class SingleBlockDefinition {
         return model;
     }
 
+    public Optional<StoneTextureSource> stoneTextureSource() {
+        return Optional.ofNullable(stoneTextureSource);
+    }
+
     public Map<MachineSide, List<String>> sideOverlays() {
         return sideOverlays;
     }
@@ -377,11 +404,12 @@ public final class SingleBlockDefinition {
         return activeOverlays(MachineSide.FRONT);
     }
 
-    public MiningTier miningTier() {
-        return miningTier;
+
+    public MachineTier breakingTier() {
+        return breakingTier;
     }
 
-    public Set<MiningTool> miningTools() {
+    public Set<ToolDefinition> miningTools() {
         return Collections.unmodifiableSet(miningTools);
     }
 
@@ -413,11 +441,15 @@ public final class SingleBlockDefinition {
     }
 
     public float hardness() {
-        return miningTier.hardness();
+        return strength != null ? strength.hardness() : MachineTierStats.blockHardness(breakingTier);
     }
 
     public float resistance() {
-        return miningTier.resistance();
+        return strength != null ? strength.resistance() : MachineTierStats.blockResistance(breakingTier);
+    }
+
+    public boolean hasExplicitStrength() {
+        return strength != null;
     }
 
     private static TierSelection resolveTierSelection(Builder builder) {
@@ -478,6 +510,10 @@ public final class SingleBlockDefinition {
     }
 
     private void validate() {
+        if (breakingTier == null || breakingTier == MachineTier.NONE) {
+            throw new IllegalArgumentException("Singleblock breaking tier must be a real machine tier: " + id);
+        }
+
         if (id == null || id.isBlank() || !ResourceLocation.isValidPath(id)) {
             throw new IllegalArgumentException(
                     "Invalid singleblock machine id: " + id
@@ -623,6 +659,11 @@ public final class SingleBlockDefinition {
             );
         }
 
+        if (steamConversionRecipe != null && (resource != SingleBlockMachineResource.STEAM
+                || resourceMode != SingleBlockMachineResourceMode.PRODUCES || temperature == null)) {
+            throw new IllegalArgumentException("Steam conversion requires a heated steam producer: " + id);
+        }
+
         if (recipeTypes.stream().distinct().count() != recipeTypes.size()) {
             throw new IllegalArgumentException(
                     "Singleblock machine contains duplicate recipe types: "
@@ -643,18 +684,11 @@ public final class SingleBlockDefinition {
                 );
             }
 
-            if (slots.itemInputs() < recipeType.maxItemInputs()
-                    || slots.itemOutputs() < recipeType.maxItemOutputs()
-                    || slots.fluidInputs() < recipeType.maxFluidInputs()
-                    || slots.fluidOutputs()
-                    < recipeType.maxFluidOutputs()) {
-                throw new IllegalArgumentException(
-                        "Singleblock machine "
-                                + id
-                                + " does not provide enough slots for "
-                                + recipeTypeId
-                );
-            }
+            // RecipeType max IO describes the largest recipe/layout the type
+            // permits. It is intentionally independent of the number of
+            // physical inventory slots on a specific machine. A machine may
+            // support the type while only being able to run the concrete
+            // recipes that fit its own inventory/runtime model.
         }
 
         if (resource == SingleBlockMachineResource.STEAM
@@ -858,6 +892,18 @@ public final class SingleBlockDefinition {
      * Options shown by autocomplete inside
      * {@code .machineDefinition(Option...)} for singleblocks.
      */
+    public record StoneTextureSource(
+            StoneMaterial material,
+            MaterialPart preferredPart,
+            MaterialPart fallbackPart
+    ) {
+        public StoneTextureSource {
+            Objects.requireNonNull(material, "Stone texture material");
+            Objects.requireNonNull(preferredPart, "Preferred stone texture part");
+            Objects.requireNonNull(fallbackPart, "Fallback stone texture part");
+        }
+    }
+
     @FunctionalInterface
     public interface Option {
         void apply(Builder builder);
@@ -887,6 +933,11 @@ public final class SingleBlockDefinition {
                 if (maxParallel < 1) throw new IllegalArgumentException("Max parallels must be at least 1");
                 builder.maxParallel = maxParallel;
             };
+        }
+
+        /** Registers this machine with a waterloggable singleblock implementation. */
+        static Option waterloggable() {
+            return builder -> builder.waterloggable = true;
         }
 
         static Option consumesSteam() {
@@ -1055,6 +1106,11 @@ public final class SingleBlockDefinition {
             for (MachineSide side : sides) target.add(Objects.requireNonNull(side, "Machine side"));
         }
 
+        /** Binds a boiler to a separately registered CE evaporation recipe. */
+        static Option steamConversionRecipe(String recipeId) {
+            return builder -> builder.steamConversionRecipe = ResourceLocation.parse(recipeId);
+        }
+
         static Option steamCapacity(int steamCapacity) {
             return builder -> builder.steamCapacity = steamCapacity;
         }
@@ -1086,6 +1142,10 @@ public final class SingleBlockDefinition {
          * required energy or steam. Without this option, WAIT_FOR_RESOURCE resets
          * progress to zero, preserving the existing behavior for other machines.
          */
+        static Option processing(double durationMultiplier) {
+            return builder -> builder.processingProfile = new ProcessingProfile(durationMultiplier, 0);
+        }
+
         static Option noDurationReset() {
             return builder -> builder.noDurationReset = true;
         }
@@ -1351,6 +1411,18 @@ public final class SingleBlockDefinition {
             return builder -> builder.model = Objects.requireNonNull(model);
         }
 
+        static Option stoneTextureSource(
+                StoneMaterial material,
+                MaterialPart preferredPart,
+                MaterialPart fallbackPart
+        ) {
+            return builder -> builder.stoneTextureSource = new StoneTextureSource(
+                    material,
+                    preferredPart,
+                    fallbackPart
+            );
+        }
+
         private static Option sideOverlay(
                 MachineSide side,
                 String idleOverlay,
@@ -1402,11 +1474,12 @@ public final class SingleBlockDefinition {
         }
 
         static Option mineableWith(
-                MiningTool tool,
-                MiningTool... moreTools
+                ToolDefinition tool,
+                ToolDefinition... moreTools
         ) {
             return builder -> {
-                builder.miningTools = EnumSet.of(tool);
+                builder.miningTools = new LinkedHashSet<>();
+                builder.miningTools.add(Objects.requireNonNull(tool));
 
                 if (moreTools != null) {
                     Collections.addAll(
@@ -1417,10 +1490,23 @@ public final class SingleBlockDefinition {
             };
         }
 
-        static Option miningTier(MiningTier miningTier) {
-            return builder ->
-                    builder.miningTier =
-                            Objects.requireNonNull(miningTier);
+        static Option breakingTier(MachineTier tier) {
+            return builder -> {
+                Objects.requireNonNull(tier, "breaking tier");
+                if (tier == MachineTier.NONE) {
+                    throw new IllegalArgumentException("Singleblock breaking tier must be a real machine tier");
+                }
+                builder.breakingTier = tier.recipeTier();
+            };
+        }
+
+        static Option strength(float hardness) {
+            return strength(hardness, hardness);
+        }
+
+        static Option strength(float hardness, float resistance) {
+            BlockStrength strength = BlockStrength.of(hardness, resistance);
+            return builder -> builder.strength = strength;
         }
 
         static Option progressBar(ProgressBar progressBar) {
@@ -1451,11 +1537,14 @@ public final class SingleBlockDefinition {
                 new ArrayList<>();
 
         private Slots slots = new Slots(0, 0, 0, 0);
+        private ResourceLocation steamConversionRecipe;
         private int steamCapacity;
         private int steamUsage;
         private int energyUsage;
         private boolean noDurationReset;
+        private ProcessingProfile processingProfile;
         private int maxParallel = 1;
+        private boolean waterloggable;
         private MachineSide kineticInput;
         private MachineSide kineticOutput;
         private double startSu = 8.0D;
@@ -1496,10 +1585,11 @@ public final class SingleBlockDefinition {
         private final EnumMap<MachineSide, List<String>> sideOverlays =
                 new EnumMap<>(MachineSide.class);
 
-        private MiningTier miningTier = MiningTier.STONE;
+        private MachineTier breakingTier = MachineTier.LV;
+        private BlockStrength strength;
 
-        private EnumSet<MiningTool> miningTools =
-                EnumSet.of(MiningTool.PICKAXE);
+        private Set<ToolDefinition> miningTools =
+                new LinkedHashSet<>(Set.of(Tool.PICKAXE));
 
         private final EnumSet<MachineSide> noItemInputSides = EnumSet.noneOf(MachineSide.class);
         private final EnumSet<MachineSide> noItemOutputSides = EnumSet.noneOf(MachineSide.class);
@@ -1509,6 +1599,7 @@ public final class SingleBlockDefinition {
         private ProgressBar progressBar;
         private TemperatureSettings temperature;
         private String model;
+        private StoneTextureSource stoneTextureSource;
 
         private Builder() {
         }

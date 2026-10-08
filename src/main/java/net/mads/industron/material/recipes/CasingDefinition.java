@@ -2,14 +2,16 @@ package net.mads.industron.material.recipes;
 
 import net.mads.industron.machine.MachineTier;
 import net.mads.industron.material.MaterialPart;
+import net.mads.industron.material.IndustrialSubstance;
 import net.mads.industron.recipe.recipetypes.assembly.AssemblyCapability;
 import net.mads.industron.recipe.recipetypes.assembly.AssemblyComponent;
-import net.mads.industron.recipe.recipetypes.assembly.AssemblyMetal;
+import net.mads.industron.recipe.recipetypes.assembly.AssemblyMaterialSelector;
 import net.mads.industron.recipe.recipetypes.assembly.AssemblyNumericStatBuilder;
 import net.mads.industron.recipe.recipetypes.assembly.AssemblyProperty;
 import net.mads.industron.recipe.recipetypes.assembly.AssemblyPropertyStatBuilder;
 import net.mads.industron.recipe.recipetypes.assembly.AssemblyRequirement;
 import net.mads.industron.recipe.recipetypes.assembly.AssemblyToolType;
+import net.mads.industron.recipe.recipetypes.assembly.ToolDefinition;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
 
@@ -24,7 +26,7 @@ public final class CasingDefinition {
     public record Input(
             InputKind kind,
             MaterialPart material,
-            AssemblyMetal metalOverride,
+            AssemblyMaterialSelector materialOverride,
             AssemblyComponent component,
             ResourceLocation itemId,
             AssemblyToolType tool,
@@ -42,11 +44,11 @@ public final class CasingDefinition {
         Input withRequirement(AssemblyRequirement requirement) {
             List<AssemblyRequirement> next = new ArrayList<>(requirements);
             next.add(Objects.requireNonNull(requirement));
-            return new Input(kind, material, metalOverride, component, itemId, tool, count, next, waitTicks, sound);
+            return new Input(kind, material, materialOverride, component, itemId, tool, count, next, waitTicks, sound);
         }
 
         Input withSound(SoundEvent value) {
-            return new Input(kind, material, metalOverride, component, itemId, tool, count, requirements, waitTicks, value);
+            return new Input(kind, material, materialOverride, component, itemId, tool, count, requirements, waitTicks, value);
         }
     }
 
@@ -137,11 +139,17 @@ public final class CasingDefinition {
             return this;
         }
 
-        /** Material leaf with a fixed/ANY override instead of the casing material. */
-        public Builder input(MaterialPart material, AssemblyMetal metal) { return input(material, metal, 1); }
-        public Builder input(MaterialPart material, AssemblyMetal metal, int count) {
-            addInput(new Input(InputKind.MATERIAL, requireItemMaterial(material), Objects.requireNonNull(metal), null, null, null, count, List.of(), 0, null));
+        /** Material leaf with a fixed/category/ANY override instead of the casing material. */
+        public Builder input(MaterialPart material, AssemblyMaterialSelector selector) { return input(material, selector, 1); }
+        public Builder input(MaterialPart material, AssemblyMaterialSelector selector, int count) {
+            addInput(new Input(InputKind.MATERIAL, requireItemMaterial(material), Objects.requireNonNull(selector), null, null, null, count, List.of(), 0, null));
             return this;
+        }
+
+        /** Material leaf fixed directly to a canonical IndustrialMaterials identity. */
+        public Builder input(MaterialPart material, IndustrialSubstance substance) { return input(material, substance, 1); }
+        public Builder input(MaterialPart material, IndustrialSubstance substance, int count) {
+            return input(material, AssemblyMaterialSelector.fixed(Objects.requireNonNull(substance)), count);
         }
 
         /** Component tree using the generated casing material. */
@@ -151,11 +159,17 @@ public final class CasingDefinition {
             return this;
         }
 
-        /** Component tree with a fixed/ANY override instead of the casing material. */
-        public Builder input(AssemblyComponent component, AssemblyMetal metal) { return input(component, metal, 1); }
-        public Builder input(AssemblyComponent component, AssemblyMetal metal, int count) {
-            addInput(new Input(InputKind.COMPONENT, null, Objects.requireNonNull(metal), Objects.requireNonNull(component), null, null, count, List.of(), 0, null));
+        /** Component tree with a fixed/category/ANY override instead of the casing material. */
+        public Builder input(AssemblyComponent component, AssemblyMaterialSelector selector) { return input(component, selector, 1); }
+        public Builder input(AssemblyComponent component, AssemblyMaterialSelector selector, int count) {
+            addInput(new Input(InputKind.COMPONENT, null, Objects.requireNonNull(selector), Objects.requireNonNull(component), null, null, count, List.of(), 0, null));
             return this;
+        }
+
+        /** Component tree fixed directly to a canonical IndustrialMaterials identity. */
+        public Builder input(AssemblyComponent component, IndustrialSubstance substance) { return input(component, substance, 1); }
+        public Builder input(AssemblyComponent component, IndustrialSubstance substance, int count) {
+            return input(component, AssemblyMaterialSelector.fixed(Objects.requireNonNull(substance)), count);
         }
 
         public Builder input(String itemId) { return input(itemId, 1); }
@@ -165,7 +179,19 @@ public final class CasingDefinition {
         }
 
         public Builder input(AssemblyToolType tool) {
-            addInput(new Input(InputKind.TOOL, null, null, null, null, Objects.requireNonNull(tool), 1, List.of(), 0, null));
+            return tool(tool, 1);
+        }
+
+        public Builder input(ToolDefinition tool) {
+            return tool(tool, 1);
+        }
+
+        public Builder tool(ToolDefinition tool, int amount) {
+            return tool(Objects.requireNonNull(tool).type(), amount);
+        }
+
+        public Builder tool(AssemblyToolType tool, int amount) {
+            addInput(new Input(InputKind.TOOL, null, null, null, null, Objects.requireNonNull(tool), amount, List.of(), 0, null));
             return this;
         }
 
@@ -252,4 +278,3 @@ public final class CasingDefinition {
         public P covers(double min, double max) { sink.accept(capability.covers(min, max)); return parent; }
     }
 }
-

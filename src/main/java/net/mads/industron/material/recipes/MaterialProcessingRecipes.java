@@ -3,10 +3,11 @@ package net.mads.industron.material.recipes;
 import net.mads.industron.Industron;
 import net.mads.industron.energy.WireThickness;
 import net.mads.industron.machine.MachineTier;
-import net.mads.industron.machine.MachineTierStats;
+import net.mads.industron.machine.foundry.FoundryMetallurgy;
 import net.mads.industron.material.IndustrialMaterial;
 import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.MaterialFormGenerator;
+import net.mads.industron.material.MaterialPropertyCalculator;
 import net.mads.industron.material.MaterialPart;
 import net.mads.industron.recipe.CERecipeTypes;
 import net.mads.industron.recipe.RecipeDefinition;
@@ -63,61 +64,50 @@ public final class MaterialProcessingRecipes {
             MaterialPart.LARGE_RING,
             MaterialPart.HUGE_RING
     );
-    private static final List<MaterialPart> GEARS = List.of(
-            MaterialPart.TINY_GEAR,
-            MaterialPart.SMALL_GEAR,
-            MaterialPart.GEAR,
-            MaterialPart.LARGE_GEAR,
-            MaterialPart.HUGE_GEAR
-    );
-    private static final List<MaterialPart> ROTORS = List.of(
-            MaterialPart.TINY_ROTOR,
-            MaterialPart.SMALL_ROTOR,
-            MaterialPart.ROTOR,
-            MaterialPart.LARGE_ROTOR,
-            MaterialPart.HUGE_ROTOR
-    );
-    private static final List<MaterialPart> BEARINGS = List.of(
-            MaterialPart.TINY_BEARING,
-            MaterialPart.SMALL_BEARING,
-            MaterialPart.BEARING,
-            MaterialPart.LARGE_BEARING,
-            MaterialPart.HUGE_BEARING
-    );
 
     private MaterialProcessingRecipes() {
     }
 
     public static void build(RecipeOutput output) {
+        OreProcessingRecipes.build(output);
+        UniversalPhysicalProcessingRecipes.build(output);
+
         for (IndustrialMaterial material : IndustrialMaterials.ALL) {
             buildTurning(output, material);
             buildBending(output, material);
             buildWireDrawing(output, material);
             buildWinding(output, material);
-            buildPrecisionMachining(output, material);
-            buildAssembling(output, material);
             buildMagnetizing(output, material);
+            buildGemCrystallization(output, material);
             buildPolishing(output, material);
+            buildHotFormHeating(output, material);
+            buildHotMetalCutting(output, material);
             buildBuzzSawCutting(output, material);
         }
     }
 
     private static void buildTurning(RecipeOutput output, IndustrialMaterial material) {
         for (int index = 0; index < RODS.size(); index++) {
-            save(output, material, CERecipeTypes.TURNING, 1, ONE_MINUTE,
+            int duration = sizeDuration(ONE_MINUTE, index);
+            save(output, material, CERecipeTypes.TURNING, 1, duration,
                     BALLS.get(index), 2, part(RODS.get(index), 1));
-            save(output, material, CERecipeTypes.TURNING, 2, ONE_MINUTE,
+            save(output, material, CERecipeTypes.TURNING, 2, duration,
                     BOLTS.get(index), 8, part(RODS.get(index), 1));
-            save(output, material, CERecipeTypes.TURNING, 3, ONE_MINUTE,
+            save(output, material, CERecipeTypes.TURNING, 3, duration,
                     RIVETS.get(index), 16, part(RODS.get(index), 1));
-            save(output, material, CERecipeTypes.TURNING, 4, ONE_MINUTE,
+            save(output, material, CERecipeTypes.TURNING, 4, duration,
                     SCREWS.get(index), 8, part(BOLTS.get(index), 8));
         }
+
+        // A finished shaft is a precision-turned one-ingot form. SHAFT and INGOT are both
+        // one material unit, so this route is exactly mass-conserving.
+        save(output, material, CERecipeTypes.TURNING, 5, ONE_MINUTE,
+                MaterialPart.SHAFT, 1, part(MaterialPart.INGOT, 1));
     }
 
     private static void buildBending(RecipeOutput output, IndustrialMaterial material) {
         for (int index = 0; index < RODS.size(); index++) {
-            save(output, material, CERecipeTypes.BENDING, 1, ONE_MINUTE,
+            save(output, material, CERecipeTypes.BENDING, 1, sizeDuration(ONE_MINUTE, index),
                     RINGS.get(index), 1, part(RODS.get(index), 1));
         }
 
@@ -141,16 +131,14 @@ public final class MaterialProcessingRecipes {
     }
 
     private static void buildWinding(RecipeOutput output, IndustrialMaterial material) {
-        save(output, material, CERecipeTypes.WINDING, 1, ONE_MINUTE,
-                MaterialPart.TINY_SPRING, 1, part(MaterialPart.FINE_WIRE, 2));
-        save(output, material, CERecipeTypes.WINDING, 1, ONE_MINUTE,
-                MaterialPart.SMALL_SPRING, 1, part(MaterialPart.WIRE_1X, 2));
-        save(output, material, CERecipeTypes.WINDING, 1, ONE_MINUTE,
-                MaterialPart.SPRING, 1, part(MaterialPart.WIRE_2X, 2));
-        save(output, material, CERecipeTypes.WINDING, 1, ONE_MINUTE,
-                MaterialPart.LARGE_SPRING, 1, part(MaterialPart.WIRE_4X, 2));
-        save(output, material, CERecipeTypes.WINDING, 1, ONE_MINUTE,
-                MaterialPart.HUGE_SPRING, 1, part(MaterialPart.WIRE_8X, 2));
+        List<MaterialPart> springs = List.of(MaterialPart.TINY_SPRING, MaterialPart.SMALL_SPRING,
+                MaterialPart.SPRING, MaterialPart.LARGE_SPRING, MaterialPart.HUGE_SPRING);
+        List<MaterialPart> springWires = List.of(MaterialPart.FINE_WIRE, MaterialPart.WIRE_1X,
+                MaterialPart.WIRE_2X, MaterialPart.WIRE_4X, MaterialPart.WIRE_8X);
+        for (int index = 0; index < springs.size(); index++) {
+            save(output, material, CERecipeTypes.WINDING, 1, sizeDuration(ONE_MINUTE, index),
+                    springs.get(index), 1, part(springWires.get(index), 2));
+        }
 
         save(output, material, CERecipeTypes.WINDING, 2, ONE_MINUTE,
                 MaterialPart.COIL, 1, part(MaterialPart.WIRE_1X, 8));
@@ -162,54 +150,6 @@ public final class MaterialProcessingRecipes {
                 MaterialPart.COIL, 1, part(MaterialPart.WIRE_8X, 1));
     }
 
-    private static void buildPrecisionMachining(RecipeOutput output, IndustrialMaterial material) {
-        save(output, material, CERecipeTypes.PRECISION_MACHINING, 1, ONE_MINUTE,
-                MaterialPart.TINY_GEAR, 1,
-                part(MaterialPart.VERY_SHORT_ROD, 4), part(MaterialPart.PLATE, 1));
-        save(output, material, CERecipeTypes.PRECISION_MACHINING, 1, ONE_MINUTE,
-                MaterialPart.SMALL_GEAR, 1,
-                part(MaterialPart.SHORT_ROD, 4), part(MaterialPart.PLATE, 2));
-        save(output, material, CERecipeTypes.PRECISION_MACHINING, 1, NINETY_SECONDS,
-                MaterialPart.GEAR, 1,
-                part(MaterialPart.ROD, 4), part(MaterialPart.PLATE, 2));
-        save(output, material, CERecipeTypes.PRECISION_MACHINING, 1, NINETY_SECONDS,
-                MaterialPart.LARGE_GEAR, 1,
-                part(MaterialPart.LONG_ROD, 4), part(MaterialPart.PLATE, 4));
-        save(output, material, CERecipeTypes.PRECISION_MACHINING, 1, TWO_MINUTES,
-                MaterialPart.HUGE_GEAR, 1,
-                part(MaterialPart.VERY_LONG_ROD, 4), part(MaterialPart.PLATE, 8));
-
-        int[] rotorDurations = {ONE_MINUTE, ONE_MINUTE, NINETY_SECONDS, NINETY_SECONDS, TWO_MINUTES};
-        for (int index = 0; index < ROTORS.size(); index++) {
-            save(output, material, CERecipeTypes.PRECISION_MACHINING, 2, rotorDurations[index],
-                    ROTORS.get(index), 1,
-                    part(GEARS.get(index), 1), part(RODS.get(index), 1), part(RINGS.get(index), 1));
-        }
-
-        save(output, material, CERecipeTypes.PRECISION_MACHINING, 3, NINETY_SECONDS,
-                MaterialPart.TURBINE_BLADE, 1,
-                part(MaterialPart.LONG_ROD, 2),
-                part(MaterialPart.ROD, 1),
-                part(MaterialPart.DENSE_PLATE, 2));
-    }
-
-    private static void buildAssembling(RecipeOutput output, IndustrialMaterial material) {
-        int[] bearingDurations = {ONE_MINUTE, ONE_MINUTE, ONE_MINUTE, NINETY_SECONDS, TWO_MINUTES};
-        for (int index = 0; index < BEARINGS.size(); index++) {
-            save(output, material, CERecipeTypes.ASSEMBLING, 1, bearingDurations[index],
-                    BEARINGS.get(index), 1,
-                    part(BALLS.get(index), 8), part(RINGS.get(index), 2));
-        }
-
-        save(output, material, CERecipeTypes.ASSEMBLING, 2, NINETY_SECONDS,
-                MaterialPart.REINFORCED_PLATE, 1,
-                part(MaterialPart.PLATE, 2), part(MaterialPart.SCREW, 4));
-        save(output, material, CERecipeTypes.ASSEMBLING, 3, NINETY_SECONDS,
-                MaterialPart.HEAT_EXCHANGER_PLATE, 1,
-                part(MaterialPart.PLATE, 2),
-                part(MaterialPart.FINE_WIRE, 32),
-                part(MaterialPart.SCREW, 16));
-    }
 
     private static void buildMagnetizing(RecipeOutput output, IndustrialMaterial material) {
         for (MaterialPart part : material.parts()) {
@@ -232,6 +172,15 @@ public final class MaterialProcessingRecipes {
         }
     }
 
+    /** Every calculated gem gets the same dust -> rough gem finishing step. */
+    private static void buildGemCrystallization(RecipeOutput output, IndustrialMaterial material) {
+        if (!material.properties().gemCandidate()) {
+            return;
+        }
+        save(output, material, CERecipeTypes.CRYSTALLIZATION, 1, NINETY_SECONDS,
+                MaterialPart.ROUGH_GEM, 1, part(MaterialPart.DUST, 1));
+    }
+
     private static void buildPolishing(RecipeOutput output, IndustrialMaterial material) {
         save(output, material, CERecipeTypes.POLISHING, 1, ONE_MINUTE,
                 MaterialPart.TINY_GEM, 1, part(MaterialPart.ROUGH_TINY_GEM, 1));
@@ -247,9 +196,61 @@ public final class MaterialProcessingRecipes {
                 MaterialPart.LENS, 1, part(MaterialPart.EXQUISITE_GEM, 1));
     }
 
+    /** Every forgeable cold/hot pair owned by a material gets one canonical HEATING route. */
+    private static void buildHotFormHeating(RecipeOutput output, IndustrialMaterial material) {
+        for (MaterialPart cold : MaterialPart.values()) {
+            if (cold.isHotForgePart() || !cold.isForgeableForm()) continue;
+            MaterialPart hot = cold.hotForgePart();
+            if (hot == null || !material.has(cold) || !material.has(hot)) continue;
+            if (material.hasExistingRecipe(hot)) continue;
+
+            int requiredTemperature = MaterialPropertyCalculator.temperatureFor(material.properties(), hot);
+            if (requiredTemperature <= 0) continue;
+
+            RecipeDefinition.recipe()
+                    .recipeDefinition(RecipeDefinition.Option.id(
+                            material.id() + "/heating/" + cold.id() + "_to_" + hot.id()))
+                    .recipeDefinition(RecipeDefinition.Option.recipeType(CERecipeTypes.HEATING))
+                    .recipeDefinition(RecipeDefinition.Option.inputItem(itemId(material, cold), 1))
+                    .recipeDefinition(RecipeDefinition.Option.outputItem(itemId(material, hot), 1))
+                    .recipeDefinition(RecipeDefinition.Option.duration(FoundryMetallurgy.duration(
+                            material, cold.materialAmountMb(), requiredTemperature)))
+                    .recipeDefinition(RecipeDefinition.Option.temperature(requiredTemperature))
+                    .recipeDefinition(RecipeDefinition.Option.tier(productionTier(material)))
+                    .save(output);
+        }
+    }
+
+    /**
+     * Manual Assembly no longer performs raw metal shape conversion. Cutting a plate into rods is
+     * a real cutting process and therefore uses the hot forms. One 144 mB plate is conserved as
+     * four 32 mB short rods plus one 16 mB very-short rod.
+     */
+    private static void buildHotMetalCutting(RecipeOutput output, IndustrialMaterial material) {
+        if (!material.has(MaterialPart.HOT_PLATE)
+                || !material.has(MaterialPart.HOT_SHORT_ROD)
+                || !material.has(MaterialPart.HOT_VERY_SHORT_ROD)
+                || material.hasExistingRecipe(MaterialPart.SHORT_ROD)
+                || material.hasExistingRecipe(MaterialPart.VERY_SHORT_ROD)) {
+            return;
+        }
+
+        RecipeDefinition.recipe()
+                .recipeDefinition(RecipeDefinition.Option.id(material.id() + "/hot_plate_to_hot_rods"))
+                .recipeDefinition(RecipeDefinition.Option.recipeType(CERecipeTypes.CUTTING))
+                .recipeDefinition(RecipeDefinition.Option.inputItem(itemId(material, MaterialPart.HOT_PLATE), 1))
+                .recipeDefinition(RecipeDefinition.Option.outputItem(itemId(material, MaterialPart.HOT_SHORT_ROD), 4))
+                .recipeDefinition(RecipeDefinition.Option.outputItem(itemId(material, MaterialPart.HOT_VERY_SHORT_ROD), 1))
+                .recipeDefinition(RecipeDefinition.Option.duration(NINETY_SECONDS))
+                .recipeDefinition(RecipeDefinition.Option.circuit(1))
+                .recipeDefinition(RecipeDefinition.Option.tier(productionTier(material)))
+                .save(output);
+    }
+
     private static void buildBuzzSawCutting(RecipeOutput output, IndustrialMaterial material) {
+        // Metal cutting uses hot input and keeps the result hot until a cooling process runs.
         save(output, material, CERecipeTypes.CUTTING, 1, NINETY_SECONDS,
-                MaterialPart.TOOL_HEAD_BUZZ_SAW, 1, part(MaterialPart.GEAR, 1));
+                MaterialPart.HOT_BUZZ_SAW, 1, part(MaterialPart.HOT_GEAR, 1));
     }
 
     private static void save(
@@ -270,6 +271,9 @@ public final class MaterialProcessingRecipes {
             if (!material.has(input.part())) {
                 return;
             }
+        }
+        if (inputs.length > type.maxItemInputs() || type.maxItemOutputs() < 1) {
+            throw new IllegalStateException("Generated " + type.id() + " recipe exceeds its declared item IO limits");
         }
 
         int divisor = outputCount;
@@ -311,6 +315,15 @@ public final class MaterialProcessingRecipes {
         return Math.max(1, left);
     }
 
+    /** Tiny, small, normal, large and huge forms should not all take exactly the same time. */
+    private static int sizeDuration(int normalDuration, int sizeIndex) {
+        int[] percent = {50, 75, 100, 150, 200};
+        if (sizeIndex < 0 || sizeIndex >= percent.length) {
+            throw new IllegalArgumentException("Unknown material form size index: " + sizeIndex);
+        }
+        return Math.max(1, (normalDuration * percent[sizeIndex] + 99) / 100);
+    }
+
     private static PartStack part(MaterialPart part, int count) {
         return new PartStack(part, count);
     }
@@ -327,7 +340,7 @@ public final class MaterialProcessingRecipes {
     }
 
     private static MachineTier productionTier(IndustrialMaterial material) {
-        return MachineTierStats.offset(material.tier(), -1);
+        return MaterialProcessingRules.processingTier(material);
     }
 
     private static boolean isFunctionalWire(MaterialPart part) {
@@ -336,4 +349,5 @@ public final class MaterialProcessingRecipes {
 
     private record PartStack(MaterialPart part, int count) {
     }
+
 }

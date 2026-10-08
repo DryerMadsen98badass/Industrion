@@ -1,11 +1,15 @@
 package net.mads.industron.block;
 
 import net.mads.industron.Industron;
+import net.mads.industron.machine.MachineTier;
+import net.mads.industron.recipe.recipes.assembly.Tool;
+import net.mads.industron.recipe.recipetypes.assembly.ToolDefinition;
+import net.mads.industron.machine.MachineTierStats;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.EnumSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -14,14 +18,14 @@ public record ActiveBlockDefinition(
         String displayName,
         ResourceLocation idleTexture,
         List<ResourceLocation> activeTextures,
-        MiningTier miningTier,
-        Set<MiningTool> miningTools
+        MachineTier breakingTier,
+        Set<ToolDefinition> miningTools
 ) {
 
     public static final int MAX_ACTIVE_FRAMES = 10;
 
     public ActiveBlockDefinition(String id, String displayName, String idleTexture, String... activeTextures) {
-        this(id, displayName, parseTexture(idleTexture), parseActiveTextures(id, activeTextures), MiningTier.STONE, EnumSet.of(MiningTool.PICKAXE));
+        this(id, displayName, parseTexture(idleTexture), parseActiveTextures(id, activeTextures), MachineTier.LV, Set.of(Tool.PICKAXE));
     }
 
     public ActiveBlockDefinition {
@@ -39,44 +43,39 @@ public record ActiveBlockDefinition(
         if (activeTextures.stream().anyMatch(texture -> texture == null)) {
             throw new IllegalArgumentException("Active block active textures cannot contain null: " + id);
         }
-        if (miningTier == null) {
-            throw new IllegalArgumentException("Active block mining tier cannot be null: " + id);
+        if (breakingTier == null || breakingTier == MachineTier.NONE) {
+            throw new IllegalArgumentException("Active block breaking tier must be a real machine tier: " + id);
         }
         activeTextures = List.copyOf(activeTextures);
         miningTools = validateMiningTools(id, miningTools);
     }
 
-    public ActiveBlockDefinition wood() { return withMiningTier(MiningTier.WOOD); }
-    public ActiveBlockDefinition stone() { return withMiningTier(MiningTier.STONE); }
-    public ActiveBlockDefinition iron() { return withMiningTier(MiningTier.IRON); }
-    public ActiveBlockDefinition diamond() { return withMiningTier(MiningTier.DIAMOND); }
-    public ActiveBlockDefinition netherite() { return withMiningTier(MiningTier.NETHERITE); }
-
-    public ActiveBlockDefinition withMiningTier(MiningTier tier) {
-        if (tier == null) {
-            throw new IllegalArgumentException("Active block mining tier cannot be null: " + id);
+    public ActiveBlockDefinition breakingTier(MachineTier tier) {
+        if (tier == null || tier == MachineTier.NONE) {
+            throw new IllegalArgumentException("Active block breaking tier must be a real machine tier: " + id);
         }
         return new ActiveBlockDefinition(id, displayName, idleTexture, activeTextures, tier, miningTools);
     }
 
-    public ActiveBlockDefinition mineableWith(MiningTool tool, MiningTool... moreTools) {
+    public ActiveBlockDefinition mineableWith(ToolDefinition tool, ToolDefinition... moreTools) {
         if (tool == null) {
             throw new IllegalArgumentException("Active block mining tool cannot be null: " + id);
         }
-        EnumSet<MiningTool> updated = EnumSet.of(tool);
+        Set<ToolDefinition> updated = new LinkedHashSet<>();
+        updated.add(tool);
         if (moreTools != null) {
-            for (MiningTool moreTool : moreTools) {
+            for (ToolDefinition moreTool : moreTools) {
                 if (moreTool == null) {
                     throw new IllegalArgumentException("Active block mining tool cannot be null: " + id);
                 }
                 updated.add(moreTool);
             }
         }
-        return new ActiveBlockDefinition(id, displayName, idleTexture, activeTextures, miningTier, updated);
+        return new ActiveBlockDefinition(id, displayName, idleTexture, activeTextures, breakingTier, updated);
     }
 
-    public float hardness() { return miningTier.hardness(); }
-    public float resistance() { return miningTier.resistance(); }
+    public float hardness() { return MachineTierStats.blockHardness(breakingTier); }
+    public float resistance() { return MachineTierStats.blockResistance(breakingTier); }
     public int activeFrameCount() { return activeTextures.size(); }
 
     public String idleModelPath() { return "block/casings/active/" + id + "_idle"; }
@@ -128,13 +127,13 @@ public record ActiveBlockDefinition(
         }
     }
 
-    private static Set<MiningTool> validateMiningTools(String id, Set<MiningTool> miningTools) {
+    private static Set<ToolDefinition> validateMiningTools(String id, Set<ToolDefinition> miningTools) {
         if (miningTools == null || miningTools.isEmpty()) {
             throw new IllegalArgumentException("Active block mining tools cannot be empty: " + id);
         }
         if (miningTools.contains(null)) {
             throw new IllegalArgumentException("Active block mining tools cannot contain null: " + id);
         }
-        return Collections.unmodifiableSet(EnumSet.copyOf(miningTools));
+        return Collections.unmodifiableSet(new LinkedHashSet<>(miningTools));
     }
 }

@@ -3,6 +3,7 @@ package net.mads.industron.fluid;
 import net.mads.industron.Industron;
 import net.mads.industron.material.IndustrialMaterial;
 import net.mads.industron.material.MaterialPart;
+import net.mads.industron.recipe.ChemicalBalanceRange;
 import net.mads.industron.registry.FluidRegistry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -10,11 +11,18 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.material.Fluid;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.FluidUtil;
+import net.mads.industron.runtime.BoundedIdentityCache;
 
 import java.util.Optional;
 
 public final class IndustrialFluidLookup {
+    private static final BoundedIdentityCache<Fluid, Optional<IndustrialFluid>> CACHE = new BoundedIdentityCache<>(4096);
+    private static int registeredCount = -1, definitionCount = -1;
     private IndustrialFluidLookup() {
+    }
+
+    public static synchronized void clearCache() {
+        CACHE.clear(); registeredCount = definitionCount = -1;
     }
 
     public static boolean shouldRegister(IndustrialFluid definition) {
@@ -59,8 +67,18 @@ public final class IndustrialFluidLookup {
         return BuiltInRegistries.FLUID.get(fluidId(definition));
     }
 
-    public static IndustrialFluid find(Fluid fluid) {
+    public static synchronized IndustrialFluid find(Fluid fluid) {
         if (fluid == null) return null;
+        int registered = FluidRegistry.MATERIAL_FLUIDS.size() + FluidRegistry.CHEMICAL_FLUIDS.size()
+                + FluidRegistry.PLANT_PROCESS_FLUIDS.size() + 2;
+        int definitions = IndustrialFluids.ALL.size();
+        if (registered != registeredCount || definitions != definitionCount) {
+            CACHE.clear(); registeredCount = registered; definitionCount = definitions;
+        }
+        return CACHE.computeIfAbsent(fluid, value -> Optional.ofNullable(findUncached(value))).orElse(null);
+    }
+
+    private static IndustrialFluid findUncached(Fluid fluid) {
         ResourceLocation id = BuiltInRegistries.FLUID.getKey(fluid);
         for (FluidRegistry.RegisteredFluid registered : FluidRegistry.allFluids()) {
             if (registered.source().get() == fluid || registered.flowing().get() == fluid) {
@@ -104,10 +122,16 @@ public final class IndustrialFluidLookup {
             int density,
             int viscosity
     ) {
+        int acidity = Math.max(-100, Math.min(100, material.properties().acidity()));
+        Optional<Integer> chemicalBalance = acidity == 0
+                ? Optional.empty()
+                : Optional.of(ChemicalBalanceRange.toHundredths(acidity));
+        int cbDrainPerTickMb = chemicalBalance.isPresent() ? 1 : 0;
+
         return new IndustrialFluid(
                 material.id(), material.displayName(), material.color(), kind,
                 temperature, density, viscosity, 0,
-                Optional.empty(), 0, material.components(), Optional.empty()
+                chemicalBalance, cbDrainPerTickMb, material.components(), Optional.empty()
         );
     }
 }

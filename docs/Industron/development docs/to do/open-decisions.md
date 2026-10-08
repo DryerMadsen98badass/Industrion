@@ -17,7 +17,7 @@ Beslutninger som allerede er låst/implementert skal ikke stå som åpne her.
 - [x] RecipeType eier ikke power source.
 - [x] Pressure brukes ikke som process-condition.
 - [x] CB/temperature/RPM/circuit/catalyst/tier/duration er machine/recipe-level data etter behov.
-- [x] Første gameplay RecipeType catalogue er definert med 53 types.
+- [x] Dagens `CERecipeTypes.ALL` er den canonical runtime/JEI-katalogen. Etter senere primitive/manual additions inneholder den nå 69 gameplay types; tierless `HAND_PROCESSING` er en av dem.
 - [ ] Maks item/fluid/gas input/output counts per type der dette faktisk er en layout/runtime-limit.
 - [ ] Endelig representation av catalyst/non-consumed process inputs.
 - [ ] Typed process-operation-sett for separation, distillation, electrolysis, mixing, alloying, crystallization og chemical reaction.
@@ -35,6 +35,13 @@ Beslutninger som allerede er låst/implementert skal ikke stå som åpne her.
 - [ ] Exact heater output curves for Steam Heater, Solid Fuel Heater og Liquid Fuel Heater.
 - [ ] Hvilke generated casing profiles Foundry og hver heater krever.
 - [ ] Exact drain/mold/casting interaction ved porting fra reference-projectet.
+- [x] Defined alloy matching bruker exact normalized ratio; ingen closest-alloy eller missing-amount UI.
+- [x] Udefinerte mixtures bruker generic data-bearing carriers og må kunne separeres igjen.
+- [x] Målet er minst 20 constituents uten scan per tick.
+- [ ] Exact generic carrier IDs/data-component schema og maximum serialized payload size.
+- [ ] Exact thermal bands/thresholds og migrering fra `HOT_INGOT`/`HOT_NUGGET` til generell thermal state.
+- [ ] Exact metallurgisk reduction-model/byproduct families for Foundry-eligible composite dust.
+- [ ] Exact stoichiometric cycle algorithm som erstatter dagens «block every directed cycle» for reversible Foundry edges.
 
 ## Composition/registry – Phase 08
 
@@ -46,7 +53,7 @@ Beslutninger som allerede er låst/implementert skal ikke stå som åpne her.
 - [ ] Alloy property mixing/synergy-formel og bounds.
 - [ ] Hvordan processing state (cast, annealed, hardened osv.) eventuelt påvirker properties senere.
 - [ ] Hvor mye phase/crystal modeling som trengs for første alloy-system.
-- [ ] Exact integration mellom molten Foundry storage og generated alloy resolution.
+- [x] Foundry resolution bruker canonical direct signature først og flattened ledger til conservation/ambiguity checks.
 
 ## Molecular/compound chemistry – Phase 10–11
 

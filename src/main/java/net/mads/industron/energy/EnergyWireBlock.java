@@ -120,13 +120,13 @@ public class EnergyWireBlock extends Block implements EntityBlock, IWrenchable {
         if (!level.isClientSide()) {
             level.scheduleTick(pos, this, 1);
         }
-        CEEnergyNetwork.invalidate(level);
+        CEEnergyNetwork.invalidate(level, pos);
     }
 
     @Override
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
         if (!state.is(newState.getBlock())) {
-            CEEnergyNetwork.invalidate(level);
+            CEEnergyNetwork.invalidate(level, pos);
         }
         super.onRemove(state, level, pos, newState, movedByPiston);
     }
@@ -148,14 +148,14 @@ public class EnergyWireBlock extends Block implements EntityBlock, IWrenchable {
         Direction direction = directionToNeighbor(pos, fromPos);
         if (direction != null) {
             refreshConnection(level, pos, direction);
-            CEEnergyNetwork.invalidate(level);
+            CEEnergyNetwork.invalidate(level, pos);
         }
     }
 
     @Override
     public void tick(BlockState state, ServerLevel level, BlockPos pos, RandomSource random) {
         refreshAllConnections(level, pos);
-        CEEnergyNetwork.invalidate(level);
+        CEEnergyNetwork.invalidate(level, pos);
     }
 
     @Override
@@ -187,7 +187,7 @@ public class EnergyWireBlock extends Block implements EntityBlock, IWrenchable {
             if (neighborState.getBlock() instanceof EnergyWireBlock) {
                 refreshConnection(serverLevel, neighborPos, direction.getOpposite());
             }
-            CEEnergyNetwork.invalidate(serverLevel);
+            CEEnergyNetwork.invalidate(serverLevel, pos);
         }
 
         IWrenchable.playRotateSound(context.getLevel(), pos);

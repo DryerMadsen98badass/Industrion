@@ -1,6 +1,7 @@
 package net.mads.industron.recipe.recipetypes;
 
 import net.mads.industron.gui.ProgressBar;
+import net.mads.industron.recipe.CERecipeLogics;
 import net.mads.industron.recipe.RecipeTypeDefinition;
 
 public final class SmeltingRecipeType {
@@ -8,6 +9,8 @@ public final class SmeltingRecipeType {
             .recipeTypeDefinition(RecipeTypeDefinition.Option.id("smelting"))
             .recipeTypeDefinition(RecipeTypeDefinition.Option.displayName("Smelting"))
             .recipeTypeDefinition(RecipeTypeDefinition.Option.maxIO(4, 4, 2, 2))
+            .recipeTypeDefinition(RecipeTypeDefinition.Option.logic(CERecipeLogics.COIL_TEMP))
+            .recipeTypeDefinition(RecipeTypeDefinition.Option.requiresCoilTemperature())
             .recipeTypeDefinition(RecipeTypeDefinition.Option.progressBar(ProgressBar.ARROW))
             .build();
 

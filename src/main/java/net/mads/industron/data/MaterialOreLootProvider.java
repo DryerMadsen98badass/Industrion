@@ -28,10 +28,6 @@ import java.util.concurrent.CompletableFuture;
 
 public final class MaterialOreLootProvider implements DataProvider {
 
-    private static final float CRUSHED_ORE_CHANCE = 0.75F;
-    private static final float IMPURE_DUST_CHANCE = 0.50F;
-    private static final float TINY_DUST_CHANCE = 0.25F;
-
     private static final Set<MaterialPart> ORE_PARTS = EnumSet.of(
             MaterialPart.ORE,
             MaterialPart.SMALL_ORE,
@@ -179,53 +175,7 @@ public final class MaterialOreLootProvider implements DataProvider {
                 yieldScale
         ));
 
-        /*
-         * 75 % sjanse for crushed ore.
-         */
-        if (MaterialRecipeHelper.hasItems(
-                material,
-                MaterialPart.CRUSHED_ORE
-        )) {
-            pools.add(createBonusDropPool(
-                    MaterialRecipeHelper.itemId(
-                            material,
-                            MaterialPart.CRUSHED_ORE
-                    ),
-                    CRUSHED_ORE_CHANCE * yieldScale
-            ));
-        }
-
-        /*
-         * 50 % sjanse for impure dust.
-         */
-        if (MaterialRecipeHelper.hasItems(
-                material,
-                MaterialPart.IMPURE_DUST
-        )) {
-            pools.add(createBonusDropPool(
-                    MaterialRecipeHelper.itemId(
-                            material,
-                            MaterialPart.IMPURE_DUST
-                    ),
-                    IMPURE_DUST_CHANCE * yieldScale
-            ));
-        }
-
-        /*
-         * 25 % sjanse for tiny dust.
-         */
-        if (MaterialRecipeHelper.hasItems(
-                material,
-                MaterialPart.TINY_DUST
-        )) {
-            pools.add(createBonusDropPool(
-                    MaterialRecipeHelper.itemId(
-                            material,
-                            MaterialPart.TINY_DUST
-                    ),
-                    TINY_DUST_CHANCE * yieldScale
-            ));
-        }
+        // Physical processing products come from the workshop, not ore mining.
 
         // Mining an ore can also recover one dust from the actual host rock. The chance is
         // exactly the vanilla gravel -> flint Fortune curve and is independent of the ore

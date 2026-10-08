@@ -3,6 +3,7 @@ package net.mads.industron.transport;
 import net.mads.industron.material.IndustrialMaterial;
 import net.mads.industron.material.defenitions.IndustrialMaterials;
 import net.mads.industron.material.MaterialProperties;
+import net.mads.industron.material.MaterialCategory;
 
 import static net.mads.industron.transport.FluidTransportTier.transportTier;
 
@@ -28,7 +29,7 @@ public final class FluidTransportTiers {
             // Fluid transport structures are a metal-only system. Gems and
             // non-metals never receive pipes, pumps or tanks. The metal must
             // also still be solid at the 20 C reference temperature.
-            if (!material.properties().metal()
+            if (!MaterialCategory.METAL.matches(material)
                     || material.properties().meltingPoint() <= 20
                     || material.properties().state() != MaterialProperties.PhysicalState.SOLID) {
                 continue;
